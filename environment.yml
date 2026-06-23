@@ -1,0 +1,17 @@
+name: OOA_NAAdmixture
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python>=3.11
+  - stdpopsim
+  - msprime
+  - tskit
+  - tszip
+  - numpy
+  - pandas
+  - pyarrow
+  - scikit-allel
+  - pip
+  - pip:
+      - tspop
