@@ -25,7 +25,7 @@
 set -euo pipefail
 
 module purge
-ml gcc/13.3.0 htslib/1.19.1 conda
+ml gcc/13.3.0 htslib/1.19.1 plink2/2.00a4.3 conda
 source /apps/conda/miniforge3/25.3.0/etc/profile.d/conda.sh
 conda activate OOA_NAAdmixture
 export PATH="${HOME}/.conda/envs/OOA_NAAdmixture/bin:${PATH}"
