@@ -38,41 +38,42 @@ source "${project_dir}/other_scripts/log_msg.sh"
 
 # input variables
 tree_dir="$1"
-vcf_dir="$2"
-plink_bed_dir="$3"
-pop_info_dir="$4"
-anc_dir="$5"
-global_anc_dir="$6"
-sample_size="$7"
-num_reps="$8"
-msprime_model="$9"
-chr="${10}"
-genetic_map="${11}"
-generation_time="${12}"
-mutation_rate="${13}"
-t_af_years="${14}"
-t_ooa_years="${15}"
-t_eu0_years="${16}"
-t_eg_years="${17}"
-r_eu0="${18}"
-r_eu="${19}"
-r_af="${20}"
-n_a="${21}"
-n_af1="${22}"
-n_b="${23}"
-n_eu0="${24}"
-m_af_b="${25}"
-m_af_eu="${26}"
-admixture_time="${27}"
-admix_generation_count="${28}"
-admix_mixing_generation_count="${29}"
-admix_ne_by_generation="${30}"
-admix_afr_props_by_generation="${31}"
-admix_eur_props_by_generation="${32}"
-admix_prioradmix_props_by_generation="${33}"
-admix_modern_growth_rate="${34}"
-census_time_offset="${35}"
-shift 35
+pickled_demo_meta="$2"
+vcf_dir="$3"
+plink_bed_dir="$4"
+pop_info_dir="$5"
+anc_dir="$6"
+global_anc_dir="$7"
+sample_size="$8"
+num_reps="$9"
+msprime_model="${10}"
+chr="${11}"
+genetic_map="${12}"
+generation_time="${13}"
+mutation_rate="${14}"
+t_af_years="${15}"
+t_ooa_years="${16}"
+t_eu0_years="${17}"
+t_eg_years="${18}"
+r_eu0="${19}"
+r_eu="${20}"
+r_af="${21}"
+n_a="${22}"
+n_af1="${23}"
+n_b="${24}"
+n_eu0="${25}"
+m_af_b="${26}"
+m_af_eu="${27}"
+admixture_time="${28}"
+admix_generation_count="${29}"
+admix_mixing_generation_count="${30}"
+admix_ne_by_generation="${31}"
+admix_afr_props_by_generation="${32}"
+admix_eur_props_by_generation="${33}"
+admix_prioradmix_props_by_generation="${34}"
+admix_modern_growth_rate="${35}"
+census_time_offset="${36}"
+shift 36
 shift 1 # skip the "--" from input arguments
 pops=( "$@" )
 
@@ -81,11 +82,12 @@ rep="${SLURM_ARRAY_TASK_ID}"
 num_threads="${SLURM_CPUS_PER_TASK:-1}"
 prefix="${genetic_map}_${rep}_all"
 tree_prefix="${tree_dir}/${prefix}"
+pickle_prefix="${pickled_demo_meta}/${prefix}"
 vcf_path="${vcf_dir}/${prefix}.vcf"
 vcf_gz_path="${vcf_path}.gz"
 plink_vcf_path="${vcf_dir}/${prefix}.biallelic_snps.vcf.gz"
 plink_bed_prefix="${plink_bed_dir}/${prefix}"
-pop_path="${pop_info_dir}/${genetic_map}_${rep}.pop"
+sample_metadata_path="${pop_info_dir}/${genetic_map}_${rep}.sample_metadata.tsv"
 if (( rep < 1 || rep > num_reps )); then
     echo "ERROR: invalid replicate ${rep}; expected 1..${num_reps}" >&2
     exit 1
@@ -99,13 +101,14 @@ if [[ -s "${tree_prefix}.ts.tsz" && -s "${vcf_gz_path}" \
     exit 0
 fi
 
-mkdir -p "${tree_dir}" "${vcf_dir}" "${plink_bed_dir}" "${pop_info_dir}" \
-    "${anc_dir}" "${global_anc_dir}"
+mkdir -p "${tree_dir}" "${pickled_demo_meta}" "${vcf_dir}" \
+    "${plink_bed_dir}" "${pop_info_dir}" "${anc_dir}" "${global_anc_dir}"
 log_msg "running simulation/data generation for rep=${rep}"
 python "${project_dir}/job_scripts/sim_model.py" \
     --tree-prefix "${tree_prefix}" \
+    --pickle-prefix "${pickle_prefix}" \
     --vcf-path "${vcf_path}" \
-    --pop-path "${pop_path}" \
+    --sample-metadata-path "${sample_metadata_path}" \
     --anc-dir "${anc_dir}" \
     --global-anc-dir "${global_anc_dir}" \
     --sample-size "${sample_size}" \

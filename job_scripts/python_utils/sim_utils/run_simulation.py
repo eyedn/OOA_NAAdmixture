@@ -15,6 +15,7 @@ import msprime
 import tskit
 from python_utils import log_msg
 from .build_demography import build_demography
+from .build_metadata import build_metadata
 from python_utils.ancestry_utils.build_global_ancestry_table import (
     build_global_ancestry_table
 )
@@ -50,15 +51,9 @@ def run_simulation(args):
             ),
     ]
 
-    # define...
-    # 1. a vector of individual sample names
-    # 2. a vector of population labels for each individual for downstream use
-    #    with "admixture --supervised"
+    # define a vector of individual sample names for VCF output
     sample_names = []
-    pop_labels = []
     for pop in args.pops:
-        pop_label = "-" if pop == "ADX" else pop
-        pop_labels.extend([pop_label] * args.sample_size)
         for sample_idx in range(args.sample_size):
             sample_names.append(f"{pop}_{sample_idx + 1}")
 
@@ -123,11 +118,11 @@ def run_simulation(args):
     ts_path = f"{args.tree_prefix}.ts"
     ts.dump(ts_path)
 
-    # pickle demography and metadata objects
+    # pickle demography and model metadata objects
     log_msg("writing demography and metadata pickles")
-    with open(f"{args.tree_prefix}.demography.pkl", "wb") as out_file:
+    with open(f"{args.pickle_prefix}.demography.pkl", "wb") as out_file:
         pickle.dump(demography, out_file)
-    with open(f"{args.tree_prefix}.model_metadata.pkl", "wb") as out_file:
+    with open(f"{args.pickle_prefix}.model_metadata.pkl", "wb") as out_file:
         pickle.dump(model_metadata, out_file)
 
     # output vcf resulting from tree sequence
@@ -140,11 +135,19 @@ def run_simulation(args):
             position_transform=lambda positions: [pos + 1 for pos in positions],
         )
 
-    # output pop file for downstream "admixture --supervised"
-    log_msg("writing supervised ADMIXTURE pop file")
-    with open(args.pop_path, "w", encoding="utf-8") as out_file:
-        for label in pop_labels:
-            out_file.write(f"{label}\n")
+    # output metadata for downstream "admixture --supervised"
+    log_msg("writing sample metadata")
+    sample_metadata_rows = build_metadata(
+        args.pops,
+        args.sample_size,
+    )
+    with open(args.sample_metadata_path, "w", encoding="utf-8") as out_file:
+        out_file.write("fid\tiid\tpop\tsupervised_label\toriginal_order\n")
+        for row in sample_metadata_rows:
+            out_file.write(
+                f"{row['fid']}\t{row['iid']}\t{row['pop']}\t"
+                f"{row['supervised_label']}\t{row['original_order']}\n"
+            )
 
     # generate true ancestry from tree sequence using tspop
     log_msg("writing local and global ancestry tables")

@@ -10,10 +10,6 @@
 
 
 import argparse
-from python_utils.stats_utils.subset_pairs import subset_pairs
-
-
-# pattern: Imperative Shell
 
 
 parser = argparse.ArgumentParser()
@@ -21,7 +17,18 @@ parser.add_argument("--subset-path", required=True)
 parser.add_argument("--pop", required=True)
 parser.add_argument("--sample-size", type=int, required=True)
 parser.add_argument("--pops", nargs="+", required=True)
-args = parser.parse_args()
 
 if __name__ == "__main__":
-    subset_pairs(args.subset_path, args.pop, args.pops, args.sample_size)
+    args = parser.parse_args()
+    subset_path = args.subset_path
+    pop = args.pop
+    pops = args.pops
+    sample_size = args.sample_size
+
+    pop_idx = pops.index(pop)
+    start = pop_idx * sample_size
+    end = (pop_idx + 1) * sample_size
+    with open(subset_path, "w", encoding="utf-8") as out_file:
+        for sample_idx in range(start, end):
+            sample_name = f"{pop}_{sample_idx - start + 1}"
+            out_file.write(f"0\t{sample_name}\n")

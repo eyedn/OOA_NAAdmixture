@@ -35,8 +35,8 @@ admix_prioradmix_props_by_generation=$(
 )
 
 # simulate model and generate all needed files for downstream statistics
-mkdir -p "${TREE_DIR}" "${VCF_DIR}" "${PLINK_BED_DIR}" "${POP_INFO_DIR}" \
-    "${ANC_DIR}" "${GLOBAL_ANC_DIR}"
+mkdir -p "${TREE_DIR}" "${PICKLED_DEMO_META}" "${VCF_DIR}" \
+    "${PLINK_BED_DIR}" "${POP_INFO_DIR}" "${ANC_DIR}" "${GLOBAL_ANC_DIR}"
 
 log_msg "submitting OOA_NAAdmixture simulation array
 outdir=${OUTDIR}
@@ -53,6 +53,7 @@ sim_jid=$(sbatch \
     --array="1-${NUM_REPS}%${MAX_JOBS}" \
     "job_scripts/sim_model.sh" \
         "${TREE_DIR}" \
+        "${PICKLED_DEMO_META}" \
         "${VCF_DIR}" \
         "${PLINK_BED_DIR}" \
         "${POP_INFO_DIR}" \

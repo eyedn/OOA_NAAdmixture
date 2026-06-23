@@ -15,8 +15,9 @@ from python_utils.sim_utils.run_simulation import run_simulation
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--tree-prefix", required=True)
+parser.add_argument("--pickle-prefix", required=True)
 parser.add_argument("--vcf-path", required=True)
-parser.add_argument("--pop-path", required=True)
+parser.add_argument("--sample-metadata-path", required=True)
 parser.add_argument("--anc-dir", required=True)
 parser.add_argument("--global-anc-dir", required=True)
 parser.add_argument("--sample-size", type=int, required=True)

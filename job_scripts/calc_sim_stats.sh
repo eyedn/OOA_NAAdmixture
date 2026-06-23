@@ -49,7 +49,10 @@ chr="$9"
 genetic_map="${10}"
 mutation_rate="${11}"
 kin_cutoff="${12}"
-shift 12
+admixture_ld_window="${13}"
+admixture_ld_step="${14}"
+admixture_ld_r2="${15}"
+shift 15
 shift 1 # skip the "--" from input arguments
 pops=( "$@" )
 
@@ -59,32 +62,19 @@ num_threads="${SLURM_CPUS_PER_TASK:-1}"
 prefix="${genetic_map}_${rep}_all"
 tree_tsz_path="${tree_dir}/${prefix}.ts.tsz"
 plink_bed_prefix="${plink_bed_dir}/${prefix}"
-pop_path="${pop_info_dir}/${genetic_map}_${rep}.pop"
+sample_metadata_path="${pop_info_dir}/${genetic_map}_${rep}.sample_metadata.tsv"
 admixture_prefix="${admixture_dir}/${prefix}"
+unrelated_keep_path="${admixture_dir}/${prefix}.king_unrelated.keep"
+ld_prune_prefix="${admixture_dir}/${prefix}.ld_prune"
 if (( rep < 1 || rep > num_reps )); then
     echo "ERROR: invalid replicate ${rep}; expected 1..${num_reps}" >&2
     exit 1
 fi
 
-# run "admixture --supervised"
-mkdir -p "${admixture_dir}" "${king_dir}" "${stats_dir}"
-log_msg "running supervised ADMIXTURE for rep=${rep}"
-cp "${pop_path}" "${admixture_prefix}.pop"
-ln -sf "${plink_bed_prefix}.bed" "${admixture_prefix}.bed"
-ln -sf "${plink_bed_prefix}.bim" "${admixture_prefix}.bim"
-ln -sf "${plink_bed_prefix}.fam" "${admixture_prefix}.fam"
-(
-    cd "${admixture_dir}"
-    "${HOME}/software/ADMIXTURE/admixture_linux-1.4.0/admixture" \
-        --supervised \
-        -j"${num_threads}" \
-        -s "${rep}" \
-        "${prefix}.bed" \
-        2
-)
-
 # calculated KING kinships coefficients
+mkdir -p "${admixture_dir}" "${king_dir}" "${stats_dir}"
 log_msg "running within-population KING for rep=${rep}"
+: > "${unrelated_keep_path}"
 for pop in "${pops[@]}"; do
     subset_path="${king_dir}/${genetic_map}_${rep}_${pop}.subset"
     out_prefix="${king_dir}/${genetic_map}_${rep}_${pop}"
@@ -101,7 +91,61 @@ for pop in "${pops[@]}"; do
         --make-king \
         --make-king-table \
         --out "${out_prefix}"
+    retained_path="${out_prefix}.king.cutoff.in.id"
+    if [[ ! -s "${retained_path}" ]]; then
+        echo "ERROR: missing KING retained sample file ${retained_path}" >&2
+        exit 1
+    fi
+    cat "${retained_path}" >> "${unrelated_keep_path}"
 done
+
+# create LD-pruned unrelated input for "admixture --supervised"
+log_msg "LD-pruning unrelated ADMIXTURE samples for rep=${rep}"
+plink2 \
+    --bfile "${plink_bed_prefix}" \
+    --keep "${unrelated_keep_path}" \
+    --threads "${num_threads}" \
+    --indep-pairwise "${admixture_ld_window}" \
+        "${admixture_ld_step}" \
+        "${admixture_ld_r2}" \
+    --out "${ld_prune_prefix}"
+
+if [[ ! -s "${ld_prune_prefix}.prune.in" ]]; then
+    echo "ERROR: missing LD-pruned SNP list ${ld_prune_prefix}.prune.in" >&2
+    exit 1
+fi
+
+log_msg "creating final ADMIXTURE BED for rep=${rep}"
+plink2 \
+    --bfile "${plink_bed_prefix}" \
+    --keep "${unrelated_keep_path}" \
+    --extract "${ld_prune_prefix}.prune.in" \
+    --threads "${num_threads}" \
+    --make-bed \
+    --out "${admixture_prefix}"
+
+if [[ ! -s "${admixture_prefix}.bed" || ! -s "${admixture_prefix}.bim" \
+    || ! -s "${admixture_prefix}.fam" ]]; then
+    echo "ERROR: failed to create final ADMIXTURE BED set" >&2
+    exit 1
+fi
+
+log_msg "writing final supervised ADMIXTURE pop file for rep=${rep}"
+python "${project_dir}/job_scripts/write_admixture_pop.py" \
+    --sample-metadata-path "${sample_metadata_path}" \
+    --fam-path "${admixture_prefix}.fam" \
+    --pop-path "${admixture_prefix}.pop"
+
+log_msg "running supervised ADMIXTURE for rep=${rep}"
+(
+    cd "${admixture_dir}"
+    "${HOME}/software/ADMIXTURE/admixture_linux-1.4.0/admixture" \
+        --supervised \
+        -j"${num_threads}" \
+        -s "${rep}" \
+        "${prefix}.bed" \
+        2
+)
 
 # calculate summaries on pi, theta, sfs, ld, and kinship
 log_msg "parsing stats for rep=${rep}"
@@ -109,6 +153,8 @@ python "${project_dir}/job_scripts/calc_sim_stats.py" \
     --rep "${rep}" \
     --tree-tsz-path "${tree_tsz_path}" \
     --plink-bed-prefix "${plink_bed_prefix}" \
+    --sample-metadata-path "${sample_metadata_path}" \
+    --admixture-fam-path "${admixture_prefix}.fam" \
     --admixture-dir "${admixture_dir}" \
     --king-dir "${king_dir}" \
     --stats-dir "${stats_dir}" \

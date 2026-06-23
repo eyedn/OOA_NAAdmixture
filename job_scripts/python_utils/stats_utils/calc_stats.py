@@ -10,6 +10,8 @@
 
 
 from pathlib import Path
+import pandas as pd
+import tszip
 from .build_2d_sfs_rows import build_2d_sfs_rows
 from .build_ld_decay_rows import build_ld_decay_rows
 from .build_pi_theta_rows import build_pi_theta_rows
@@ -20,9 +22,6 @@ from .parse_king_file import parse_king_file
 
 # generate replicate summaries on pi, theta, sfs, ld, and kinship
 def calc_stats(args):
-    import pandas as pd
-    import tszip
-
     stats_dir = Path(args.stats_dir)
     stats_dir.mkdir(parents=True, exist_ok=True)
 
@@ -45,8 +44,8 @@ def calc_stats(args):
     admixture_table = parse_admixture_q(
         q_path,
         args.rep,
-        args.pops,
-        args.sample_size
+        args.sample_metadata_path,
+        args.admixture_fam_path,
     )
     admixture_table.to_csv(
         stats_dir / f"admixture_q.rep_{args.rep}.tsv",

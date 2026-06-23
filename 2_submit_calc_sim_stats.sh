@@ -44,6 +44,9 @@ stats_jid=$(sbatch \
         "${GENETIC_MAP}" \
         "${MUTATION_RATE}" \
         "${KIN_CUTOFF=}" \
+        "${ADMIXTURE_LD_WINDOW}" \
+        "${ADMIXTURE_LD_STEP}" \
+        "${ADMIXTURE_LD_R2}" \
         -- \
         "${POPS[@]}"
 )
