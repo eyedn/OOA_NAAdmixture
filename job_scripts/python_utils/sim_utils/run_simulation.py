@@ -103,7 +103,7 @@ def run_simulation(args):
     )
 
     # simulate the above demography with msprime and output the tree sequence
-    log_msg.log_msg("simulating tree sequence")
+    log_msg("simulating tree sequence")
     ts = msprime.sim_ancestry(
         samples=sample_sets,
         demography=demography,
@@ -124,14 +124,14 @@ def run_simulation(args):
     ts.dump(ts_path)
 
     # pickle demography and metadata objects
-    log_msg.log_msg("writing demography and metadata pickles")
+    log_msg("writing demography and metadata pickles")
     with open(f"{args.tree_prefix}.demography.pkl", "wb") as out_file:
         pickle.dump(demography, out_file)
     with open(f"{args.tree_prefix}.model_metadata.pkl", "wb") as out_file:
         pickle.dump(model_metadata, out_file)
 
     # output vcf resulting from tree sequence
-    log_msg.log_msg("writing all-sample VCF")
+    log_msg("writing all-sample VCF")
     with open(args.vcf_path, "w", encoding="utf-8") as out_file:
         ts.write_vcf(
             out_file,
@@ -141,13 +141,13 @@ def run_simulation(args):
         )
 
     # output pop file for downstream "admixture --supervised"
-    log_msg.log_msg("writing supervised ADMIXTURE pop file")
+    log_msg("writing supervised ADMIXTURE pop file")
     with open(args.pop_path, "w", encoding="utf-8") as out_file:
         for label in pop_labels:
             out_file.write(f"{label}\n")
 
     # generate true ancestry from tree sequence using tspop
-    log_msg.log_msg("writing local and global ancestry tables")
+    log_msg("writing local and global ancestry tables")
     census_time = args.admixture_time + args.census_time_offset
     ancestry_table = get_local_ancestry_table(ts, census_time)
     sample_node_rows = []

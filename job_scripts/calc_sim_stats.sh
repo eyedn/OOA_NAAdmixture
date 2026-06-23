@@ -30,8 +30,7 @@ source /apps/conda/miniforge3/25.3.0/etc/profile.d/conda.sh
 conda activate OOA_NAAdmixture
 export PATH="${HOME}/.conda/envs/OOA_NAAdmixture/bin:${PATH}"
 
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-project_dir="$(cd "${script_dir}/.." && pwd)"
+project_dir="$(pwd)"
 source "${project_dir}/other_scripts/log_msg.sh"
 
 : "${SLURM_ARRAY_TASK_ID:?ERROR: run as a Slurm array}"
