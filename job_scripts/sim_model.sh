@@ -25,7 +25,7 @@
 set -euo pipefail
 
 module purge
-ml gcc/13.3.0 htslib/1.19.1 plink2/2.00a4.3 conda
+ml gcc/13.3.0 htslib/1.19.1 bcftools/1.19 plink2/2.00a4.3 conda
 source /apps/conda/miniforge3/25.3.0/etc/profile.d/conda.sh
 conda activate OOA_NAAdmixture
 export PATH="${HOME}/.conda/envs/OOA_NAAdmixture/bin:${PATH}"
@@ -78,9 +78,11 @@ pops=( "$@" )
 
 # derived variables
 rep="${SLURM_ARRAY_TASK_ID}"
+num_threads="${SLURM_CPUS_PER_TASK:-1}"
 prefix="${genetic_map}_${rep}_all"
 tree_prefix="${tree_dir}/${prefix}"
 vcf_path="${vcf_dir}/${prefix}.vcf"
+plink_vcf_path="${vcf_dir}/${prefix}.biallelic_snps.vcf.gz"
 plink_bed_prefix="${plink_bed_dir}/${prefix}"
 pop_path="${pop_info_dir}/${genetic_map}_${rep}.pop"
 if (( rep < 1 || rep > num_reps )); then
@@ -90,7 +92,8 @@ fi
 
 # run simulation using msprime via sim_3T.py
 if [[ -s "${tree_prefix}.ts.tsz" && -s "${vcf_path}" \
-    && -s "${plink_bed_prefix}.bed" ]]; then
+    && -s "${plink_bed_prefix}.bed" && -s "${plink_bed_prefix}.bim" \
+    && -s "${plink_bed_prefix}.fam" ]]; then
     log_msg "simulation outputs exist for rep=${rep}; skipping"
     exit 0
 fi
@@ -149,7 +152,31 @@ if [[ -s "${tree_prefix}.ts" ]]; then
     rm "${tree_prefix}.ts"
 fi
 
+log_msg "filtering biallelic SNPs for PLINK for rep=${rep}"
+bcftools norm \
+    --rm-dup all \
+    --threads "${num_threads}" \
+    "${vcf_path}" |
+    bcftools view \
+        --types snps \
+        --min-alleles 2 \
+        --max-alleles 2 \
+        --threads "${num_threads}" \
+        -Oz \
+        -o "${plink_vcf_path}"
+tabix -p vcf "${plink_vcf_path}"
+
 log_msg "creating PLINK BED for rep=${rep}"
-plink2 --vcf "${vcf_path}" --make-bed --out "${plink_bed_prefix}"
+plink2 \
+    --vcf "${plink_vcf_path}" \
+    --threads "${num_threads}" \
+    --make-bed \
+    --out "${plink_bed_prefix}"
+
+if [[ ! -s "${plink_bed_prefix}.bed" || ! -s "${plink_bed_prefix}.bim" \
+    || ! -s "${plink_bed_prefix}.fam" ]]; then
+    echo "ERROR: failed to create complete PLINK BED set" >&2
+    exit 1
+fi
 
 log_msg "done with simulation/data generation for rep=${rep}"
