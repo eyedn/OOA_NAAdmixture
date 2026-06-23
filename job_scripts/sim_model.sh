@@ -82,6 +82,7 @@ num_threads="${SLURM_CPUS_PER_TASK:-1}"
 prefix="${genetic_map}_${rep}_all"
 tree_prefix="${tree_dir}/${prefix}"
 vcf_path="${vcf_dir}/${prefix}.vcf"
+vcf_gz_path="${vcf_path}.gz"
 plink_vcf_path="${vcf_dir}/${prefix}.biallelic_snps.vcf.gz"
 plink_bed_prefix="${plink_bed_dir}/${prefix}"
 pop_path="${pop_info_dir}/${genetic_map}_${rep}.pop"
@@ -91,7 +92,7 @@ if (( rep < 1 || rep > num_reps )); then
 fi
 
 # run simulation using msprime via sim_3T.py
-if [[ -s "${tree_prefix}.ts.tsz" && -s "${vcf_path}" \
+if [[ -s "${tree_prefix}.ts.tsz" && -s "${vcf_gz_path}" \
     && -s "${plink_bed_prefix}.bed" && -s "${plink_bed_prefix}.bim" \
     && -s "${plink_bed_prefix}.fam" ]]; then
     log_msg "simulation outputs exist for rep=${rep}; skipping"
@@ -152,11 +153,17 @@ if [[ -s "${tree_prefix}.ts" ]]; then
     rm "${tree_prefix}.ts"
 fi
 
+log_msg "compressing and indexing all-sample VCF for rep=${rep}"
+if [[ ! -s "${vcf_gz_path}" ]]; then
+    bgzip -f "${vcf_path}"
+fi
+tabix -f -p vcf "${vcf_gz_path}"
+
 log_msg "filtering biallelic SNPs for PLINK for rep=${rep}"
 bcftools norm \
     --rm-dup all \
     --threads "${num_threads}" \
-    "${vcf_path}" |
+    "${vcf_gz_path}" |
     bcftools view \
         --types snps \
         --min-alleles 2 \
