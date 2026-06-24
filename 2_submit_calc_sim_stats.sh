@@ -29,7 +29,7 @@ pops=${POPS[*]}"
 stats_jid=$(sbatch \
     --parsable \
     --chdir="${script_dir}" \
-    --job-name="ooa_stats" \
+    --job-name="calcOOANAA" \
     --array="1-${NUM_REPS}%${MAX_JOBS}" \
     "job_scripts/calc_sim_stats.sh" \
         "${TREE_DIR}" \
@@ -58,7 +58,7 @@ combine_jid=$(sbatch \
     --parsable \
     --dependency="afterok:${stats_jid}" \
     --chdir="${script_dir}" \
-    --job-name="ooa_combine_stats" \
+    --job-name="combOOANAA" \
     "job_scripts/combine_sim_stats.sh" \
         "${STATS_DIR}" \
         "${NUM_REPS}"
