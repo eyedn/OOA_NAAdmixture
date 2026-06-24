@@ -19,7 +19,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--stats-dir", required=True)
 parser.add_argument("--num-reps", type=int, required=True)
 TABLE_NAMES = [
-    "admixture_q",
+    "ancestry",
     "kinship",
     "pi_theta_stats",
     "sfs",

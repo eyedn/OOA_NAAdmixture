@@ -41,18 +41,19 @@ tree_dir="$1"
 plink_bed_dir="$2"
 pop_info_dir="$3"
 admixture_dir="$4"
-king_dir="$5"
-stats_dir="$6"
-sample_size="$7"
-num_reps="$8"
-chr="$9"
-genetic_map="${10}"
-mutation_rate="${11}"
-kin_cutoff="${12}"
-admixture_ld_window="${13}"
-admixture_ld_step="${14}"
-admixture_ld_r2="${15}"
-shift 15
+global_anc_dir="$5"
+king_dir="$6"
+stats_dir="$7"
+sample_size="$8"
+num_reps="$9"
+chr="${10}"
+genetic_map="${11}"
+mutation_rate="${12}"
+kin_cutoff="${13}"
+admixture_ld_window="${14}"
+admixture_ld_step="${15}"
+admixture_ld_r2="${16}"
+shift 16
 shift 1 # skip the "--" from input arguments
 pops=( "$@" )
 
@@ -156,6 +157,7 @@ python "${project_dir}/job_scripts/calc_sim_stats.py" \
     --sample-metadata-path "${sample_metadata_path}" \
     --admixture-fam-path "${admixture_prefix}.fam" \
     --admixture-dir "${admixture_dir}" \
+    --global-anc-dir "${global_anc_dir}" \
     --king-dir "${king_dir}" \
     --stats-dir "${stats_dir}" \
     --sample-size "${sample_size}" \

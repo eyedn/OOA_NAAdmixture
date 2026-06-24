@@ -8,10 +8,7 @@
 #           build_global_ancestry_table.py
 ###############################################################################
 
-# pattern: Functional Core
-
-
-from .build_adx_sample_ids import build_adx_sample_ids
+from .build_sample_ids import build_sample_ids
 
 
 POP_ID_TO_NAME = {
@@ -19,28 +16,29 @@ POP_ID_TO_NAME = {
     1: "EUR",
 }
 
-
 # build global ancestry table from the tspop local ancestry calls
-def build_global_ancestry_table(ancestry_table, sample_node_rows):
+def build_global_ancestry_table(ancestry_table, sample_node_rows, pop):
     sample_to_ind = {node: ind_id for node, ind_id, _ in sample_node_rows}
 
     ancestry_table = ancestry_table.copy()
-    adx_start_ind = min(sample_to_ind[int(node)] for node in ancestry_table[
+    pop_start_ind = min(sample_to_ind[int(node)] for node in ancestry_table[
         "sample"
     ])
     ancestry_table["sample_ind"] = ancestry_table["sample"].map(
         lambda node: sample_to_ind[int(node)]
     )
     ancestry_table["sample_id"] = ancestry_table["sample"].map(
-        lambda node: build_adx_sample_ids(
+        lambda node: build_sample_ids(
+            pop,
             sample_to_ind[int(node)],
-            adx_start_ind,
+            pop_start_ind,
         )[0]
     )
     ancestry_table["vcf_sample_id"] = ancestry_table["sample"].map(
-        lambda node: build_adx_sample_ids(
+        lambda node: build_sample_ids(
+            pop,
             sample_to_ind[int(node)],
-            adx_start_ind,
+            pop_start_ind,
         )[1]
     )
     ancestry_table["population_name"] = ancestry_table["population"].map(

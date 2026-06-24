@@ -8,10 +8,8 @@
 #           write_local_ancestry.py
 ###############################################################################
 
-# pattern: Imperative Shell
 
-
-from .build_adx_sample_ids import build_adx_sample_ids
+from .build_sample_ids import build_sample_ids
 
 
 POP_ID_TO_NAME = {
@@ -20,26 +18,33 @@ POP_ID_TO_NAME = {
     2: "ADX",
 }
 
-
 # output tsv of tspop local ancestry
-def write_local_ancestry(ancestry_table, sample_node_rows, out_tsv, chr_used):
+def write_local_ancestry(
+    ancestry_table,
+    sample_node_rows,
+    out_tsv,
+    chr_used,
+    pop,
+):
     sample_to_ind = {node: ind_id for node, ind_id, _ in sample_node_rows}
     sample_to_hap = {node: hap for node, _, hap in sample_node_rows}
 
     ancestry_table = ancestry_table.copy()
-    adx_start_ind = min(sample_to_ind[int(node)] for node in ancestry_table[
+    pop_start_ind = min(sample_to_ind[int(node)] for node in ancestry_table[
         "sample"
     ])
     ancestry_table["sample_id"] = ancestry_table["sample"].map(
-        lambda node: build_adx_sample_ids(
+        lambda node: build_sample_ids(
+            pop,
             sample_to_ind[int(node)],
-            adx_start_ind,
+            pop_start_ind,
         )[0]
     )
     ancestry_table["vcf_sample_id"] = ancestry_table["sample"].map(
-        lambda node: build_adx_sample_ids(
+        lambda node: build_sample_ids(
+            pop,
             sample_to_ind[int(node)],
-            adx_start_ind,
+            pop_start_ind,
         )[1]
     )
     ancestry_table["hap"] = ancestry_table["sample"].map(

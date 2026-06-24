@@ -36,6 +36,7 @@ stats_jid=$(sbatch \
         "${PLINK_BED_DIR}" \
         "${POP_INFO_DIR}" \
         "${ADMIXTURE_DIR}" \
+        "${GLOBAL_ANC_DIR}" \
         "${KING_DIR}" \
         "${STATS_DIR}" \
         "${SAMPLE_SIZE}" \

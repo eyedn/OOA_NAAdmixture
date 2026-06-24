@@ -168,21 +168,22 @@ def run_simulation(args):
             & (ancestry_table["sample"] <= end_node)
         ].copy()
 
-        if pop == "ADX":
-            local_path = (
-                f"{args.anc_dir}/{args.genetic_map}_{args.seed}_{pop}.tsv"
-            )
-            write_local_ancestry(
-                pop_ancestry,
-                sample_node_rows,
-                local_path,
-                args.chromosome,
-            )
-            global_path = (
-                f"{args.global_anc_dir}/{args.genetic_map}_{args.seed}_ADX.tsv"
-            )
-            global_table = build_global_ancestry_table(
-                pop_ancestry,
-                sample_node_rows,
-            )
-            write_global_ancestry(global_table, global_path)
+        local_path = (
+            f"{args.anc_dir}/{args.genetic_map}_{args.seed}_{pop}.tsv"
+        )
+        write_local_ancestry(
+            pop_ancestry,
+            sample_node_rows,
+            local_path,
+            args.chromosome,
+            pop,
+        )
+        global_path = (
+            f"{args.global_anc_dir}/{args.genetic_map}_{args.seed}_{pop}.tsv"
+        )
+        global_table = build_global_ancestry_table(
+            pop_ancestry,
+            sample_node_rows,
+            pop,
+        )
+        write_global_ancestry(global_table, global_path)

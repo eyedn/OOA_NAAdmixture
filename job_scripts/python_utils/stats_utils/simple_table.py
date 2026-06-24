@@ -15,6 +15,7 @@
 class SimpleTable:
     def __init__(self, rows):
         self.rows = rows
+        self.columns = list(rows[0].keys()) if rows else []
 
     def to_dict(self, orient="dict"):
         if orient != "records":

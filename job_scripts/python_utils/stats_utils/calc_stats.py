@@ -13,10 +13,10 @@ from pathlib import Path
 import pandas as pd
 import tszip
 from .build_2d_sfs_rows import build_2d_sfs_rows
+from .build_ancestry_table import build_ancestry_table
 from .build_ld_decay_rows import build_ld_decay_rows
 from .build_pi_theta_rows import build_pi_theta_rows
 from .build_1d_sfs_rows import build_1d_sfs_rows
-from .parse_admixture_q import parse_admixture_q
 from .parse_king_file import parse_king_file
 
 
@@ -37,23 +37,25 @@ def calc_stats(args):
         )
     ts = tszip.decompress(tree_tsz_path)
 
-    # process "admixture --supervised" results
+    # process tspop and "admixture --supervised" ancestry results
     q_path = Path(args.admixture_dir) / (
         f"{args.genetic_map}_{args.rep}_all.2.Q"
     )
-    admixture_table = parse_admixture_q(
-        q_path,
-        args.rep,
-        args.sample_metadata_path,
-        args.admixture_fam_path,
+    ancestry_table = build_ancestry_table(
+        rep=args.rep,
+        pops=args.pops,
+        genetic_map=args.genetic_map,
+        global_anc_dir=args.global_anc_dir,
+        q_path=q_path,
+        fam_path=args.admixture_fam_path,
     )
-    admixture_table.to_csv(
-        stats_dir / f"admixture_q.rep_{args.rep}.tsv",
+    ancestry_table.to_csv(
+        stats_dir / f"ancestry.rep_{args.rep}.tsv",
         sep="\t",
         index=False
     )
-    admixture_table.to_parquet(
-        stats_dir / f"admixture_q.rep_{args.rep}.parquet",
+    ancestry_table.to_parquet(
+        stats_dir / f"ancestry.rep_{args.rep}.parquet",
         index=False
     )
 
