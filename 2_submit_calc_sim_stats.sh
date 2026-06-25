@@ -31,6 +31,8 @@ stats_jid=$(sbatch \
     --chdir="${script_dir}" \
     --job-name="calcOOANAA" \
     --array="1-${NUM_REPS}%${MAX_JOBS}" \
+    --cpus-per-task="${STATS_CPUS_PER_TASK}" \
+    --mem="${STATS_MEM}" \
     "job_scripts/calc_sim_stats.sh" \
         "${TREE_DIR}" \
         "${PLINK_BED_DIR}" \
@@ -59,6 +61,7 @@ combine_jid=$(sbatch \
     --dependency="afterok:${stats_jid}" \
     --chdir="${script_dir}" \
     --job-name="combOOANAA" \
+    --mem="${COMB_MEM}" \
     "job_scripts/combine_sim_stats.sh" \
         "${STATS_DIR}" \
         "${NUM_REPS}"

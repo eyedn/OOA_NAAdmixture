@@ -11,8 +11,6 @@
 ###############################################################################
 
 #SBATCH --time=1-00:00:00
-#SBATCH --cpus-per-task=4
-#SBATCH --mem=32G
 #SBATCH --partition=qcb
 #SBATCH --account=jazlynmo_738
 #SBATCH --nodes=1

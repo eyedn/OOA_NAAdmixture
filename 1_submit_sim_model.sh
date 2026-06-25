@@ -51,6 +51,8 @@ sim_jid=$(sbatch \
     --chdir="${script_dir}" \
     --job-name="simOOANAA" \
     --array="1-${NUM_REPS}%${MAX_JOBS}" \
+    --cpus-per-task="${SIM_CPUS_PER_TASK}" \
+    --mem="${SIM_MEM}" \
     "job_scripts/sim_model.sh" \
         "${TREE_DIR}" \
         "${PICKLED_DEMO_META}" \
