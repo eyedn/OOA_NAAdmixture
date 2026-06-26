@@ -8,6 +8,7 @@
 #           build_global_ancestry_table.py
 ###############################################################################
 
+
 from .build_sample_ids import build_sample_ids
 
 
@@ -16,7 +17,8 @@ POP_ID_TO_NAME = {
     1: "EUR",
 }
 
-# build global ancestry table from the tspop local ancestry calls
+
+# Build global ancestry proportions from tspop local ancestry calls.
 def build_global_ancestry_table(ancestry_table, sample_node_rows, pop):
     sample_to_ind = {node: ind_id for node, ind_id, _ in sample_node_rows}
 
@@ -68,8 +70,9 @@ def build_global_ancestry_table(ancestry_table, sample_node_rows, pop):
     total_span = ancestry_wide.sum(axis=1)
     ancestry_wide["AFR_prop"] = ancestry_wide["AFR"] / total_span
     ancestry_wide["EUR_prop"] = ancestry_wide["EUR"] / total_span
+    ancestry_wide["span"] = total_span
     ancestry_wide = ancestry_wide.reset_index().sort_values("sample_ind")
 
     return ancestry_wide[
-        ["sample_id", "vcf_sample_id", "AFR_prop", "EUR_prop"]
+        ["sample_id", "vcf_sample_id", "AFR_prop", "EUR_prop", "span"]
     ]

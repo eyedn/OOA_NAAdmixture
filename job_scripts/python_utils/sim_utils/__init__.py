@@ -8,13 +8,9 @@
 #           __init__.py
 ###############################################################################
 
-from .build_demography import *
-from .build_metadata import *
-from .run_simulation import *
+from .run_simulation import run_simulation
 
 
 __all__ = [
-    "build_demography",
-    "build_metadata",
     "run_simulation"
 ]

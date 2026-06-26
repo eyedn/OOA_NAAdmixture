@@ -7,8 +7,9 @@
 #           Department of Quantitative and Computational Biology 
 #           Mooney Lab
 #           ---
-#           run_stats.sh
+#           calc_chrom_stats.sh
 ###############################################################################
+
 
 #SBATCH --time=1-00:00:00
 #SBATCH --partition=qcb
@@ -30,6 +31,7 @@ export PATH="${HOME}/.conda/envs/OOA_NAAdmixture/bin:${PATH}"
 
 project_dir="$(pwd)"
 source "${project_dir}/other_scripts/log_msg.sh"
+source "${project_dir}/other_scripts/map_slurm_task.sh"
 
 : "${SLURM_ARRAY_TASK_ID:?ERROR: run as a Slurm array}"
 
@@ -44,40 +46,45 @@ king_dir="$6"
 stats_dir="$7"
 sample_size="$8"
 num_reps="$9"
-chr="${10}"
-genetic_map="${11}"
-mutation_rate="${12}"
-kin_cutoff="${13}"
-admixture_ld_window="${14}"
-admixture_ld_step="${15}"
-admixture_ld_r2="${16}"
-shift 16
+genetic_map="${10}"
+mutation_rate="${11}"
+kin_cutoff="${12}"
+admixture_ld_window="${13}"
+admixture_ld_step="${14}"
+admixture_ld_r2="${15}"
+shift 15
+chroms=()
+while [[ "$1" != "--" ]]; do
+    chroms+=( "$1" )
+    shift
+done
 shift 1 # skip the "--" from input arguments
 pops=( "$@" )
 
 # derived variables
-rep="${SLURM_ARRAY_TASK_ID}"
+read -r rep chr < <(
+    map_slurm_task_to_rep_chr \
+        "${SLURM_ARRAY_TASK_ID}" \
+        "${num_reps}" \
+        "${chroms[@]}"
+)
 num_threads="${SLURM_CPUS_PER_TASK:-1}"
-prefix="${genetic_map}_${rep}_all"
+prefix="${genetic_map}_${rep}_chr${chr}_all"
 tree_tsz_path="${tree_dir}/${prefix}.ts.tsz"
 plink_bed_prefix="${plink_bed_dir}/${prefix}"
-sample_metadata_path="${pop_info_dir}/${genetic_map}_${rep}.sample_metadata.tsv"
+sample_metadata_path="${pop_info_dir}/${genetic_map}_${rep}_chr${chr}.sample_metadata.tsv"
 admixture_prefix="${admixture_dir}/${prefix}"
 unrelated_keep_path="${admixture_dir}/${prefix}.king_unrelated.keep"
 ld_prune_prefix="${admixture_dir}/${prefix}.ld_prune"
-if (( rep < 1 || rep > num_reps )); then
-    echo "ERROR: invalid replicate ${rep}; expected 1..${num_reps}" >&2
-    exit 1
-fi
 
 # calculated KING kinships coefficients
 mkdir -p "${admixture_dir}" "${king_dir}" "${stats_dir}"
-log_msg "running within-population KING for rep=${rep}"
+log_msg "running within-population KING for rep=${rep} chr=${chr}"
 : > "${unrelated_keep_path}"
 for pop in "${pops[@]}"; do
-    subset_path="${king_dir}/${genetic_map}_${rep}_${pop}.subset"
-    out_prefix="${king_dir}/${genetic_map}_${rep}_${pop}"
-    python "${project_dir}/job_scripts/write_pop_subset.py" \
+    subset_path="${king_dir}/${genetic_map}_${rep}_chr${chr}_${pop}.subset"
+    out_prefix="${king_dir}/${genetic_map}_${rep}_chr${chr}_${pop}"
+    python "${project_dir}/job_scripts/python_utils/write_pop_subset.py" \
         --subset-path "${subset_path}" \
         --pop "${pop}" \
         --sample-size "${sample_size}" \
@@ -99,7 +106,7 @@ for pop in "${pops[@]}"; do
 done
 
 # create LD-pruned unrelated input for "admixture --supervised"
-log_msg "LD-pruning unrelated ADMIXTURE samples for rep=${rep}"
+log_msg "LD-pruning unrelated ADMIXTURE samples for rep=${rep} chr=${chr}"
 plink2 \
     --bfile "${plink_bed_prefix}" \
     --keep "${unrelated_keep_path}" \
@@ -114,7 +121,7 @@ if [[ ! -s "${ld_prune_prefix}.prune.in" ]]; then
     exit 1
 fi
 
-log_msg "creating final ADMIXTURE BED for rep=${rep}"
+log_msg "creating final ADMIXTURE BED for rep=${rep} chr=${chr}"
 plink2 \
     --bfile "${plink_bed_prefix}" \
     --keep "${unrelated_keep_path}" \
@@ -129,13 +136,13 @@ if [[ ! -s "${admixture_prefix}.bed" || ! -s "${admixture_prefix}.bim" \
     exit 1
 fi
 
-log_msg "writing final supervised ADMIXTURE pop file for rep=${rep}"
-python "${project_dir}/job_scripts/write_admixture_pop.py" \
+log_msg "writing final supervised ADMIXTURE pop file for rep=${rep} chr=${chr}"
+python "${project_dir}/job_scripts/python_utils/write_admixture_pop.py" \
     --sample-metadata-path "${sample_metadata_path}" \
     --fam-path "${admixture_prefix}.fam" \
     --pop-path "${admixture_prefix}.pop"
 
-log_msg "running supervised ADMIXTURE for rep=${rep}"
+log_msg "running supervised ADMIXTURE for rep=${rep} chr=${chr}"
 (
     cd "${admixture_dir}"
     "${HOME}/software/ADMIXTURE/admixture_linux-1.4.0/admixture" \
@@ -147,8 +154,8 @@ log_msg "running supervised ADMIXTURE for rep=${rep}"
 )
 
 # calculate summaries on pi, theta, sfs, ld, and kinship
-log_msg "parsing stats for rep=${rep}"
-python "${project_dir}/job_scripts/calc_sim_stats.py" \
+log_msg "parsing stats for rep=${rep} chr=${chr}"
+python "${project_dir}/job_scripts/python_utils/calc_sim_stats.py" \
     --rep "${rep}" \
     --tree-tsz-path "${tree_tsz_path}" \
     --plink-bed-prefix "${plink_bed_prefix}" \
@@ -164,4 +171,4 @@ python "${project_dir}/job_scripts/calc_sim_stats.py" \
     --mutation-rate "${mutation_rate}" \
     --pops "${pops[@]}"
 
-log_msg "done with statistics for rep=${rep}"
+log_msg "done with statistics for rep=${rep} chr=${chr}"

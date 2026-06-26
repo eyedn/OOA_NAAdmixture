@@ -10,8 +10,10 @@
 
 
 import argparse
-from python_utils.stats_utils.read_fam_order import read_fam_order
-from python_utils.stats_utils.read_sample_metadata import read_sample_metadata
+from job_scripts.python_utils.stats_utils.read_fam_order import read_fam_order
+from job_scripts.python_utils.stats_utils.read_sample_metadata import (
+    read_sample_metadata,
+)
 
 
 parser = argparse.ArgumentParser()

@@ -10,6 +10,7 @@
 #           combine_sim_stats.sh
 ###############################################################################
 
+
 #SBATCH --time=4:00:00
 #SBATCH --cpus-per-task=1
 #SBATCH --partition=qcb
@@ -36,12 +37,15 @@ source "${project_dir}/other_scripts/log_msg.sh"
 # input variables
 stats_dir="$1"
 num_reps="$2"
+shift 2
+extra_args=( "$@" )
 
 
 # combine per-replicate summaries
 log_msg "combining simulation statistics across ${num_reps} replicates"
-python "${project_dir}/job_scripts/combine_sim_stats.py" \
+python "${project_dir}/job_scripts/python_utils/combine_sim_stats.py" \
     --stats-dir "${stats_dir}" \
-    --num-reps "${num_reps}"
+    --num-reps "${num_reps}" \
+    "${extra_args[@]}"
 
 log_msg "done combining simulation statistics"

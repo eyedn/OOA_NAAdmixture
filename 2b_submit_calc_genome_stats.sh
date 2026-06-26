@@ -7,7 +7,7 @@
 #           Department of Quantitative and Computational Biology 
 #           Mooney Lab
 #           ---
-#           2_submit_calc_sim_stats.sh
+#           2b_submit_calc_genome_stats.sh
 ###############################################################################
 
 
@@ -18,47 +18,46 @@ source "${script_dir}/other_scripts/const.sh"
 source "${script_dir}/other_scripts/log_msg.sh"
 
 
-# generate summaries of pi, watterson's theta, 1D/2D sfs, ld decay, and kinship
+# aggregate chromosome statistics and run genome-level ADMIXTURE/KING
 mkdir -p "${ADMIXTURE_DIR}" "${KING_DIR}" "${STATS_DIR}"
-log_msg "submitting OOA_NAAdmixture statistics array
+log_msg "submitting OOA_NAAdmixture genome statistics array
 outdir=${OUTDIR}
 num_reps=${NUM_REPS}
 sample_size=${SAMPLE_SIZE}
+chroms=${CHROMS[*]}
 pops=${POPS[*]}"
 
-stats_jid=$(sbatch \
+genome_jid=$(sbatch \
     --parsable \
     --chdir="${script_dir}" \
-    --job-name="calcOOANAA" \
+    --job-name="calcGenomeOOANAA" \
     --array="1-${NUM_REPS}%${MAX_JOBS}" \
     --cpus-per-task="${STATS_CPUS_PER_TASK}" \
     --mem="${STATS_MEM}" \
-    "job_scripts/calc_sim_stats.sh" \
-        "${TREE_DIR}" \
+    "job_scripts/calc_genome_stats.sh" \
+        "${VCF_DIR}" \
         "${PLINK_BED_DIR}" \
         "${POP_INFO_DIR}" \
         "${ADMIXTURE_DIR}" \
-        "${GLOBAL_ANC_DIR}" \
         "${KING_DIR}" \
         "${STATS_DIR}" \
         "${SAMPLE_SIZE}" \
         "${NUM_REPS}" \
-        "${CHR}" \
         "${GENETIC_MAP}" \
-        "${MUTATION_RATE}" \
         "${KIN_CUTOFF=}" \
         "${ADMIXTURE_LD_WINDOW}" \
         "${ADMIXTURE_LD_STEP}" \
         "${ADMIXTURE_LD_R2}" \
+        "${CHROMS[@]}" \
         -- \
         "${POPS[@]}"
 )
 
-log_msg "submitted simulation statistics array; jid=${stats_jid}"
+log_msg "submitted genome statistics array; jid=${genome_jid}"
 
 combine_jid=$(sbatch \
     --parsable \
-    --dependency="afterok:${stats_jid}" \
+    --dependency="afterok:${genome_jid}" \
     --chdir="${script_dir}" \
     --job-name="combOOANAA" \
     --mem="${COMB_MEM}" \
@@ -67,4 +66,4 @@ combine_jid=$(sbatch \
         "${NUM_REPS}"
 )
 
-log_msg "submitted simulation statistics combine job; jid=${combine_jid}"
+log_msg "submitted genome statistics combine job; jid=${combine_jid}"

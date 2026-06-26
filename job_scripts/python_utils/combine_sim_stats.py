@@ -10,7 +10,8 @@
 
 
 import argparse
-from python_utils.stats_utils.combine_sim_stats_tables import (
+from job_scripts.python_utils.stats_utils.combine_sim_stats_tables import (
+    combine_chromosome_stats_tables,
     combine_sim_stats_tables,
 )
 
@@ -18,6 +19,8 @@ from python_utils.stats_utils.combine_sim_stats_tables import (
 parser = argparse.ArgumentParser()
 parser.add_argument("--stats-dir", required=True)
 parser.add_argument("--num-reps", type=int, required=True)
+parser.add_argument("--chroms", nargs="+")
+parser.add_argument("--chromosomes", action="store_true")
 TABLE_NAMES = [
     "ancestry",
     "kinship",
@@ -29,4 +32,8 @@ TABLE_NAMES = [
 
 
 if __name__ == "__main__":
-    combine_sim_stats_tables(parser.parse_args(), TABLE_NAMES)
+    args = parser.parse_args()
+    if args.chromosomes:
+        combine_chromosome_stats_tables(args, TABLE_NAMES)
+    else:
+        combine_sim_stats_tables(args, TABLE_NAMES)

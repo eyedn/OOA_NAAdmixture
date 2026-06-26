@@ -10,7 +10,7 @@
 
 
 import argparse
-from python_utils.sim_utils.run_simulation import run_simulation
+from job_scripts.python_utils.sim_utils.run_simulation import run_simulation
 
 
 parser = argparse.ArgumentParser()
@@ -53,4 +53,5 @@ parser.add_argument("--pops", nargs="+", required=True)
 
 
 if __name__ == "__main__":
-    run_simulation(parser.parse_args())
+    args = parser.parse_args()
+    run_simulation(args)

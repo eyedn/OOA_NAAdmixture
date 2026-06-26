@@ -11,7 +11,6 @@
 
 import argparse
 
-
 parser = argparse.ArgumentParser()
 parser.add_argument("--subset-path", required=True)
 parser.add_argument("--pop", required=True)

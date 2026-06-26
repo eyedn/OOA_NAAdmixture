@@ -18,7 +18,8 @@ POP_ID_TO_NAME = {
     2: "ADX",
 }
 
-# output tsv of tspop local ancestry
+
+# Write tspop local ancestry rows with sample labels.
 def write_local_ancestry(
     ancestry_table,
     sample_node_rows,
