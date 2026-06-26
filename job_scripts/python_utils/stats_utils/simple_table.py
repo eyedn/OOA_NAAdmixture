@@ -9,14 +9,14 @@
 ###############################################################################
 
 
-# pattern: Functional Core
-
-
+# store table rows for fallback paths when pandas is unavailable
 class SimpleTable:
+    # initialize a minimal table from row dictionaries
     def __init__(self, rows):
         self.rows = rows
         self.columns = list(rows[0].keys()) if rows else []
 
+    # convert rows to a records-style list for shared callers
     def to_dict(self, orient="dict"):
         if orient != "records":
             raise ValueError("SimpleTable only supports orient='records'")

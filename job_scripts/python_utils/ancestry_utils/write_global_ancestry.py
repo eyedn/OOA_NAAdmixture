@@ -9,7 +9,7 @@
 ###############################################################################
 
 
-# output tsv of derived global ancestry
+# Write a TSV of derived global ancestry proportions.
 def write_global_ancestry(global_ancestry_table, out_tsv):
     global_ancestry_table.to_csv(
         out_tsv,

@@ -9,11 +9,10 @@
 ###############################################################################
 
 
-# pattern: Imperative Shell
-
 from datetime import datetime
 
 
+# Print a timestamped workflow message for shell-script logs.
 def log_msg(message):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print(f"{timestamp} | {message}", flush=True)

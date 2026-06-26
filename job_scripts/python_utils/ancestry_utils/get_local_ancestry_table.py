@@ -12,7 +12,7 @@
 import tspop
 
 
-# get local ancestry via the census prior to the first admixture pulse
+# Get local ancestry via the census before the first admixture pulse.
 def get_local_ancestry_table(ts, census_time):
     return tspop.get_pop_ancestry(
         ts,

@@ -42,15 +42,16 @@ log_msg "submitting OOA_NAAdmixture simulation array
 outdir=${OUTDIR}
 num_reps=${NUM_REPS}
 sample_size=${SAMPLE_SIZE}
-chr=${CHR}
+chroms=${CHROMS[*]}
 genetic_map=${GENETIC_MAP}
 pops=${POPS[*]}"
 
+array_size=$((NUM_REPS * ${#CHROMS[@]}))
 sim_jid=$(sbatch \
     --parsable \
     --chdir="${script_dir}" \
     --job-name="simOOANAA" \
-    --array="1-${NUM_REPS}%${MAX_JOBS}" \
+    --array="1-${array_size}%${MAX_JOBS}" \
     --cpus-per-task="${SIM_CPUS_PER_TASK}" \
     --mem="${SIM_MEM}" \
     "job_scripts/sim_model.sh" \
@@ -64,7 +65,6 @@ sim_jid=$(sbatch \
         "${SAMPLE_SIZE}" \
         "${NUM_REPS}" \
         "${MSPRIME_MODEL}" \
-        "${CHR}" \
         "${GENETIC_MAP}" \
         "${GENERATION_TIME}" \
         "${MUTATION_RATE}" \
@@ -90,6 +90,8 @@ sim_jid=$(sbatch \
         "${admix_prioradmix_props_by_generation}" \
         "${ADMIX_MODERN_GROWTH_RATE}" \
         "${CENSUS_TIME_OFFSET}" \
+        -- \
+        "${CHROMS[@]}" \
         -- \
         "${POPS[@]}"
 )
