@@ -10,7 +10,7 @@
 
 
 import argparse
-from job_scripts.python_utils.stats_utils.aggregate_genome_stats import (
+from stats_utils.aggregate_genome_stats import (
     aggregate_genome_stats,
 )
 

@@ -16,7 +16,7 @@ import allel
 import numpy as np
 import pandas as pd
 import tszip
-from job_scripts.python_utils.misc_utils import log_msg
+from misc_utils import log_msg
 from .parse_king_file import parse_king_file
 from .read_fam_order import read_q_rows
 

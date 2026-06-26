@@ -10,7 +10,7 @@
 
 
 import argparse
-from job_scripts.python_utils.stats_utils.calc_stats import calc_stats
+from stats_utils.calc_stats import calc_stats
 
 
 parser = argparse.ArgumentParser()

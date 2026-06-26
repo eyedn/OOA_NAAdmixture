@@ -14,7 +14,7 @@ from pathlib import Path
 import csv
 import math
 import pandas as pd
-from job_scripts.python_utils.misc_utils import log_msg
+from misc_utils import log_msg
 from .parse_king_file import parse_king_file
 from .read_fam_order import read_q_rows
 

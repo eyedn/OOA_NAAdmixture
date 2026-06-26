@@ -14,17 +14,17 @@ import pickle
 import msprime
 import stdpopsim
 import tskit
-from job_scripts.python_utils.misc_utils import log_msg
-from job_scripts.python_utils.ancestry_utils.build_global_ancestry_table import (
+from misc_utils import log_msg
+from ancestry_utils.build_global_ancestry_table import (
     build_global_ancestry_table
 )
-from job_scripts.python_utils.ancestry_utils.get_local_ancestry_table import (
+from ancestry_utils.get_local_ancestry_table import (
     get_local_ancestry_table
 )
-from job_scripts.python_utils.ancestry_utils.write_global_ancestry import (
+from ancestry_utils.write_global_ancestry import (
     write_global_ancestry
 )
-from job_scripts.python_utils.ancestry_utils.write_local_ancestry import (
+from ancestry_utils.write_local_ancestry import (
     write_local_ancestry
 )
 

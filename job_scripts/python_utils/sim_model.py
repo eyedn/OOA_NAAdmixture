@@ -10,7 +10,7 @@
 
 
 import argparse
-from job_scripts.python_utils.sim_utils.run_simulation import run_simulation
+from sim_utils.run_simulation import run_simulation
 
 
 parser = argparse.ArgumentParser()

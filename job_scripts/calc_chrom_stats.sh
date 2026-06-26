@@ -53,6 +53,7 @@ admixture_ld_window="${13}"
 admixture_ld_step="${14}"
 admixture_ld_r2="${15}"
 shift 15
+shift 1 # skip the "--" from input arguments
 chroms=()
 while [[ "$1" != "--" ]]; do
     chroms+=( "$1" )

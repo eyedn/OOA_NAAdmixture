@@ -10,7 +10,7 @@
 
 
 import argparse
-from job_scripts.python_utils.stats_utils.combine_sim_stats_tables import (
+from stats_utils.combine_sim_stats_tables import (
     combine_chromosome_stats_tables,
     combine_sim_stats_tables,
 )

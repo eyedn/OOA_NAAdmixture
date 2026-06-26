@@ -10,8 +10,8 @@
 
 
 import argparse
-from job_scripts.python_utils.stats_utils.read_fam_order import read_fam_order
-from job_scripts.python_utils.stats_utils.read_sample_metadata import (
+from stats_utils.read_fam_order import read_fam_order
+from stats_utils.read_sample_metadata import (
     read_sample_metadata,
 )
 

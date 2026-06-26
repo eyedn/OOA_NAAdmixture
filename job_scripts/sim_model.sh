@@ -73,6 +73,7 @@ admix_prioradmix_props_by_generation="${33}"
 admix_modern_growth_rate="${34}"
 census_time_offset="${35}"
 shift 35
+shift 1 # skip the "--" from input arguments
 chroms=()
 while [[ "$1" != "--" ]]; do
     chroms+=( "$1" )

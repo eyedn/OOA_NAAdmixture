@@ -7,7 +7,7 @@
 #           Department of Quantitative and Computational Biology 
 #           Mooney Lab
 #           ---
-#           2a_submit_calc_chrom_stats.sh
+#           2_submit_calc_chrom_stats.sh
 ###############################################################################
 
 
