@@ -64,6 +64,7 @@ chrom_combine_jid=$(sbatch \
     --dependency="afterok:${stats_jid}" \
     --chdir="${script_dir}" \
     --job-name="combChrOOANAA" \
+    --array="1-${#CHROMS[@]}%${MAX_JOBS}" \
     --mem="${COMB_MEM}" \
     "job_scripts/combine_sim_stats.sh" \
         "${STATS_DIR}" \

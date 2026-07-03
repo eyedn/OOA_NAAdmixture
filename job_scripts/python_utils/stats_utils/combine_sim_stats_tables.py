@@ -81,11 +81,20 @@ def combine_sim_stats_tables(args, table_names):
 # combine per-replicate-per-chromosome statistics tables
 def combine_chromosome_stats_tables(args, table_names):
     stats_path = Path(args.stats_dir)
+    if not args.chroms:
+        raise ValueError("--chroms is required with --chromosomes")
+    if args.chrom_index is None:
+        raise ValueError("--chrom-index is required with --chromosomes")
+    if args.chrom_index < 1 or args.chrom_index > len(args.chroms):
+        raise ValueError(
+            f"--chrom-index must be between 1 and {len(args.chroms)}"
+        )
+
+    chrom = args.chroms[args.chrom_index - 1]
     for table_name in table_names:
         chrom_paths = [
             stats_path / f"{table_name}.rep_{rep}.chr{chrom}.tsv"
             for rep in range(1, args.num_reps + 1)
-            for chrom in args.chroms
         ]
         try:
             rows = _combine_paths(chrom_paths)
@@ -93,4 +102,4 @@ def combine_chromosome_stats_tables(args, table_names):
             raise FileNotFoundError(
                 f"Missing chromosome files for {table_name}: {exc}"
             ) from exc
-        _write_combined_table(stats_path, table_name, ".chromosomes", rows)
+        _write_combined_table(stats_path, table_name, f".chr{chrom}", rows)

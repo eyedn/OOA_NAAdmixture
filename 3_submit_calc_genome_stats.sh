@@ -48,6 +48,7 @@ genome_jid=$(sbatch \
         "${ADMIXTURE_LD_WINDOW}" \
         "${ADMIXTURE_LD_STEP}" \
         "${ADMIXTURE_LD_R2}" \
+        -- \
         "${CHROMS[@]}" \
         -- \
         "${POPS[@]}"

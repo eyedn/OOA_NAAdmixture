@@ -20,6 +20,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--stats-dir", required=True)
 parser.add_argument("--num-reps", type=int, required=True)
 parser.add_argument("--chroms", nargs="+")
+parser.add_argument("--chrom-index", type=int)
 parser.add_argument("--chromosomes", action="store_true")
 TABLE_NAMES = [
     "ancestry",
