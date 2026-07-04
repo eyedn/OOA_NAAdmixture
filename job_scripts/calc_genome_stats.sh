@@ -93,9 +93,10 @@ bcftools concat \
     "${vcf_paths[@]}"
 tabix -f -p vcf "${merged_vcf_path}"
 
-log_msg "creating merged autosomal PLINK BED for rep=${rep}"
+log_msg "creating merged autosomal PLINK BED with unique var ids for rep=${rep}"
 plink2 \
     --vcf "${merged_vcf_path}" \
+    --set-all-var-ids '@:#:$r:$a' \
     --threads "${num_threads}" \
     --make-bed \
     --out "${genome_bed_prefix}"
