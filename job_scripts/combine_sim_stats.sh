@@ -11,7 +11,7 @@
 ###############################################################################
 
 
-#SBATCH --time=4:00:00
+#SBATCH --time=1-00:00:00
 #SBATCH --cpus-per-task=1
 #SBATCH --partition=qcb
 #SBATCH --account=jazlynmo_738
