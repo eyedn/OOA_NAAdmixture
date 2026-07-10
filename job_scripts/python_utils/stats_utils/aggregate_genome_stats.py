@@ -189,8 +189,8 @@ def _aggregate_pi_theta_rows(rows, haplotypes_by_pop):
     aggregated = []
     for (rep, pop, stat), stat_rows in sorted(grouped.items()):
         mutation_rate = float(stat_rows[0]["mutation_rate"])
+        total_span = sum(float(row["span"]) for row in stat_rows)
         if stat == "pi":
-            total_span = sum(float(row["span"]) for row in stat_rows)
             value = sum(
                 float(row["value"]) * float(row["span"])
                 for row in stat_rows
@@ -205,10 +205,10 @@ def _aggregate_pi_theta_rows(rows, haplotypes_by_pop):
             wattersons_const = None
         elif stat == "theta":
             segregating_sites = sum(
-                float(row["segregating_sites"])
+                float(row["segregating_sites"]) * float(row["span"])
                 for row in stat_rows
                 if _finite(row["segregating_sites"])
-            )
+            ) / total_span
             wattersons_const = float(stat_rows[0]["wattersons_const"])
             value = segregating_sites / wattersons_const
         else:
