@@ -47,13 +47,23 @@ genetic_map=${GENETIC_MAP}
 pops=${POPS[*]}"
 
 array_size=$((NUM_REPS * ${#CHROMS[@]}))
+jname="simOOANAA"
+mkdir -p "/home1/karatas/logs/${jname}"
 sim_jid=$(sbatch \
     --parsable \
     --chdir="${script_dir}" \
-    --job-name="simOOANAA" \
+    --job-name="${jname}" \
     --array="1-${array_size}%${MAX_JOBS}" \
     --cpus-per-task="${SIM_CPUS_PER_TASK}" \
     --mem="${SIM_MEM}" \
+    --time=1-00:00:00 \
+    --partition=qcb \
+    --account=jazlynmo_738 \
+    --nodes=1 \
+    --output="/home1/karatas/logs/${jname}/%A_%a.%x.out" \
+    --error="/home1/karatas/logs/${jname}/%A_%a.%x.err" \
+    --mail-type=ALL \
+    --mail-user=karatas@usc.edu \
     "job_scripts/sim_model.sh" \
         "${TREE_DIR}" \
         "${PICKLED_DEMO_META}" \

@@ -11,16 +11,6 @@
 ###############################################################################
 
 
-#SBATCH --time=1-00:00:00
-#SBATCH --partition=qcb
-#SBATCH --account=jazlynmo_738
-#SBATCH --nodes=1
-#SBATCH --output=/home1/karatas/logs/calcOOANAA/calcOOANAA.%A_%a.%x.out
-#SBATCH --error=/home1/karatas/logs/calcOOANAA/calcOOANAA.%A_%a.%x.err
-#SBATCH --mail-type=ALL
-#SBATCH --mail-user=karatas@usc.edu
-
-
 set -euo pipefail
 
 module purge
@@ -103,8 +93,25 @@ for pop in "${pops[@]}"; do
         echo "ERROR: missing KING retained sample file ${retained_path}" >&2
         exit 1
     fi
+
+    unrelated_out_prefix="${out_prefix}_unrelated"
+    plink2 \
+        --bfile "${plink_bed_prefix}" \
+        --keep "${retained_path}" \
+        --threads "${num_threads}" \
+        --make-king \
+        --make-king-table \
+        --out "${unrelated_out_prefix}"
     cat "${retained_path}" >> "${unrelated_keep_path}"
 done
+
+python "${project_dir}/job_scripts/python_utils/write_unrelated_kinship.py" \
+    --rep "${rep}" \
+    --king-dir "${king_dir}" \
+    --stats-dir "${stats_dir}" \
+    --genetic-map "${genetic_map}" \
+    --chr "${chr}" \
+    --pops "${pops[@]}"
 
 # create LD-pruned unrelated input for "admixture --supervised"
 log_msg "LD-pruning unrelated ADMIXTURE samples for rep=${rep} chr=${chr}"

@@ -11,16 +11,6 @@
 ###############################################################################
 
 
-#SBATCH --time=1-00:00:00
-#SBATCH --partition=qcb
-#SBATCH --account=jazlynmo_738
-#SBATCH --nodes=1
-#SBATCH --output=/home1/karatas/logs/simOOANAA/simOOANAA.%A_%a.%x.out
-#SBATCH --error=/home1/karatas/logs/simOOANAA/simOOANAA.%A_%a.%x.err
-#SBATCH --mail-type=ALL
-#SBATCH --mail-user=karatas@usc.edu
-
-
 set -euo pipefail
 
 module purge
