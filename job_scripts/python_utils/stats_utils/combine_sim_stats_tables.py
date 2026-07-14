@@ -36,8 +36,6 @@ def _write_tsv_rows(path, rows):
 
 # write parquet output when pandas and pyarrow support are available
 def _write_parquet(path, rows):
-    if pd is None:
-        return
     pd.DataFrame(rows).to_parquet(path, index=False)
 
 

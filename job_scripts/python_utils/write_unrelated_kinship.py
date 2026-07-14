@@ -1,0 +1,83 @@
+###############################################################################
+#           Aydin Loid Karatas
+#           ---
+#           University of Southern California
+#           Department of Quantitative and Computational Biology
+#           Mooney Lab
+#           ---
+#           write_unrelated_kinship.py
+###############################################################################
+
+
+from pathlib import Path
+import argparse
+import csv
+import pandas as pd
+from stats_utils.parse_king_file import parse_king_file
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--rep", type=int, required=True)
+parser.add_argument("--king-dir", required=True)
+parser.add_argument("--stats-dir", required=True)
+parser.add_argument("--genetic-map", required=True)
+parser.add_argument("--chr")
+parser.add_argument("--pops", nargs="+", required=True)
+
+
+if __name__ == "__main__":
+    args = parser.parse_args()
+    king_dir = Path(args.king_dir)
+    stats_dir = Path(args.stats_dir)
+    stats_dir.mkdir(parents=True, exist_ok=True)
+
+    unit = f"chr{args.chr}" if args.chr is not None else "genome"
+    rows = []
+    for pop in args.pops:
+        king_path = king_dir / (
+            f"{args.genetic_map}_{args.rep}_{unit}_{pop}_unrelated.kin0"
+        )
+        if not king_path.is_file():
+            raise FileNotFoundError(king_path)
+        king_table = parse_king_file(king_path, args.rep, pop)
+        pop_rows = king_table.to_dict("records")
+        if args.chr is not None:
+            pop_rows = [
+                {
+                    "rep": row["rep"],
+                    "chrom": args.chr,
+                    "pop": row["pop"],
+                    "sample1": row["sample1"],
+                    "sample2": row["sample2"],
+                    "kinship": row["kinship"],
+                }
+                for row in pop_rows
+            ]
+        rows.extend(pop_rows)
+
+    output_suffix = (
+        f".rep_{args.rep}.chr{args.chr}"
+        if args.chr is not None
+        else f".rep_{args.rep}"
+    )
+    tsv_path = stats_dir / f"kinship_unrelated{output_suffix}.tsv"
+    parquet_path = stats_dir / f"kinship_unrelated{output_suffix}.parquet"
+    fieldnames = (
+        ["rep", "chrom", "pop", "sample1", "sample2", "kinship"]
+        if args.chr is not None
+        else ["rep", "pop", "sample1", "sample2", "kinship"]
+    )
+    with open(tsv_path, "w", encoding="utf-8", newline="") as out_file:
+        writer = csv.DictWriter(
+            out_file,
+            fieldnames=fieldnames,
+            delimiter="\t",
+            lineterminator="\n",
+        )
+        writer.writeheader()
+        writer.writerows(rows)
+
+    pd.DataFrame(rows, columns=fieldnames).to_parquet(
+        parquet_path,
+        index=False,
+    )
