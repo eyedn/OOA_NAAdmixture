@@ -27,38 +27,39 @@ sample_size=${SAMPLE_SIZE}
 chroms=${CHROMS[*]}
 pops=${POPS[*]}"
 
-# genome_jid=$(sbatch \
-#     --parsable \
-#     --chdir="${script_dir}" \
-#     --job-name="calcGenomeOOANAA" \
-#     --array="1-${NUM_REPS}%${MAX_JOBS}" \
-#     --cpus-per-task="${STATS_CPUS_PER_TASK}" \
-#     --mem="${STATS_MEM}" \
-#     "job_scripts/calc_genome_stats.sh" \
-#         "${VCF_DIR}" \
-#         "${PLINK_BED_DIR}" \
-#         "${POP_INFO_DIR}" \
-#         "${ADMIXTURE_DIR}" \
-#         "${KING_DIR}" \
-#         "${STATS_DIR}" \
-#         "${SAMPLE_SIZE}" \
-#         "${NUM_REPS}" \
-#         "${GENETIC_MAP}" \
-#         "${KIN_CUTOFF=}" \
-#         "${ADMIXTURE_LD_WINDOW}" \
-#         "${ADMIXTURE_LD_STEP}" \
-#         "${ADMIXTURE_LD_R2}" \
-#         -- \
-#         "${CHROMS[@]}" \
-#         -- \
-#         "${POPS[@]}"
-# )
+genome_jid=$(sbatch \
+    --parsable \
+    --chdir="${script_dir}" \
+    --job-name="calcGenomeOOANAA" \
+    --array="1-${NUM_REPS}%${MAX_JOBS}" \
+    --cpus-per-task="${STATS_CPUS_PER_TASK}" \
+    --mem="${STATS_MEM}" \
+    "job_scripts/calc_genome_stats.sh" \
+        "${VCF_DIR}" \
+        "${PLINK_BED_DIR}" \
+        "${POP_INFO_DIR}" \
+        "${ADMIXTURE_DIR}" \
+        "${KING_DIR}" \
+        "${STATS_DIR}" \
+        "${SAMPLE_SIZE}" \
+        "${NUM_REPS}" \
+        "${GENETIC_MAP}" \
+        "${KIN_CUTOFF=}" \
+        "${ADMIXTURE_LD_WINDOW}" \
+        "${ADMIXTURE_LD_STEP}" \
+        "${ADMIXTURE_LD_R2}" \
+        -- \
+        "${CHROMS[@]}" \
+        -- \
+        "${POPS[@]}"
+)
 
-# log_msg "submitted genome statistics array; jid=${genome_jid}" --dependency="afterok:${genome_jid}" \
+log_msg "submitted genome statistics array; jid=${genome_jid}" 
 
 combine_jid=$(sbatch \
     --parsable \
     --chdir="${script_dir}" \
+    --dependency="afterok:${genome_jid}" \
     --job-name="combOOANAA" \
     --mem="${COMB_MEM}" \
     "job_scripts/combine_sim_stats.sh" \
