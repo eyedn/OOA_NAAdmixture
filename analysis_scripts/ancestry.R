@@ -159,9 +159,6 @@ ggplot(
   )
 
 # mean density curves ----
-# ==============================================================================
-# Mean ancestry histograms across replicates
-# ==============================================================================
 breaks <- seq(0, 1, by = 0.05)
 
 hist.df <- anc %>%
@@ -178,7 +175,7 @@ hist.df <- anc %>%
       xmax  = tail(h$breaks, -1),
       xmid  = h$mids,
       count = h$counts,
-      frac = h$counts / sum(count)
+      frac = h$counts / sum(h$counts)
     )
   }) %>%
   ungroup()

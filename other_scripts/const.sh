@@ -20,9 +20,17 @@ CHROMS=(1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22)
 SAMPLE_SIZE="500"
 MSPRIME_MODEL="dtwf"
 
+# job array specifications
+MAX_JOBS="100"
+SIM_CPUS_PER_TASK="4"
+SIM_MEM="8G"
+STATS_CPUS_PER_TASK="8"
+STATS_MEM="64G"
+COMB_MEM="64G"
+
 # output directories
-PROJECT_DIR="${HOME}/OOA_NAAdmixture"
-OUTDIR="${SCRATCH}/OOA_NAAdmixture_small"
+PROJECT_DIR="/home1/karatas/OOA_NAAdmixture"
+OUTDIR="/home1/karatas/scratch/OOA_NAAdmixture_small"
 TREE_DIR="${OUTDIR}/trees"
 PICKLED_DEMO_META="${OUTDIR}/pickled_demo_meta"
 VCF_DIR="${OUTDIR}/vcfs"
@@ -33,14 +41,6 @@ GLOBAL_ANC_DIR="${OUTDIR}/global_ancestry"
 ADMIXTURE_DIR="${OUTDIR}/admixture"
 KING_DIR="${OUTDIR}/king"
 STATS_DIR="${OUTDIR}/stats"
-
-# job array specifications
-MAX_JOBS="100"
-SIM_CPUS_PER_TASK="4"
-SIM_MEM="8G"
-STATS_CPUS_PER_TASK="8"
-STATS_MEM="184G"
-COMB_MEM="184G"
 
 # Tennessen 2012 model specifications adapted from Fu 2013
 GENERATION_TIME=25
