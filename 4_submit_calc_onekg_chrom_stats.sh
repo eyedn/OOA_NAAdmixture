@@ -57,6 +57,7 @@ parse_jid=$(sbatch \
         "${ONEKG_VCF_SUFFIX}" \
         "${ONEKG_UNRELS_FILE}" \
         "${ONEKG_PLINK_FAM_FILE}" \
+        "${INTERGENTIC_FILE}" \
         "${ONEKG_OUT_VCF_DIR}" \
         "${ONEKG_OUT_PLINK_BED_DIR}" \
         "${ONEKG_OUT_POP_INFO_DIR}" \
@@ -92,6 +93,7 @@ stats_jid=$(sbatch \
         "${ONEKG_UNRELS_FILE}" \
         "${ONEKG_PLINK_FAM_FILE}" \
         "${ONEKG_CHR_LENS}" \
+        "${INTERGENTIC_FILE}" \
         "${ONEKG_OUT_VCF_DIR}" \
         "${ONEKG_OUT_PLINK_BED_DIR}" \
         "${ONEKG_OUT_POP_INFO_DIR}" \

@@ -35,10 +35,11 @@ vcf_prefix="$1"
 vcf_suffix="$2"
 unrels_path="$3"
 fam_path="$4"
-out_vcf_dir="$5"
-out_bed_dir="$6"
-pop_info_dir="$7"
-shift 7
+intergenic_file="$5"
+out_vcf_dir="$6"
+out_bed_dir="$7"
+pop_info_dir="$8"
+shift 8
 shift   # skip the "--" from input arguments
 chroms=()
 while [[ "$1" != "--" ]]; do
@@ -62,6 +63,7 @@ input_vcf="${vcf_prefix}${chr}${vcf_suffix}"
 prefix="onekg.rep_0.chr${chr}"
 common_vcf="${out_vcf_dir}/${prefix}.all.${pop}.vcf.gz"
 pop_vcf="${out_vcf_dir}/${prefix}.${pop}.vcf.gz"
+intergenic_vcf="${out_vcf_dir}/${prefix}.${pop}.intergenic.vcf.gz"
 pop_bed_prefix="${out_bed_dir}/${prefix}.${pop}"
 
 
@@ -101,6 +103,14 @@ bcftools view \
     -Oz -o "${pop_vcf}" \
     "${common_vcf}"
 tabix -f -p vcf "${pop_vcf}"
+
+# retain an indexed intergenic subset for its dedicated diversity statistics.
+bcftools view \
+    --threads "${num_threads}" \
+    -R "${intergenic_file}" \
+    -Oz -o "${intergenic_vcf}" \
+    "${pop_vcf}"
+tabix -f -p vcf "${intergenic_vcf}"
 
 
 ##### PLINK output ############################################################

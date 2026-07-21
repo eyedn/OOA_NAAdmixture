@@ -8,7 +8,8 @@
 #           write_stats_table.py
 ###############################################################################
 
-# overview: write empirical statistics tables in canonical TSV and Parquet formats.
+# overview: write empirical statistics tables in canonical TSV and Parquet
+# formats.
 
 
 ##### set up ##################################################################
@@ -35,7 +36,12 @@ EMPTY_TABLE_COLUMNS = {
         "rep", "chrom", "pop", "window_start", "window_end",
         "distance_bin_bp", "mean_r2", "sum_r2", "n_pairs",
     ],
-    "pi_theta_stats": [
+    "pi_theta_stats_intergenic": [
+        "rep", "chrom", "pop", "stat", "value", "ne_value",
+        "mutation_rate", "span", "segregating_sites",
+        "wattersons_const",
+    ],
+    "pi_theta_stats_full_callable_chrom": [
         "rep", "chrom", "pop", "stat", "value", "ne_value",
         "mutation_rate", "span", "segregating_sites",
         "wattersons_const",

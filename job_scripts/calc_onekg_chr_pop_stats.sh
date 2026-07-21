@@ -36,13 +36,14 @@ vcf_suffix="$2"
 unrels_path="$3"
 fam_path="$4"
 chr_lens_path="$5"
-out_vcf_dir="$6"
-out_bed_dir="$7"
-pop_info_dir="$8"
-king_dir="$9"
-stats_dir="${10}"
-mutation_rate="${11}"
-shift 11
+intergenic_file="$6"
+out_vcf_dir="$7"
+out_bed_dir="$8"
+pop_info_dir="$9"
+king_dir="${10}"
+stats_dir="${11}"
+mutation_rate="${12}"
+shift 12
 shift
 chroms=()
 while [[ "$1" != "--" ]]; do
@@ -63,6 +64,7 @@ input_vcf="${vcf_prefix}${chr}${vcf_suffix}"
 prefix="onekg.rep_0.chr${chr}"
 pop_bed_prefix="${out_bed_dir}/${prefix}.${pop}"
 common_vcf="${out_vcf_dir}/${prefix}.all.${pop}.vcf.gz"
+intergenic_vcf="${out_vcf_dir}/${prefix}.${pop}.intergenic.vcf.gz"
 common_bed_prefix="${out_bed_dir}/${prefix}.common_maf10.${pop}"
 pop_keep="${pop_info_dir}/${prefix}.${pop}.keep"
 king_prefix="${king_dir}/${prefix}.${pop}"
@@ -131,6 +133,8 @@ fi
 python "${project_dir}/job_scripts/python_utils/calc_onekg_stats.py" \
     --analysis-level "chromosome" \
     --vcf-path "${input_vcf}" \
+    --intergenic-vcf-path "${intergenic_vcf}" \
+    --intergenic-bed-path "${intergenic_file}" \
     --unrels-path "${unrels_path}" \
     --fam-path "${fam_path}" \
     --chr-lens-path "${chr_lens_path}" \

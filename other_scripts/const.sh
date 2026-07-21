@@ -25,8 +25,7 @@ STATS_CPUS_PER_TASK="8"
 STATS_MEM="128G"
 COMB_MEM="128G"
 PARTITION="qcb"
-# ACCOUNT="jazlynmo_738"
-ACCOUNT="qcb_640"
+ACCOUNT="qcb_640" # typically use "jazlynmo_738"; can use "qcb_640" 
 MAIL_TYPE="ALL"
 MAIL_USER="karatas@usc.edu"
 
@@ -190,8 +189,11 @@ ONEKG_POPS=(YRI CEU ASW)
 ONEKG_NONADMIXED_POP_LABELS=(YRI CEU)
 ONEKG_ADMIXED_POP_LABEL="ASW"
 
+# paths related to GRCH38.p14
+INTERGENTIC_FILE="/home1/karatas/references/GRCh38.p14/gencodeV49.canonicalIntergenic.bed"
+
 # input and output directories for the 1000 Genomes empirical analogue
-# a valid VCF path uses "${ONEKG_VCF_PREFIX}${CHR}${ONEKG_VCF_SUFFIX}"
+# note, a valid VCF path uses "${ONEKG_VCF_PREFIX}${CHR}${ONEKG_VCF_SUFFIX}"
 ONEKG_DIR="/home1/karatas/1000GenomeNYGC_hg38"
 ONEKG_UNRELS_FILE="${ONEKG_DIR}/FileInformation/allUnrels_rm3rd_RmSampsGarlicStevenPaper.txt"
 ONEKG_VCF_DIR="${ONEKG_DIR}/vcfs_strictMask"

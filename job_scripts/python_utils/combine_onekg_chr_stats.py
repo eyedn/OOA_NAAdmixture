@@ -37,8 +37,8 @@ if __name__ == "__main__":
     stats_dir = Path(args.stats_dir)
     # combine population-specific tables that already share one schema.
     partial_tables = [
-        "pi_theta_stats",
-        "pi_theta_stats_full_chrom",
+        "pi_theta_stats_intergenic",
+        "pi_theta_stats_full_callable_chrom",
         "sfs",
         "ld_decay",
         "kinship_unrelated",

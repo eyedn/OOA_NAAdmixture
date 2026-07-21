@@ -77,10 +77,10 @@ def _aggregate_ld_rows(rows):
     return output
 
 '''
-internal: aggregate chromosome pi and theta rows at genome scope. Pi receives
-its sample-derived finite-sample correction; theta uses segregating sites.
+internal: aggregate chromosome pi and theta rows at genome scope by rebuilding
+their numerators from values and family-specific spans.
 '''
-def _aggregate_pi_theta_rows(rows, haplotypes_by_pop):
+def _aggregate_pi_theta_rows(rows):
     grouped = defaultdict(list)
     for row in rows:
         grouped[(int(row["rep"]), row["pop"], row["stat"])].append(row)
@@ -95,10 +95,6 @@ def _aggregate_pi_theta_rows(rows, haplotypes_by_pop):
                 float(row["value"]) * float(row["span"])
                 for row in stat_rows
             ) / span
-            num_haplotypes = haplotypes_by_pop.get(pop, 0)
-            if num_haplotypes < 2:
-                raise ValueError(f"Invalid haplotype count for pop={pop}")
-            value *= num_haplotypes / (num_haplotypes - 1)
             segregating_sites = None
         elif stat == "theta":
             segregating_sites = sum(
@@ -212,14 +208,15 @@ def _build_pi_theta_rows(
     allele_counts,
     span,
     mutation_rate,
+    num_haplotypes,
 ):
     if span <= 0:
         raise ValueError("Sequence span must be positive")
-    sample_sizes = {ref_count + alt_count
-                    for ref_count, alt_count in allele_counts}
-    if len(sample_sizes) != 1:
+    sample_sizes = {
+        ref_count + alt_count for ref_count, alt_count in allele_counts
+    }
+    if sample_sizes and sample_sizes != {num_haplotypes}:
         raise ValueError("Allele counts must have one called sample size")
-    num_haplotypes = sample_sizes.pop()
     if num_haplotypes < 2:
         raise ValueError("At least two called haplotypes are required")
 
@@ -279,7 +276,7 @@ def _read_plink_ld_rows(path):
 
 
 '''
-internal: read full and post-QC lengths for one chromosome from GRCh38p14.
+internal: read the post-QC callable length for one chromosome from GRCh38.p14.
 '''
 def _read_onekg_chr_lengths(path, chrom):
     with open(path, "r", encoding="utf-8") as in_file:
@@ -288,32 +285,80 @@ def _read_onekg_chr_lengths(path, chrom):
         raise ValueError("Chromosome-length file is empty")
     headers = [value.lower() for value in rows[0]]
     chrom_names = ("chrom", "chr", "chromosome")
-    full_names = ("chr_len", "length", "full_chrom_length")
     qc_names = ("chr_len_after_qc", "length_after_qc", "callable_length")
     chrom_index = next(
         (headers.index(name) for name in chrom_names if name in headers),
-        None,
-    )
-    full_index = next(
-        (headers.index(name) for name in full_names if name in headers),
         None,
     )
     qc_index = next(
         (headers.index(name) for name in qc_names if name in headers),
         None,
     )
-    if None in (chrom_index, full_index, qc_index):
+    if None in (chrom_index, qc_index):
         raise ValueError(
-            "Chromosome-length file needs chrom, chr_len, and "
-            "chr_len_after_qc columns"
+            "Chromosome-length file needs chrom and chr_len_after_qc columns"
         )
     target = str(chrom).removeprefix("chr")
     for fields in rows[1:]:
         row_chrom = fields[chrom_index].removeprefix("chr")
         if row_chrom == target:
-            return float(fields[qc_index]), float(fields[full_index])
+            span = float(fields[qc_index])
+            if span <= 0:
+                raise ValueError(
+                    f"Chromosome {chrom} has invalid chr_len_after_qc"
+                )
+            return span
     raise ValueError(f"Chromosome {chrom} is absent from chromosome lengths")
 
+'''
+calculate the union span of BED intervals for one chromosome. Coordinates use
+zero-based, half-open BED semantics, and adjacent intervals are merged.
+'''
+def _calc_bed_union_span(rows, chrom):
+    target_chrom = str(chrom).lower().removeprefix("chr")
+    intervals = []
+    for line_number, raw_line in enumerate(rows, start=1):
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        fields = line.split()
+        if len(fields) < 3:
+            raise ValueError(
+                f"Malformed BED interval on line {line_number}: "
+                "expected at least three columns"
+            )
+        row_chrom = fields[0].lower().removeprefix("chr")
+        try:
+            start = int(fields[1])
+            end = int(fields[2])
+        except ValueError as error:
+            raise ValueError(
+                f"Malformed BED interval on line {line_number}: "
+                "coordinates must be integers"
+            ) from error
+        if start < 0 or end < start:
+            raise ValueError(
+                f"Malformed BED interval on line {line_number}: "
+                f"invalid half-open interval [{start}, {end})"
+            )
+        if row_chrom == target_chrom and end > start:
+            intervals.append((start, end))
+
+    if not intervals:
+        raise ValueError(
+            f"Chromosome {chrom} has no positive BED span"
+        )
+
+    intervals.sort()
+    span = 0
+    current_start, current_end = intervals[0]
+    for start, end in intervals[1:]:
+        if start <= current_end:
+            current_end = max(current_end, end)
+        else:
+            span += current_end - current_start
+            current_start, current_end = start, end
+    return span + current_end - current_start
 
 ##### main function ###########################################################
 '''
@@ -331,6 +376,8 @@ def calc_onekg_stats(args):
         required_args = {
             "ld_path": args.ld_path,
             "vcf_path": args.vcf_path,
+            "intergenic_vcf_path": args.intergenic_vcf_path,
+            "intergenic_bed_path": args.intergenic_bed_path,
             "unrels_path": args.unrels_path,
             "fam_path": args.fam_path,
             "chr_lens_path": args.chr_lens_path,
@@ -395,25 +442,60 @@ def calc_onekg_stats(args):
 
         pop_counts = scan["counts_by_pop"][args.pop]
         allele_counts = list(pop_counts.values())
-        chr_len_after_qc, chr_len = _read_onekg_chr_lengths(
+        num_haplotypes = 2 * scan["sample_counts"][args.pop]
+        callable_span = _read_onekg_chr_lengths(
             args.chr_lens_path,
             args.chrom,
         )
-        pi_theta = _build_pi_theta_rows(
-            0,
-            args.chrom,
-            args.pop,
-            allele_counts,
-            chr_len_after_qc,
-            args.mutation_rate,
+        intergenic_sample_pops = {
+            sample: pop
+            for sample, pop in sample_pops.items()
+            if pop == args.pop
+        }
+        open_intergenic_vcf = (
+            gzip.open
+            if args.intergenic_vcf_path.endswith(".gz")
+            else open
         )
-        pi_theta_full = _build_pi_theta_rows(
+        with open_intergenic_vcf(
+            args.intergenic_vcf_path,
+            "rt",
+            encoding="utf-8",
+        ) as vcf_file:
+            intergenic_scan = scan_onekg_vcf(
+                vcf_file,
+                intergenic_sample_pops,
+                [args.pop],
+            )
+        intergenic_counts = list(
+            intergenic_scan["counts_by_pop"][args.pop].values()
+        )
+        with open(
+            args.intergenic_bed_path,
+            "r",
+            encoding="utf-8",
+        ) as bed_file:
+            intergenic_span = _calc_bed_union_span(
+                bed_file,
+                args.chrom,
+            )
+        pi_theta_intergenic = _build_pi_theta_rows(
+            0,
+            args.chrom,
+            args.pop,
+            intergenic_counts,
+            intergenic_span,
+            args.mutation_rate,
+            num_haplotypes,
+        )
+        pi_theta_callable = _build_pi_theta_rows(
             0,
             args.chrom,
             args.pop,
             allele_counts,
-            chr_len,
+            callable_span,
             args.mutation_rate,
+            num_haplotypes,
         )
         sfs = _build_folded_1d_sfs_rows(
             0,
@@ -450,12 +532,14 @@ def calc_onekg_stats(args):
                 f"allele_counts.rep_0.chr{args.chrom}.{args.pop}"
             ): counts_rows,
             (
-                f"pi_theta_stats.rep_0.chr{args.chrom}.{args.pop}"
-            ): pi_theta,
-            (
-                f"pi_theta_stats_full_chrom.rep_0.chr{args.chrom}."
+                f"pi_theta_stats_intergenic.rep_0.chr{args.chrom}."
                 f"{args.pop}"
-            ): pi_theta_full,
+            ): pi_theta_intergenic,
+            (
+                f"pi_theta_stats_full_callable_chrom.rep_0."
+                f"chr{args.chrom}."
+                f"{args.pop}"
+            ): pi_theta_callable,
             f"sfs.rep_0.chr{args.chrom}.{args.pop}": sfs,
             (
                 f"variant_qc.rep_0.chr{args.chrom}.{args.pop}"
@@ -473,28 +557,9 @@ def calc_onekg_stats(args):
             write_stats_table(stats_dir / output_name, rows)
         return
 
-    haplotype_counts = set()
-    for chrom in args.chroms:
-        counts_path = stats_dir / (
-            f"allele_counts.rep_0.chr{chrom}.{args.pop}.tsv"
-        )
-        counts_rows = read_tsv_rows(counts_path)
-        if not counts_rows:
-            raise ValueError(f"No allele counts in {counts_path}")
-        haplotype_counts.add(
-            int(counts_rows[0]["ref_count"])
-            + int(counts_rows[0]["alt_count"])
-        )
-    if len(haplotype_counts) != 1:
-        raise ValueError(
-            f"Inconsistent haplotype counts for pop={args.pop}: "
-            f"{sorted(haplotype_counts)}"
-        )
-    haplotypes_by_pop = {args.pop: haplotype_counts.pop()}
-
     for table_name in (
-        "pi_theta_stats",
-        "pi_theta_stats_full_chrom",
+        "pi_theta_stats_intergenic",
+        "pi_theta_stats_full_callable_chrom",
     ):
         rows = []
         for chrom in args.chroms:
@@ -502,7 +567,7 @@ def calc_onekg_stats(args):
                 f"{table_name}.rep_0.chr{chrom}.{args.pop}.tsv"
             )
             rows.extend(read_tsv_rows(path))
-        aggregated = _aggregate_pi_theta_rows(rows, haplotypes_by_pop)
+        aggregated = _aggregate_pi_theta_rows(rows)
         write_stats_table(
             stats_dir / f"{table_name}.rep_0.{args.pop}",
             aggregated,
