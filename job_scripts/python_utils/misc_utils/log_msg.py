@@ -7,7 +7,8 @@
 #           ---
 #           log_msg.py
 ###############################################################################
-# format timestamped workflow log messages.
+
+# overview: format timestamped workflow log messages.
 
 
 ##### set up ##################################################################

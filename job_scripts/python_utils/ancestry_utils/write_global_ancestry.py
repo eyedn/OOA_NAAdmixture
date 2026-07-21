@@ -7,7 +7,7 @@
 #           ---
 #           write_global_ancestry.py
 ###############################################################################
-# write global ancestry tables for downstream statistics.
+# overview: write global ancestry tables for downstream statistics.
 
 
 ##### main function ###########################################################

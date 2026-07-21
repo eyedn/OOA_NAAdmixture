@@ -7,7 +7,8 @@
 #           ---
 #           aggregate_genome_stats.py
 ###############################################################################
-# aggregate chromosome statistics and related handoffs at genome scope.
+
+# overview: aggregate chromosome stats. and related handoffs at genome scope.
 
 
 ##### set up ##################################################################

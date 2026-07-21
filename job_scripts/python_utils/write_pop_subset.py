@@ -7,7 +7,8 @@
 #           ---
 #           write_pop_subset.py
 ###############################################################################
-# write one population's deterministic PLINK and KING keep-file subset.
+
+# overview: write one population's PLINK and KING keep-file subset.
 
 
 ##### set up ##################################################################

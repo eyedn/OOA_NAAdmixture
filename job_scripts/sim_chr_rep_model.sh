@@ -12,6 +12,7 @@
 
 # workflow: simulate one chromosome and replicate and write analysis inputs.
 
+
 ##### set up ##################################################################
 set -euo pipefail
 
@@ -99,6 +100,7 @@ plink_vcf_path="${vcf_dir}/${prefix}.biallelic_snps.vcf.gz"
 plink_bed_prefix="${plink_bed_dir}/${prefix}"
 sample_metadata_path="${pop_info_dir}/${genetic_map}_${rep}_chr${chr}.sample_metadata.tsv"
 
+
 ##### simulation ##############################################################
 # skip this task when the tree sequence, VCF, and PLINK outputs already exist.
 if [[ -s "${tree_prefix}.ts.tsz" && -s "${vcf_gz_path}" \
@@ -155,6 +157,7 @@ python "${project_dir}/job_scripts/python_utils/sim_model.py" \
     --census-time-offset "${census_time_offset}" \
     --pops "${pops[@]}"
 
+
 ##### post-sim logistics ######################################################
 # compress tree sequence file
 if [[ ! -s "${tree_prefix}.ts.tsz" ]]; then
@@ -206,5 +209,4 @@ if [[ ! -s "${plink_bed_prefix}.bed" || ! -s "${plink_bed_prefix}.bim" \
     echo "ERROR: failed to create complete PLINK BED set" >&2
     exit 1
 fi
-
 log_msg "done with simulation/data generation for rep=${rep} chr=${chr}"

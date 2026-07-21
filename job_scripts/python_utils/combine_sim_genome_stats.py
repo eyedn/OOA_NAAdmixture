@@ -7,7 +7,8 @@
 #           ---
 #           combine_sim_genome_stats.py
 ###############################################################################
-# combine one simulated genome statistic across replicate outputs.
+
+# overview: combine simulated genome statistics across replicate outputs.
 
 
 ##### set up ##################################################################

@@ -12,6 +12,7 @@
 
 # workflow: prepare one 1000 Genomes chromosome-population analysis input.
 
+
 ##### set up ##################################################################
 set -euo pipefail
 
@@ -63,6 +64,7 @@ common_vcf="${out_vcf_dir}/${prefix}.all.${pop}.vcf.gz"
 pop_vcf="${out_vcf_dir}/${prefix}.${pop}.vcf.gz"
 pop_bed_prefix="${out_bed_dir}/${prefix}.${pop}"
 
+
 ##### sample and variant filtering ############################################
 # create output directories and population-specific sample and site lists.
 mkdir -p "${out_vcf_dir}" "${out_bed_dir}" "${pop_info_dir}"
@@ -96,6 +98,7 @@ bcftools view \
     -Oz -o "${pop_vcf}" \
     "${common_vcf}"
 tabix -f -p vcf "${pop_vcf}"
+
 
 ##### PLINK output ############################################################
 # generate PLINK binaries for the population-specific VCF.

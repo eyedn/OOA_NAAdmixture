@@ -12,6 +12,7 @@
 
 # workflow: merge 1000 Genomes chromosomes and calculate genome statistics.
 
+
 ##### set up ##################################################################
 set -euo pipefail
 
@@ -56,6 +57,7 @@ genome_prefix="${bed_dir}/onekg.rep_0.genome.${pop}"
 king_prefix="${king_dir}/onekg.rep_0.genome.${pop}"
 pop_keep="${pop_info_dir}/onekg.rep_0.chr${chroms[0]}.${pop}.keep"
 
+
 ##### genome PLINK and KING outputs ###########################################
 # merge chromosome PLINK sets, then calculate KING for the target population.
 : > "${merge_list}"
@@ -74,6 +76,8 @@ plink2 \
     --threads "${num_threads}" \
     --make-king-table \
     --out "${king_prefix}"
+
+
 ##### statistics ##############################################################
 # aggregate chromosome statistics using the genome-level KING output.
 python "${project_dir}/job_scripts/python_utils/calc_onekg_stats.py" \

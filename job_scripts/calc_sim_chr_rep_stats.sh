@@ -12,6 +12,7 @@
 
 # workflow: calculate simulation statistics for one chromosome and replicate.
 
+
 ##### set up ##################################################################
 set -euo pipefail
 

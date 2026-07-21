@@ -13,6 +13,7 @@
 # workflow: submit per-replicate genome statistics after chromosome jobs, then
 # submit the dependent combine job that writes genome-level summary tables.
 
+
 ##### set up ##################################################################
 set -euo pipefail
 
@@ -74,8 +75,8 @@ stats_jid=$(sbatch \
         -- \
         "${POPS[@]}"
 )
-
 log_msg "submitted genome statistics array; jid=${stats_jid}"
+
 
 ##### genome statistics combination ###########################################
 # combine per-replicate genome tables only after all workers succeed.
@@ -100,5 +101,4 @@ comb_jid=$(sbatch \
         "${STATS_DIR}" \
         "${NUM_REPS}"
 )
-
 log_msg "submitted genome statistics combine job; jid=${comb_jid}"

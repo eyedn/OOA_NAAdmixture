@@ -7,7 +7,9 @@
 #           ---
 #           __init__.py
 ###############################################################################
-# reusable simulation-statistics helpers; imports stay intentionally minimal.
+
+# overview: reusable simulation-statistics helpers
+
 
 ##### set up ##################################################################
 from .aggregate_genome_stats import *

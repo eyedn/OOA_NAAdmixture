@@ -7,7 +7,8 @@
 #           ---
 #           write_unrelated_kinship.py
 ###############################################################################
-# collect KING unrelated-pair output into the shared kinship schema.
+
+# overview: collect KING unrelated-pair output into the shared kinship schema.
 
 
 ##### set up ##################################################################
@@ -48,12 +49,12 @@ if __name__ == "__main__":
     # standardize each population's unrelated-sample KING output.
     rows = []
     for pop in args.pops:
-        # ...create the KING .kin0 path for the unrelated subset
+        # create the KING .kin0 path for the unrelated subset
         king_path = king_dir / (
             f"{args.genetic_map}_{args.rep}_{unit}_{pop}_unrelated.kin0"
         )
 
-        # ...verify that each expected KING file exists
+        # verify that each expected KING file exists
         if not king_path.is_file():
             raise FileNotFoundError(king_path)
 

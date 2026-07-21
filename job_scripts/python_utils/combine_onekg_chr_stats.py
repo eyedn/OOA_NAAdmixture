@@ -7,7 +7,8 @@
 #           ---
 #           combine_onekg_chr_stats.py
 ###############################################################################
-# combine one 1000 Genomes chromosome statistic across population outputs.
+
+# overview: combine 1000 Genomes chromosome stats. across population outputs.
 
 
 ##### set up ##################################################################
@@ -102,7 +103,7 @@ if __name__ == "__main__":
         sfs_2d,
     )
 
-    # publish chromosome-level ancestry and variant-QC handoffs.
+    # write chromosome-level ancestry and variant-QC handoffs.
     ancestry_rows = read_tsv_rows(
         stats_dir / f"ancestry.rep_0.chr{args.chrom}.tsv"
     )

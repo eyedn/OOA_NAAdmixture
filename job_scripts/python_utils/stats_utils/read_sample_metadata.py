@@ -7,7 +7,8 @@
 #           ---
 #           read_sample_metadata.py
 ###############################################################################
-# read simulation metadata used to build supervised ADMIXTURE labels.
+
+# overview: read simulation metadata used to build supervised ADMIXTURE labels.
 
 
 ##### set up ##################################################################

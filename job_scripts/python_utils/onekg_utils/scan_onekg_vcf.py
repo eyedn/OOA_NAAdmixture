@@ -7,7 +7,8 @@
 #           ---
 #           scan_onekg_vcf.py
 ###############################################################################
-# scan VCF records into population-aware genotype and QC summaries.
+
+# overview: scan VCF records into population-aware genotype and QC summaries.
 
 
 ##### set up ##################################################################

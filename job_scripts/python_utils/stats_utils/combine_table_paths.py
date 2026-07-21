@@ -7,7 +7,8 @@
 #           ---
 #           combine_table_paths.py
 ###############################################################################
-# read and concatenate required TSV tables without skipping missing inputs.
+
+# overview: read and concat. required TSVs without skipping missing inputs.
 
 
 ##### set up ##################################################################

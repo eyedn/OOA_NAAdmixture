@@ -7,7 +7,9 @@
 #           ---
 #           calc_onekg_stats.py
 ###############################################################################
-# calculate 1000 Genomes chromosome or genome statistics from CLI inputs.
+
+# overview: calculate 1000 Genomes chromosome or genome statistics from CLI 
+# inputs.
 
 
 ##### set up ##################################################################

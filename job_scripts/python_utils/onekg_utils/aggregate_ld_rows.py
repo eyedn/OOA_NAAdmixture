@@ -7,7 +7,8 @@
 #           ---
 #           aggregate_ld_rows.py
 ###############################################################################
-# aggregate chromosome LD-decay summaries at genome scope.
+
+# overview: aggregate chromosome LD-decay summaries at genome scope.
 
 
 ##### set up ##################################################################

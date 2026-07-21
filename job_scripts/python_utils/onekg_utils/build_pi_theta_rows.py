@@ -7,7 +7,8 @@
 #           ---
 #           build_pi_theta_rows.py
 ###############################################################################
-# build population pi and theta rows from scanned VCF genotype counts.
+
+# overview: build pop. pi and theta rows from scanned VCF genotype counts.
 
 
 ##### main function ###########################################################

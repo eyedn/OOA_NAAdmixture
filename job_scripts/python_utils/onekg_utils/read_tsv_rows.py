@@ -7,7 +7,8 @@
 #           ---
 #           read_tsv_rows.py
 ###############################################################################
-# read canonical tab-separated statistics rows.
+
+# overview: read canonical tab-separated statistics rows.
 
 
 ##### set up ##################################################################

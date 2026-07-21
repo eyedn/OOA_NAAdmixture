@@ -7,7 +7,8 @@
 #           ---
 #           build_global_ancestry_table.py
 ###############################################################################
-# assemble global ancestry rows from simulated samples.
+
+# overview: assemble global ancestry rows from simulated samples.
 
 
 ##### set up ##################################################################

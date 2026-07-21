@@ -7,7 +7,8 @@
 #           ---
 #           calc_stats.py
 ###############################################################################
-# calculate simulation statistics from tree-sequence and PLINK inputs.
+
+# overview: calculate simulation stats. from tree-sequence and PLINK inputs.
 
 
 ##### set up ##################################################################
@@ -334,6 +335,7 @@ def _build_ancestry_table(*args, **kwargs):
     return pd.DataFrame(rows, columns=ANCESTRY_COLUMNS)
 
 
+##### main function ###########################################################
 '''
 calculate all simulation statistics for one chromosome and replicate. Writes
 joined ancestry, population and combined KING tables, pi, theta, one- and

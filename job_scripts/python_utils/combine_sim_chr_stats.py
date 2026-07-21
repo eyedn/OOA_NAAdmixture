@@ -7,7 +7,8 @@
 #           ---
 #           combine_sim_chr_stats.py
 ###############################################################################
-# combine one simulated chromosome statistic across replicate outputs.
+
+# overview: combine simulated chromosome statistics across replicate outputs.
 
 
 ##### set up ##################################################################

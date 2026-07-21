@@ -7,7 +7,8 @@
 #           ---
 #           write_onekg_admixture_pop.py
 ###############################################################################
-# write 1000 Genomes supervised ADMIXTURE population labels.
+
+# overview: write 1000 Genomes supervised ADMIXTURE population labels.
 
 
 ##### set up ##################################################################

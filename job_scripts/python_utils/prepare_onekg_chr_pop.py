@@ -7,7 +7,8 @@
 #           ---
 #           prepare_onekg_chr_pop.py
 ###############################################################################
-# prepare one empirical chromosome-population subset for downstream tools.
+
+# overview: prepare empirical chrom.-population subset for downstream tools.
 
 
 ##### set up ##################################################################

@@ -7,7 +7,8 @@
 #           ---
 #           __init__.py
 ###############################################################################
-# shared 1000 Genomes statistics helpers; imports stay intentionally minimal.
+
+# overview: shared 1000 Genomes statistics helpers
 
 
 ##### set up ##################################################################

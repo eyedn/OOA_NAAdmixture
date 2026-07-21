@@ -12,6 +12,7 @@
 
 # shared logging helper for timestamped pipeline messages.
 
+
 ##### main function ###########################################################
 # print one pipeline message with a sortable wall-clock timestamp.
 log_msg() {

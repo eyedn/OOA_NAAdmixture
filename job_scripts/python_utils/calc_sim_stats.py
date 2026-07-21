@@ -7,7 +7,8 @@
 #           ---
 #           calc_sim_stats.py
 ###############################################################################
-# calculate simulated chromosome statistics from CLI inputs.
+
+# overview: calculate simulated chromosome statistics from CLI inputs.
 
 
 ##### set up ##################################################################
@@ -43,10 +44,4 @@ parser.add_argument("--pops", nargs="+", required=True)
 ##### main ####################################################################
 if __name__ == "__main__":
     args = parser.parse_args()
-    '''
-    pass complete argument set to calc_stats, which
-        - joins true and ADMIXTURE ancestry estimates
-        - parses and combines KING kinship tables
-        - calculates pi, theta, 1D/2D SFS, and LD-decay summaries
-    '''
     calc_stats(args)

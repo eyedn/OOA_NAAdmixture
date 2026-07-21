@@ -7,7 +7,8 @@
 #           ---
 #           aggregate_variant_qc_rows.py
 ###############################################################################
-# aggregate chromosome variant-quality counts at genome scope.
+
+# overview: aggregate chromosome variant-quality counts at genome scope.
 
 
 ##### main function ###########################################################

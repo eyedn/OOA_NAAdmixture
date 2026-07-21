@@ -7,7 +7,8 @@
 #           ---
 #           run_simulation.py
 ###############################################################################
-# construct, simulate, and serialize OOA_NAAdmixture data products.
+
+# overview: construct, simulate, and serialize OOA_NAAdmixture data products.
 
 
 ##### set up ##################################################################

@@ -7,7 +7,8 @@
 #           ---
 #           build_folded_1d_sfs_rows.py
 ###############################################################################
-# build folded one-dimensional SFS rows without ancestral-state inference.
+
+# overview: build folded 1D SFS rows without ancestral-state inference.
 
 
 ##### set up ##################################################################

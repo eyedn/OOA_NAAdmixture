@@ -7,7 +7,8 @@
 #           ---
 #           bin_plink_ld_rows.py
 ###############################################################################
-# bin PLINK pairwise LD rows into distance-decay summaries.
+
+# overview: bin PLINK pairwise LD rows into distance-decay summaries.
 
 
 ##### set up ##################################################################

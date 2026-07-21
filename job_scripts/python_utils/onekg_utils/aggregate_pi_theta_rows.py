@@ -7,7 +7,8 @@
 #           ---
 #           aggregate_pi_theta_rows.py
 ###############################################################################
-# aggregate chromosome pi and theta summaries at genome scope.
+
+# overview: aggregate chromosome pi and theta summaries at genome scope.
 
 
 ##### set up ##################################################################

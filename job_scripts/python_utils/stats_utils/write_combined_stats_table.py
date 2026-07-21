@@ -7,7 +7,8 @@
 #           ---
 #           write_combined_stats_table.py
 ###############################################################################
-# write final combined statistics tables as TSV and Parquet.
+
+# overview: write final combined statistics tables as TSV and Parquet.
 
 
 ##### set up ##################################################################

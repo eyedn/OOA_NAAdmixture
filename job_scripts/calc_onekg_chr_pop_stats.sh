@@ -12,6 +12,7 @@
 
 # workflow: calculate 1000 Genomes statistics for one chromosome and pop.
 
+
 ##### set up ##################################################################
 set -euo pipefail
 
@@ -67,6 +68,7 @@ pop_keep="${pop_info_dir}/${prefix}.${pop}.keep"
 king_prefix="${king_dir}/${prefix}.${pop}"
 ld_prefix="${stats_dir}/${prefix}.${pop}.ld"
 
+
 ##### KING coefficients #######################################################
 # calculate KING coefficients for unrelated samples in the target population.
 mkdir -p "${king_dir}" "${stats_dir}"
@@ -76,6 +78,7 @@ plink2 \
     --threads "${num_threads}" \
     --make-king-table \
     --out "${king_prefix}"
+
 
 ##### linkage disequilibrium ##################################################
 # build the common-site PLINK input and calculate unphased LD pairs.
@@ -121,6 +124,8 @@ if [[ -z "${ld_path}" ]]; then
     echo "ERROR: PLINK did not produce an LD-pair table" >&2
     exit 1
 fi
+
+
 ##### statistics ##############################################################
 # hand VCF, KING, and LD outputs to the empirical statistics implementation.
 python "${project_dir}/job_scripts/python_utils/calc_onekg_stats.py" \

@@ -12,6 +12,7 @@
 
 # workflow: submit simulation chromosome-statistics jobs after simulation.
 
+
 ##### set up ##################################################################
 set -euo pipefail
 
@@ -21,6 +22,7 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # source shared constants and functions
 source "${script_dir}/other_scripts/const.sh"
 source "${script_dir}/other_scripts/log_msg.sh"
+
 
 ##### chromosome statistics jobs ##############################################
 # create output directories for ADMIXTURE, KING, and stats outputs
@@ -74,6 +76,7 @@ stats_jid=$(sbatch \
         "${POPS[@]}"
 )
 log_msg "submitted chromosome statistics array; jid=${stats_jid}"
+
 
 ##### chromosome statistics combination #######################################
 # pass stats outputs worker script that combines the results of the previous

@@ -7,7 +7,8 @@
 #           ---
 #           parse_king_file.py
 ###############################################################################
-# normalize KING kinship output into the pipeline's shared table columns.
+
+# overview: normalize KING output into the pipeline's shared table columns.
 
 
 ##### set up ##################################################################

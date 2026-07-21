@@ -7,7 +7,8 @@
 #           ---
 #           write_admixture_pop.py
 ###############################################################################
-# write supervised labels in the exact final FAM sample order.
+
+# overview: write supervised labels in the exact final FAM sample order.
 
 
 ##### set up ##################################################################

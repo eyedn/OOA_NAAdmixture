@@ -7,7 +7,9 @@
 #           ---
 #           __init__.py
 ###############################################################################
-# simulation model and output helpers; imports stay intentionally minimal.
+
+# overview: simulation model and output helpers
+
 
 ##### set up ##################################################################
 from .run_simulation import run_simulation

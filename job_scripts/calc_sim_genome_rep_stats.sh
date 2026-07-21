@@ -12,6 +12,7 @@
 
 # workflow: merge simulation chromosomes and calculate genome statistics.
 
+
 ##### set up ##################################################################
 set -euo pipefail
 
@@ -70,6 +71,7 @@ if (( rep < 1 || rep > num_reps )); then
     exit 1
 fi
 
+
 ##### genome PLINK input ######################################################
 # create output directories and merge chromosome VCFs for this replicate.
 mkdir -p "${admixture_dir}" "${king_dir}" "${stats_dir}" "${plink_bed_dir}"
@@ -103,6 +105,7 @@ if [[ ! -s "${genome_bed_prefix}.bed" || ! -s "${genome_bed_prefix}.bim" \
     echo "ERROR: failed to create merged genome BED set" >&2
     exit 1
 fi
+
 
 ##### KING coefficients #######################################################
 # run KING for each population and retain unrelated samples for ADMIXTURE.
@@ -148,6 +151,7 @@ python "${project_dir}/job_scripts/python_utils/write_unrelated_kinship.py" \
     --genetic-map "${genetic_map}" \
     --pops "${pops[@]}"
 
+
 ##### ADMIXTURE ###############################################################
 # LD-prune the combined unrelated samples before supervised ADMIXTURE.
 log_msg "LD-pruning genome-level ADMIXTURE samples for rep=${rep}"
@@ -190,6 +194,7 @@ log_msg "running genome-level supervised ADMIXTURE for rep=${rep}"
         "${genome_prefix}.bed" \
         2
 )
+
 
 ##### statistics ##############################################################
 # aggregate chromosome tables and genome-level KING and ADMIXTURE outputs.

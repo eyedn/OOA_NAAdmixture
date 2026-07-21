@@ -7,7 +7,8 @@
 #           ---
 #           calc_onekg_stats.py
 ###############################################################################
-# coordinate empirical folded-SFS, diversity, LD, and kinship statistics.
+
+# overview: coordinate empirical folded-SFS, diversity, LD, and kinship stats.
 
 
 ##### set up ##################################################################

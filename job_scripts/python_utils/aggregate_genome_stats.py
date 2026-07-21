@@ -7,7 +7,8 @@
 #           ---
 #           aggregate_genome_stats.py
 ###############################################################################
-# aggregate chromosome handoffs into simulation genome statistics.
+
+# overview: aggregate chromosome handoffs into simulation genome statistics.
 
 
 ##### set up ##################################################################

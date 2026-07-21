@@ -7,7 +7,8 @@
 #           ---
 #           combine_onekg_genome_stats.py
 ###############################################################################
-# combine one 1000 Genomes genome statistic across population outputs.
+
+# overview: combine 1000 Genomes genome stats. across population outputs.
 
 
 ##### set up ##################################################################

@@ -12,6 +12,7 @@
 
 # workflow: combine 1000 Genomes chromosome statistics into one table set.
 
+
 ##### set up ##################################################################
 set -euo pipefail
 
@@ -63,6 +64,7 @@ all_bed_prefix="${out_bed_dir}/${prefix}.all"
 prune_prefix="${admixture_dir}/${prefix}.ld_prune"
 admixture_prefix="${admixture_dir}/${prefix}.all"
 
+
 ##### ADMIXTURE ###############################################################
 # construct and LD-prune the common chromosome input used by ADMIXTURE.
 mkdir -p "${admixture_dir}" "${stats_dir}"
@@ -107,6 +109,7 @@ python "${project_dir}/job_scripts/python_utils/write_onekg_admixture_pop.py" \
         "${prefix}.all.bed" 2
     cp "${prefix}.all.2.Q" "${prefix}.all.unsupervised.2.Q"
 )
+
 
 ##### statistics ##############################################################
 # orient ancestry estimates and combine population statistics by chromosome.

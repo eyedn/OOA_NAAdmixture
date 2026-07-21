@@ -12,8 +12,8 @@
 
 # shared constants for simulation, empirical data, and Slurm job resources.
 
-##### shared configuration ####################################################
 
+##### shared configuration ####################################################
 # codebase directory
 PROJECT_DIR="/home1/karatas/OOA_NAAdmixture"
 
@@ -23,8 +23,9 @@ SIM_CPUS_PER_TASK="4"
 SIM_MEM="8G"
 STATS_CPUS_PER_TASK="8"
 STATS_MEM="256G"
-COMB_MEM="128G"
-CHROMS=(1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22)
+COMB_MEM="256G"
+# CHROMS=(1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22)
+CHROMS=(22)
 GENETIC_MAP="HapMapII_GRCh38"
 
 # statistics specification
@@ -33,8 +34,8 @@ ADMIXTURE_LD_WINDOW="50"
 ADMIXTURE_LD_STEP="10"
 ADMIXTURE_LD_R2="0.1"
 
-##### simulation configuration ################################################
 
+##### simulation configuration ################################################
 # simulation labels and settings
 POPS=(AFR EUR ADX)
 NONADMIXED_POP_LABELS=(AFR EUR)
@@ -175,8 +176,8 @@ ADMIX_PRIORADMIX_PROPS_BY_GENERATION=(
     1.000000
 )
 
-##### empirical configuration #################################################
 
+##### empirical configuration #################################################
 # empirical labels and settings
 ONEKG_POPS=(YRI CEU ASW)
 ONEKG_NONADMIXED_POP_LABELS=(YRI CEU)

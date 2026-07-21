@@ -7,7 +7,8 @@
 #           ---
 #           __init__.py
 ###############################################################################
-# small shared workflow helpers; imports stay intentionally minimal.
+
+# overview: small shared workflow helpers
 
 
 ##### set up ##################################################################

@@ -7,7 +7,8 @@
 #           ---
 #           read_fam_order.py
 ###############################################################################
-# preserve PLINK FAM order while reading ADMIXTURE input and output files.
+
+# overview: preserve PLINK FAM order while reading ADMIXTURE inputs/outputs.
 
 
 ##### main functions ##########################################################

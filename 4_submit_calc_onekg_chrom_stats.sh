@@ -13,6 +13,7 @@
 # workflow: prepare and analyze 1000 Genomes chromosome-population inputs, then
 # combine completed chromosome outputs after their dependent array jobs finish.
 
+
 ##### set up ##################################################################
 set -euo pipefail
 
@@ -64,6 +65,7 @@ parse_jid=$(sbatch \
         -- \
         "${ONEKG_POPS[@]}"
 )
+log_msg "submitted 1000 Genomes parsing job; jid=${parse_jid}"
 
 # calculate statistics only after all preparation tasks complete successfully.
 stats_jname="stats1kG"
@@ -101,6 +103,8 @@ stats_jid=$(sbatch \
         -- \
         "${ONEKG_POPS[@]}"
 )
+log_msg "submitted 1000 Genomes chrom. stats. job; jid=${stats_jid}"
+
 
 ##### chromosome statistics combination #######################################
 # combine each chromosome only after its preparation and statistics pipeline.
@@ -129,5 +133,4 @@ comb_jid=$(sbatch \
         "${ADMIXTURE_LD_STEP}" "${ADMIXTURE_LD_R2}" \
         -- "${CHROMS[@]}" -- "${ONEKG_POPS[@]}"
 )
-
-log_msg "submitted 1000 Genomes chromosome pipeline; jid=${comb_jid}"
+log_msg "submitted 1000 Genomes chrom. comb. job; jid=${comb_jname}"

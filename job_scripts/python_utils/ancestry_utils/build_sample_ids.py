@@ -7,7 +7,8 @@
 #           ---
 #           build_sample_ids.py
 ###############################################################################
-# construct stable sample identifiers for ancestry outputs.
+
+# overview: construct stable sample identifiers for ancestry outputs.
 
 
 ##### main function ###########################################################

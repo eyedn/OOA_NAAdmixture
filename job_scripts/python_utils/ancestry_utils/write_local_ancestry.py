@@ -7,7 +7,7 @@
 #           ---
 #           write_local_ancestry.py
 ###############################################################################
-# write local ancestry intervals for downstream statistics.
+# overview: write local ancestry intervals for downstream statistics.
 
 
 ##### set up ##################################################################

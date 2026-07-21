@@ -7,7 +7,8 @@
 #           ---
 #           orient_admixture_rows.py
 ###############################################################################
-# orient ADMIXTURE components consistently with African and European labels.
+
+# overview: orient ADMIXTURE components consistently with AFR/EUR labels.
 
 
 ##### main function ###########################################################

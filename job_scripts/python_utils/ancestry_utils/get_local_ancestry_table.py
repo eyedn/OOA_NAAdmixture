@@ -7,7 +7,8 @@
 #           ---
 #           get_local_ancestry_table.py
 ###############################################################################
-# extract per-sample local ancestry intervals from tree-sequence data.
+
+# overview: extract per-sample local ancestry intervals from tree sequence.
 
 
 ##### set up ##################################################################

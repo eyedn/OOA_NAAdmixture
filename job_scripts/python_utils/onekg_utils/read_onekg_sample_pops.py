@@ -7,7 +7,8 @@
 #           ---
 #           read_onekg_sample_pops.py
 ###############################################################################
-# map unrelated 1000 Genomes samples to requested populations.
+
+# overview: map unrelated 1000 Genomes samples to requested populations.
 
 
 ##### main function ###########################################################

@@ -7,7 +7,8 @@
 #           ---
 #           read_plink_ld_rows.py
 ###############################################################################
-# read PLINK LD output rows for distance-bin aggregation.
+
+# overview: read PLINK LD output rows for distance-bin aggregation.
 
 
 ##### main function ###########################################################

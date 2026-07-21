@@ -7,7 +7,8 @@
 #           ---
 #           __init__.py
 ###############################################################################
-# shared ancestry-table helpers; imports stay intentionally minimal.
+
+# overview: shared ancestry-table helpers
 
 ##### set up ##################################################################
 from .build_global_ancestry_table import *

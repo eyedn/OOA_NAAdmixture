@@ -7,7 +7,8 @@
 #           ---
 #           build_folded_2d_sfs_rows.py
 ###############################################################################
-# build folded two-dimensional SFS rows for population comparisons.
+
+# overview: build folded 2D SFS rows for population comparisons.
 
 
 ##### set up ##################################################################

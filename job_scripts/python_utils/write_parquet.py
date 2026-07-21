@@ -7,7 +7,8 @@
 #           ---
 #           write_parquet.py
 ###############################################################################
-# convert canonical TSV statistics tables to Parquet.
+
+# overview: convert canonical TSV statistics tables to Parquet.
 
 
 ##### set up ##################################################################

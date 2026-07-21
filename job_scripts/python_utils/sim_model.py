@@ -7,7 +7,8 @@
 #           ---
 #           sim_model.py
 ###############################################################################
-# parse one simulation request and hand it to the model runner.
+
+# overview: parse simulation request and hand it to the model runner.
 
 
 ##### set up ##################################################################
@@ -66,14 +67,4 @@ parser.add_argument("--pops", nargs="+", required=True)
 ##### main ####################################################################
 if __name__ == "__main__":
     args = parser.parse_args()
-    '''
-    pass complete argument set to run_simulation, which
-        - builds the OOA_NAAdmixture demographic model
-        - simulates ancestry and mutations with msprime
-        - writes the tree sequence
-        - pickles the demography and model metadata
-        - writes the all-sample VCF
-        - writes sample metadata for supervised ADMIXTURE
-        - generates population-specific local and global ancestry tables
-    '''
     run_simulation(args)

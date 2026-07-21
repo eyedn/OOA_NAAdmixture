@@ -7,7 +7,8 @@
 #           ---
 #           aggregate_folded_2d_sfs_rows.py
 ###############################################################################
-# aggregate folded two-dimensional SFS rows across chromosome inputs.
+
+# overview: aggregate folded two-dimensional SFS rows across chromosome inputs.
 
 
 ##### set up ##################################################################

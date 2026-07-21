@@ -7,7 +7,8 @@
 #           ---
 #           read_onekg_chr_lengths.py
 ###############################################################################
-# read 1000 Genomes chromosome lengths for statistics normalization.
+
+# overview: read 1000 Genomes chromosome lengths for statistics normalization.
 
 
 ##### main function ###########################################################

@@ -13,6 +13,7 @@
 # workflow: validate chromosome outputs, calculate per-population genome
 # statistics, then combine the resulting empirical genome tables.
 
+
 ##### set up ##################################################################
 set -euo pipefail
 
@@ -78,6 +79,7 @@ for chr in "${CHROMS[@]}"; do
     done
 done
 
+
 ##### genome statistics jobs ##################################################
 # submit one population-specific worker after all chromosome handoffs validate.
 pop_jname="statsOnekgGenomePop"
@@ -102,6 +104,8 @@ pop_jid=$(sbatch \
         "${ONEKG_OUT_KING_DIR}" "${ONEKG_OUT_STATS_DIR}" \
         -- "${CHROMS[@]}" -- "${ONEKG_POPS[@]}"
 )
+log_msg "submitted 1000 Genomes genome stats. job; jid=${pop_jid}"
+
 
 ##### genome statistics combination ###########################################
 # combine all population results only after every genome worker succeeds.
@@ -128,5 +132,4 @@ comb_jid=$(sbatch \
         "${ADMIXTURE_LD_STEP}" "${ADMIXTURE_LD_R2}" \
         -- "${CHROMS[@]}" -- "${ONEKG_POPS[@]}"
 )
-
-log_msg "submitted 1000 Genomes genome pipeline; jid=${comb_jid}"
+log_msg "submitted 1000 Genomes genome comb. job; jid=${comb_jid}"

@@ -7,7 +7,8 @@
 #           ---
 #           parse_gt.py
 ###############################################################################
-# parse VCF genotype fields into called allele counts.
+
+# overview: parse VCF genotype fields into called allele counts.
 
 
 ##### set up ##################################################################

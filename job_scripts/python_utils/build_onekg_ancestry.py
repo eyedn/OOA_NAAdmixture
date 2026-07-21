@@ -7,7 +7,9 @@
 #           ---
 #           build_onekg_ancestry.py
 ###############################################################################
-# build empirical ancestry tables from sample labels and ADMIXTURE outputs.
+
+# overview: build empirical ancestry tables from sample labels and ADMIXTURE 
+# outputs.
 
 
 ##### set up ##################################################################
@@ -47,6 +49,7 @@ if __name__ == "__main__":
     )
     with open(args.admixture_fam_path, "r", encoding="utf-8") as in_file:
         samples = [line.split()[1] for line in in_file if line.strip()]
+    
     # read and orient supervised and unsupervised Q matrices in FAM order.
     q_sets = []
     for q_path in (args.supervised_q_path, args.unsupervised_q_path):
@@ -67,6 +70,7 @@ if __name__ == "__main__":
             orient_admixture_rows(raw_rows, args.afr_pop, args.eur_pop)
         )
     supervised, unsupervised = q_sets
+    
     # join both ADMIXTURE results into the canonical ancestry table schema.
     rows = []
     for supervised_row, unsupervised_row in zip(supervised, unsupervised):

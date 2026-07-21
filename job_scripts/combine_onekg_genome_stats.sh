@@ -12,6 +12,7 @@
 
 # workflow: combine 1000 Genomes genome statistics into final table outputs.
 
+
 ##### set up ##################################################################
 set -euo pipefail
 
@@ -52,6 +53,7 @@ merge_list="${bed_dir}/onekg.rep_0.genome.merge_list"
 genome_prefix="${bed_dir}/onekg.rep_0.genome.all"
 prune_prefix="${admixture_dir}/onekg.rep_0.genome.ld_prune"
 admixture_prefix="${admixture_dir}/onekg.rep_0.genome.all"
+
 
 ##### ADMIXTURE ###############################################################
 # merge chromosome PLINK sets and LD-prune the genome-wide ADMIXTURE input.
@@ -100,6 +102,7 @@ python "${project_dir}/job_scripts/python_utils/write_onekg_admixture_pop.py" \
     cp "onekg.rep_0.genome.all.2.Q" \
         "onekg.rep_0.genome.all.unsupervised.2.Q"
 )
+
 
 ##### statistics ##############################################################
 # orient ancestry estimates and combine population statistics at genome scope.
