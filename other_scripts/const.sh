@@ -39,6 +39,9 @@ KIN_CUTOFF="0.0442"
 ADMIXTURE_LD_WINDOW="50"
 ADMIXTURE_LD_STEP="10"
 ADMIXTURE_LD_R2="0.1"
+LD_DECAY_WINDOW_SIZE_BP="2000000"
+LD_DECAY_DISTANCE_BIN_BP="5000"
+LD_DECAY_MAF_THRESHOLD="0.10"
 
 
 ##### simulation configuration ################################################

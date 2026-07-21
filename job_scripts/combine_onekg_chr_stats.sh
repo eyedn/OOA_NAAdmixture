@@ -79,12 +79,22 @@ plink2 \
     --indep-pairwise "${ld_window}" "${ld_step}" "${ld_r2}" \
     --threads "${num_threads}" \
     --out "${prune_prefix}"
+if [[ ! -s "${prune_prefix}.prune.in" ]]; then
+    echo "ERROR: missing LD-pruned SNP list ${prune_prefix}.prune.in" >&2
+    exit 1
+fi
 plink2 \
     --bfile "${all_bed_prefix}" \
     --extract "${prune_prefix}.prune.in" \
     --threads "${num_threads}" \
     --make-bed \
     --out "${admixture_prefix}"
+if [[ ! -s "${admixture_prefix}.bed" \
+    || ! -s "${admixture_prefix}.bim" \
+    || ! -s "${admixture_prefix}.fam" ]]; then
+    echo "ERROR: failed to create final chromosome ADMIXTURE BED set" >&2
+    exit 1
+fi
 
 # label reference samples and leave the admixed population unsupervised.
 python "${project_dir}/job_scripts/python_utils/write_onekg_admixture_pop.py" \

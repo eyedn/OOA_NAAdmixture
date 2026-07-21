@@ -456,6 +456,9 @@ def calc_stats(args):
             args.pops,
             args.sample_size,
             args.chr,
+            args.ld_decay_window_size_bp,
+            args.ld_decay_distance_bin_bp,
+            args.ld_decay_maf_threshold,
         )
     )
 

@@ -49,7 +49,10 @@ kin_cutoff="${12}"
 admixture_ld_window="${13}"
 admixture_ld_step="${14}"
 admixture_ld_r2="${15}"
-shift 15
+ld_decay_window_size_bp="${16}"
+ld_decay_distance_bin_bp="${17}"
+ld_decay_maf_threshold="${18}"
+shift 18
 shift 1 # skip the "--" from input arguments
 chroms=()
 while [[ "$1" != "--" ]]; do
@@ -213,6 +216,9 @@ python "${project_dir}/job_scripts/python_utils/calc_sim_stats.py" \
     --chr "${chr}" \
     --genetic-map "${genetic_map}" \
     --mutation-rate "${mutation_rate}" \
+    --ld-decay-window-size-bp "${ld_decay_window_size_bp}" \
+    --ld-decay-distance-bin-bp "${ld_decay_distance_bin_bp}" \
+    --ld-decay-maf-threshold "${ld_decay_maf_threshold}" \
     --pops "${pops[@]}"
 
 log_msg "done with statistics for rep=${rep} chr=${chr}"

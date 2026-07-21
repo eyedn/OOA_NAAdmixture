@@ -38,6 +38,9 @@ parser.add_argument("--sample-size", type=int, required=True)
 parser.add_argument("--chr", required=True)
 parser.add_argument("--genetic-map", required=True)
 parser.add_argument("--mutation-rate", type=float, required=True)
+parser.add_argument("--ld-decay-window-size-bp", type=int, required=True)
+parser.add_argument("--ld-decay-distance-bin-bp", type=int, required=True)
+parser.add_argument("--ld-decay-maf-threshold", type=float, required=True)
 parser.add_argument("--pops", nargs="+", required=True)
 
 

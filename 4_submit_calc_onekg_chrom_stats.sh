@@ -96,13 +96,12 @@ stats_jid=$(sbatch \
         "${INTERGENTIC_FILE}" \
         "${ONEKG_OUT_VCF_DIR}" \
         "${ONEKG_OUT_PLINK_BED_DIR}" \
-        "${ONEKG_OUT_POP_INFO_DIR}" \
         "${ONEKG_OUT_KING_DIR}" \
         "${ONEKG_OUT_STATS_DIR}" \
         "${MUTATION_RATE}" \
-        "${ADMIXTURE_LD_WINDOW}" \
-        "${ADMIXTURE_LD_STEP}" \
-        "${ADMIXTURE_LD_R2}" \
+        "${LD_DECAY_WINDOW_SIZE_BP}" \
+        "${LD_DECAY_DISTANCE_BIN_BP}" \
+        "${LD_DECAY_MAF_THRESHOLD}" \
         -- \
         "${CHROMS[@]}" \
         -- \

@@ -16,6 +16,8 @@ from collections import Counter, defaultdict
 from pathlib import Path
 import gzip
 import math
+import allel
+import numpy as np
 from .read_onekg_sample_pops import read_onekg_sample_pops
 from .read_tsv_rows import read_tsv_rows
 from .scan_onekg_vcf import scan_onekg_vcf
@@ -23,6 +25,195 @@ from .write_stats_table import write_stats_table
 
 
 ##### internal functions #####################################################
+'''
+internal: calculate pooled-MAF-filtered Rogers-Huff rows for one empirical
+physical window, then summarize target-population r2 by distance bin.
+'''
+def _build_onekg_ld_decay_rows(
+    positions,
+    genotypes,
+    sample_indexes_by_pop,
+    rep,
+    chrom,
+    window_start,
+    window_end,
+    distance_bin_bp,
+    maf_threshold,
+):
+    positions = np.asarray(positions)
+    genotypes = np.asarray(genotypes)
+    if genotypes.ndim != 3 or genotypes.shape[2] != 2:
+        raise ValueError("Expected variants by individuals by diploid alleles")
+    if len(positions) != len(genotypes):
+        raise ValueError("Positions and genotypes must have the same length")
+
+    in_window = (positions >= window_start) & (positions < window_end)
+    positions = positions[in_window]
+    genotypes = genotypes[in_window]
+    if len(positions) < 2:
+        return []
+
+    alt_counts = genotypes.sum(axis=2)
+    called_alleles = 2 * genotypes.shape[1]
+    alt_freq = genotypes.sum(axis=(1, 2)) / called_alleles
+    maf = np.minimum(alt_freq, 1 - alt_freq)
+    keep = maf >= maf_threshold
+    positions = positions[keep]
+    alt_counts = alt_counts[keep]
+    if len(positions) < 2:
+        return []
+
+    row_indexes, col_indexes = np.triu_indices(len(positions), k=1)
+    distances = positions[col_indexes] - positions[row_indexes]
+    valid_distances = distances > 0
+    distance_bins = (
+        ((distances.astype(int) - 1) // distance_bin_bp) + 1
+    ) * distance_bin_bp
+    rows = []
+    for pop, sample_indexes in sample_indexes_by_pop.items():
+        pop_alt_counts = alt_counts[:, sample_indexes]
+        r2_values = np.asarray(allel.rogers_huff_r(pop_alt_counts)) ** 2
+        grouped = {}
+        for distance_bin, r2_value in zip(
+            distance_bins[valid_distances],
+            r2_values[valid_distances],
+        ):
+            grouped.setdefault(int(distance_bin), []).append(float(r2_value))
+        for distance_bin, values in sorted(grouped.items()):
+            finite_values = [value for value in values if np.isfinite(value)]
+            rows.append(
+                {
+                    "rep": rep,
+                    "chrom": chrom,
+                    "pop": pop,
+                    "window_start": int(window_start),
+                    "window_end": int(window_end),
+                    "distance_bin_bp": distance_bin,
+                    "mean_r2": (
+                        float(np.mean(finite_values))
+                        if finite_values else float("nan")
+                    ),
+                    "sum_r2": float(np.sum(finite_values)),
+                    "n_pairs": len(values),
+                }
+            )
+    return rows
+
+
+'''
+internal: stream a complete shared VCF in non-overlapping physical windows.
+Pooled genotypes determine MAF and target-population genotypes determine LD.
+'''
+def _stream_onekg_ld_decay_rows(
+    vcf_file,
+    sample_pops,
+    pops,
+    target_pop,
+    rep,
+    chrom,
+    chrom_len,
+    window_size_bp,
+    distance_bin_bp,
+    maf_threshold,
+):
+    sample_indexes = None
+    target_indexes = None
+    positions = []
+    genotypes = []
+    rows = []
+    window_start = 0
+    window_end = min(window_size_bp, chrom_len)
+
+    def flush_window():
+        if not positions:
+            return []
+        return _build_onekg_ld_decay_rows(
+            np.asarray(positions),
+            np.asarray(genotypes, dtype=np.int8),
+            {target_pop: target_indexes},
+            rep,
+            chrom,
+            window_start,
+            window_end,
+            distance_bin_bp,
+            maf_threshold,
+        )
+
+    for raw_line in vcf_file:
+        if raw_line.startswith("##") or not raw_line.strip():
+            continue
+        if raw_line.startswith("#CHROM"):
+            names = raw_line.rstrip("\n").split("\t")[9:]
+            missing = sorted(set(sample_pops) - set(names))
+            if missing:
+                raise ValueError(
+                    "Requested samples missing from VCF: "
+                    + ", ".join(missing)
+                )
+            selected = [
+                (index, sample_pops[name])
+                for index, name in enumerate(names)
+                if sample_pops.get(name) in pops
+            ]
+            sample_indexes = [index for index, _ in selected]
+            target_indexes = [
+                index
+                for index, (_, pop) in enumerate(selected)
+                if pop == target_pop
+            ]
+            if not target_indexes:
+                raise ValueError(
+                    f"No VCF samples found for population {target_pop}"
+                )
+            continue
+        if raw_line.startswith("#"):
+            continue
+        if sample_indexes is None:
+            raise ValueError("VCF header is missing #CHROM")
+
+        fields = raw_line.rstrip("\n").split("\t")
+        if len(fields) < 10 or "," in fields[4] or fields[4] == ".":
+            continue
+        # Convert one-based VCF POS to the zero-based coordinates used by the
+        # simulation LD windows.
+        position = int(fields[1]) - 1
+        while position >= window_end and window_start < chrom_len:
+            rows.extend(flush_window())
+            positions.clear()
+            genotypes.clear()
+            window_start += window_size_bp
+            window_end = min(window_start + window_size_bp, chrom_len)
+        if position >= chrom_len:
+            continue
+
+        format_fields = fields[8].split(":")
+        if "GT" not in format_fields:
+            continue
+        gt_index = format_fields.index("GT")
+        site_genotypes = []
+        complete = True
+        for sample_index in sample_indexes:
+            sample_fields = fields[9 + sample_index].split(":")
+            if gt_index >= len(sample_fields):
+                complete = False
+                break
+            gt = sample_fields[gt_index].replace("|", "/").split("/")
+            if len(gt) != 2 or any(
+                allele not in {"0", "1"} for allele in gt
+            ):
+                complete = False
+                break
+            site_genotypes.append([int(gt[0]), int(gt[1])])
+        if complete:
+            positions.append(position)
+            genotypes.append(site_genotypes)
+
+    if sample_indexes is None:
+        raise ValueError("VCF header is missing #CHROM")
+    rows.extend(flush_window())
+    return rows
+
+
 '''
 internal: sum folded one-dimensional SFS bins across chromosome tables.
 '''
@@ -119,68 +310,6 @@ def _aggregate_pi_theta_rows(rows):
     return aggregated
 
 '''
-internal: bin PLINK LD pairs into nonoverlapping genomic windows and distance
-bins.
-'''
-def _bin_plink_ld_rows(
-    pairs,
-    rep,
-    chrom,
-    pop,
-    window_size_bp=2_000_000,
-    distance_bin_bp=5_000,
-):
-    grouped = defaultdict(lambda: {"sum_r2": 0.0, "n_pairs": 0})
-    for pair in pairs:
-        pos1_key = next(
-            (key for key in ("POS_A", "POS1", "BP_A") if key in pair),
-            None,
-        )
-        pos2_key = next(
-            (key for key in ("POS_B", "POS2", "BP_B") if key in pair),
-            None,
-        )
-        r2_key = next(
-            (key for key in ("UNPHASED_R2", "R2") if key in pair),
-            None,
-        )
-        if pos1_key is None or pos2_key is None or r2_key is None:
-            raise ValueError("PLINK LD output lacks position or r2 columns")
-        pos1 = int(pair[pos1_key])
-        pos2 = int(pair[pos2_key])
-        window_start = ((pos1 - 1) // window_size_bp) * window_size_bp
-        if ((pos2 - 1) // window_size_bp) * window_size_bp != window_start:
-            continue
-        distance = pos2 - pos1
-        if distance <= 0 or distance > window_size_bp:
-            continue
-        distance_bin = (
-            ((distance - 1) // distance_bin_bp) + 1
-        ) * distance_bin_bp
-        key = (window_start, distance_bin)
-        r2_value = float(pair[r2_key])
-        grouped[key]["sum_r2"] += (
-            r2_value if math.isfinite(r2_value) else 0.0
-        )
-        grouped[key]["n_pairs"] += 1
-    output = []
-    for (window_start, distance_bin), values in sorted(grouped.items()):
-        output.append(
-            {
-                "rep": rep,
-                "chrom": chrom,
-                "pop": pop,
-                "window_start": window_start,
-                "window_end": window_start + window_size_bp,
-                "distance_bin_bp": distance_bin,
-                "mean_r2": values["sum_r2"] / values["n_pairs"],
-                "sum_r2": values["sum_r2"],
-                "n_pairs": values["n_pairs"],
-            }
-        )
-    return output
-
-'''
 internal: build a folded 1D SFS from REF and ALT allele counts; here, we do not
 use polarization/ancestral-state inference.
 '''
@@ -261,21 +390,6 @@ def _build_pi_theta_rows(
     ]
 
 '''
-internal: stream dictionary rows from a whitespace-delimited PLINK LD report.
-Header names are normalized by removing PLINK's optional leading hash char.
-'''
-def _read_plink_ld_rows(path):
-    with open(path, "r", encoding="utf-8") as in_file:
-        header_line = next((line for line in in_file if line.strip()), None)
-        if header_line is None:
-            raise ValueError(f"Empty PLINK LD output {path}")
-        headers = [header.lstrip("#") for header in header_line.split()]
-        for line in in_file:
-            if line.strip():
-                yield dict(zip(headers, line.split()))
-
-
-'''
 internal: read the post-QC callable length for one chromosome from GRCh38.p14.
 '''
 def _read_onekg_chr_lengths(path, chrom):
@@ -285,6 +399,7 @@ def _read_onekg_chr_lengths(path, chrom):
         raise ValueError("Chromosome-length file is empty")
     headers = [value.lower() for value in rows[0]]
     chrom_names = ("chrom", "chr", "chromosome")
+    length_names = ("chr_len", "length", "chromosome_length")
     qc_names = ("chr_len_after_qc", "length_after_qc", "callable_length")
     chrom_index = next(
         (headers.index(name) for name in chrom_names if name in headers),
@@ -294,20 +409,26 @@ def _read_onekg_chr_lengths(path, chrom):
         (headers.index(name) for name in qc_names if name in headers),
         None,
     )
-    if None in (chrom_index, qc_index):
+    length_index = next(
+        (headers.index(name) for name in length_names if name in headers),
+        None,
+    )
+    if None in (chrom_index, length_index, qc_index):
         raise ValueError(
-            "Chromosome-length file needs chrom and chr_len_after_qc columns"
+            "Chromosome-length file needs chrom, chr_len, and "
+            "chr_len_after_qc columns"
         )
     target = str(chrom).removeprefix("chr")
     for fields in rows[1:]:
         row_chrom = fields[chrom_index].removeprefix("chr")
         if row_chrom == target:
-            span = float(fields[qc_index])
-            if span <= 0:
+            chrom_len = int(fields[length_index])
+            callable_span = float(fields[qc_index])
+            if chrom_len <= 0 or callable_span <= 0:
                 raise ValueError(
-                    f"Chromosome {chrom} has invalid chr_len_after_qc"
+                    f"Chromosome {chrom} has invalid chromosome lengths"
                 )
-            return span
+            return chrom_len, callable_span
     raise ValueError(f"Chromosome {chrom} is absent from chromosome lengths")
 
 '''
@@ -374,8 +495,8 @@ def calc_onekg_stats(args):
 
     if args.analysis_level == "chromosome":
         required_args = {
-            "ld_path": args.ld_path,
             "vcf_path": args.vcf_path,
+            "ld_vcf_path": args.ld_vcf_path,
             "intergenic_vcf_path": args.intergenic_vcf_path,
             "intergenic_bed_path": args.intergenic_bed_path,
             "unrels_path": args.unrels_path,
@@ -383,6 +504,9 @@ def calc_onekg_stats(args):
             "chr_lens_path": args.chr_lens_path,
             "chrom": args.chrom,
             "mutation_rate": args.mutation_rate,
+            "ld_decay_window_size_bp": args.ld_decay_window_size_bp,
+            "ld_decay_distance_bin_bp": args.ld_decay_distance_bin_bp,
+            "ld_decay_maf_threshold": args.ld_decay_maf_threshold,
             "pops": args.pops,
         }
         missing_args = [
@@ -437,16 +561,34 @@ def calc_onekg_stats(args):
             args.pops,
         )
         open_vcf = gzip.open if args.vcf_path.endswith(".gz") else open
+        open_ld_vcf = gzip.open if args.ld_vcf_path.endswith(".gz") else open
         with open_vcf(args.vcf_path, "rt", encoding="utf-8") as vcf_file:
             scan = scan_onekg_vcf(vcf_file, sample_pops, args.pops)
 
         pop_counts = scan["counts_by_pop"][args.pop]
         allele_counts = list(pop_counts.values())
         num_haplotypes = 2 * scan["sample_counts"][args.pop]
-        callable_span = _read_onekg_chr_lengths(
+        chrom_len, callable_span = _read_onekg_chr_lengths(
             args.chr_lens_path,
             args.chrom,
         )
+        with open_ld_vcf(
+            args.ld_vcf_path,
+            "rt",
+            encoding="utf-8",
+        ) as vcf_file:
+            ld_decay = _stream_onekg_ld_decay_rows(
+                vcf_file,
+                sample_pops,
+                args.pops,
+                args.pop,
+                0,
+                args.chrom,
+                chrom_len,
+                args.ld_decay_window_size_bp,
+                args.ld_decay_distance_bin_bp,
+                args.ld_decay_maf_threshold,
+            )
         intergenic_sample_pops = {
             sample: pop
             for sample, pop in sample_pops.items()
@@ -546,12 +688,7 @@ def calc_onekg_stats(args):
             ): [qc_row],
             (
                 f"ld_decay.rep_0.chr{args.chrom}.{args.pop}"
-            ): _bin_plink_ld_rows(
-                _read_plink_ld_rows(args.ld_path),
-                0,
-                args.chrom,
-                args.pop,
-            ),
+            ): ld_decay,
         }
         for output_name, rows in outputs.items():
             write_stats_table(stats_dir / output_name, rows)

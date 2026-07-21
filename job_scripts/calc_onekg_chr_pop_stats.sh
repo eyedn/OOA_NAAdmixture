@@ -39,14 +39,13 @@ chr_lens_path="$5"
 intergenic_file="$6"
 out_vcf_dir="$7"
 out_bed_dir="$8"
-pop_info_dir="$9"
-king_dir="${10}"
-stats_dir="${11}"
-mutation_rate="${12}"
-admixture_ld_window="${13}"
-admixture_ld_step="${14}"
-admixture_ld_r2="${15}"
-shift 15
+king_dir="$9"
+stats_dir="${10}"
+mutation_rate="${11}"
+ld_decay_window_size_bp="${12}"
+ld_decay_distance_bin_bp="${13}"
+ld_decay_maf_threshold="${14}"
+shift 14
 shift 1 # skip the "--" from input arguments
 chroms=()
 while [[ "$1" != "--" ]]; do
@@ -68,10 +67,7 @@ prefix="onekg.rep_0.chr${chr}"
 pop_bed_prefix="${out_bed_dir}/${prefix}.${pop}"
 common_vcf="${out_vcf_dir}/${prefix}.all.${pop}.vcf.gz"
 intergenic_vcf="${out_vcf_dir}/${prefix}.${pop}.intergenic.vcf.gz"
-common_bed_prefix="${out_bed_dir}/${prefix}.common_maf10.${pop}"
-pop_keep="${pop_info_dir}/${prefix}.${pop}.keep"
 king_prefix="${king_dir}/${prefix}.${pop}"
-ld_prefix="${stats_dir}/${prefix}.${pop}.ld"
 
 
 ##### KING coefficients #######################################################
@@ -85,63 +81,24 @@ plink2 \
     --out "${king_prefix}"
 
 
-##### linkage disequilibrium ##################################################
-# build the common-site PLINK input and calculate unphased LD pairs.
-log_msg "creating shared MAF-filtered LD input chr=${chr} pop=${pop}"
-plink2 \
-    --vcf "${common_vcf}" \
-    --set-all-var-ids '@:#:$r:$a' \
-    --maf 0.10 \
-    --threads "${num_threads}" \
-    --make-bed \
-    --out "${common_bed_prefix}"
-
-log_msg "ld prune with PLINK chr=${chr} pop=${pop}"
-plink2 \
-    --bfile "${common_bed_prefix}" \
-    --keep "${pop_keep}" \
-    --threads "${num_threads}" \
-    --indep-pairwise "${admixture_ld_window}" \
-        "${admixture_ld_step}" \
-        "${admixture_ld_r2}" \
-    --out "${ld_prefix}"
-
-#TODO: correct verify step: verify that the LD-pruned SNP list was created.
-if [[ ! -s "${ld_prune_prefix}.prune.in" ]]; then
-    echo "ERROR: missing LD-pruned SNP list ${ld_prune_prefix}.prune.in" >&2
-    exit 1
-fi
-
-# accept the PLINK-version-specific LD output suffix that was produced.
-ld_path=""
-for candidate in "${ld_prefix}.vcor" "${ld_prefix}.vcor1" \
-    "${ld_prefix}.ld"; do
-    if [[ -s "${candidate}" ]]; then
-        ld_path="${candidate}"
-        break
-    fi
-done
-if [[ -z "${ld_path}" ]]; then
-    echo "ERROR: PLINK did not produce an LD-pair table" >&2
-    exit 1
-fi
-
-
 ##### statistics ##############################################################
-# hand VCF, KING, and LD outputs to the empirical statistics implementation.
+# hand shared VCF and KING outputs to the empirical statistics implementation.
 python "${project_dir}/job_scripts/python_utils/calc_onekg_stats.py" \
     --analysis-level "chromosome" \
     --vcf-path "${input_vcf}" \
+    --ld-vcf-path "${common_vcf}" \
     --intergenic-vcf-path "${intergenic_vcf}" \
     --intergenic-bed-path "${intergenic_file}" \
     --unrels-path "${unrels_path}" \
     --fam-path "${fam_path}" \
     --chr-lens-path "${chr_lens_path}" \
     --king-path "${king_prefix}.kin0" \
-    --ld-path "${ld_path}" \
     --stats-dir "${stats_dir}" \
     --chrom "${chr}" \
     --pop "${pop}" \
     --mutation-rate "${mutation_rate}" \
+    --ld-decay-window-size-bp "${ld_decay_window_size_bp}" \
+    --ld-decay-distance-bin-bp "${ld_decay_distance_bin_bp}" \
+    --ld-decay-maf-threshold "${ld_decay_maf_threshold}" \
     --pops "${pops[@]}"
 log_msg "done with 1000 Genomes statistics chr=${chr} pop=${pop}"
