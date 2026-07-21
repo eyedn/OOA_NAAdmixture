@@ -7,8 +7,10 @@
 #           ---
 #           run_simulation.py
 ###############################################################################
+# construct, simulate, and serialize OOA_NAAdmixture data products.
 
 
+##### set up ##################################################################
 import math
 import pickle
 import msprime
@@ -29,12 +31,20 @@ from ancestry_utils.write_local_ancestry import (
 )
 
 
-# internal: parse comma-delimited numeric CLI vectors for admixture parameters
+##### internal functions ######################################################
+'''
+internal: parse a comma-delimited numeric CLI vector. Returns floating-point
+values in the exact generation order supplied by the submitter.
+'''
 def _parse_float_list(raw_values):
     return [float(value) for value in raw_values.split(",") if value != ""]
 
 
-# internal: generate metadata rows for supervised ADMIXTURE sample labels
+'''
+internal: generate metadata rows for supervised ADMIXTURE. Returns sample and
+population IDs, supervised labels, and original sample order, using "-" for
+ADX samples.
+'''
 def _build_metadata(pops, sample_size):
     rows = []
     original_order = 1
@@ -54,7 +64,10 @@ def _build_metadata(pops, sample_size):
     return rows
 
 
-# interal: build the OOA_NAAdmixture demography
+'''
+internal: build and validate the OOA_NAAdmixture demography. Returns the
+demography and the metadata required to reproduce its parameterization.
+'''
 def _build_demography(
     generation_time=25,
     mutation_rate=2.36e-8,
@@ -174,7 +187,7 @@ def _build_demography(
     n_eu = n_eu1 / math.exp(-r_eu * t_eg)
     n_af = n_af1 / math.exp(-r_af * t_eg)
 
-    # initalize demography with Tennessen AFR/EUR and derived modern ADX
+    # initialize demography with Tennessen AFR/EUR and derived modern ADX.
     demography = msprime.Demography()
     demography.add_population(
         name="AFR",
@@ -225,8 +238,7 @@ def _build_demography(
         ],
     )
 
-    # define all intermediate admixture events that derives all intermediate
-    # ADX_G* apart from ADX_G1
+    # define intermediate admixture events for ADX_G* populations after ADX_G1.
     for gen_number in range(admix_mixing_generation_count - 1, 1, -1):
         raw_sources = ["AFR", "EUR", f"ADX_G{gen_number - 1}"]
         raw_proportions = [
@@ -248,9 +260,7 @@ def _build_demography(
             proportions=proportions,
         )
 
-    # in backward in time language, add a census right after the first
-    # admixture event that derives ADX_G1 for the purpose of tspop true local
-    # ancestry calling
+    # add a backward-time census after the ADX_G1 event for true local ancestry.
     demography.add_census(time=admixture_time + census_time_offset)
     demography.add_admixture(
         time=admixture_time,
@@ -304,6 +314,7 @@ def _build_demography(
         initial_size=n_a,
     )
 
+    # sort events and return the demography object and msprime metadata
     demography.sort_events()
     metadata = {
         "id": "OutOfAfrica_NorthAmericanAdmixture",
@@ -324,14 +335,18 @@ def _build_demography(
     return demography, metadata
 
 
-# simulate OOA_NAAdmixture and write downstream input files.
+##### main function ###########################################################
+'''
+simulate one OOA_NAAdmixture chromosome and write every downstream handoff:
+tree sequence, demography metadata, VCF, sample metadata, and ancestry tables.
+'''
 def run_simulation(args):
-    # define species and chromosome
+    # define species and chromosome using stdpopsim
     species = stdpopsim.get_species("HomSap")
     contig = species.get_contig(
         f"chr{args.chromosome}", genetic_map=args.genetic_map
         )
-    
+
     # define sample set for msprime simulator
     sample_sets = [
         msprime.SampleSet(
@@ -351,6 +366,7 @@ def run_simulation(args):
         for sample_idx in range(args.sample_size):
             sample_names.append(f"{pop}_{sample_idx + 1}")
 
+    # build demography from above internal function
     demography, model_metadata = _build_demography(
         generation_time=args.generation_time,
         mutation_rate=args.mutation_rate,
@@ -390,6 +406,8 @@ def run_simulation(args):
     log_msg(
         f"simulating tree sequence rep={args.seed} chr={args.chromosome}"
     )
+
+    # generate tree
     ts = msprime.sim_ancestry(
         samples=sample_sets,
         demography=demography,
@@ -399,11 +417,15 @@ def run_simulation(args):
         random_seed=args.seed,
         model=args.msprime_model,
     )
+
+    # generate mutations
     ts = msprime.sim_mutations(
         ts,
         rate=args.mutation_rate,
         random_seed=args.seed + 1,
     )
+
+    # verify the result is a valid tree sequence
     if not isinstance(ts, tskit.TreeSequence):
         raise TypeError("Expected a tskit.TreeSequence result")
     ts_path = f"{args.tree_prefix}.ts"
@@ -462,7 +484,7 @@ def run_simulation(args):
         for hap, node in enumerate(nodes, start=1):
             sample_node_rows.append((node, ind_id, hap))
 
-    # for each population, generate pop specific ancestry
+    # write local and global tspop ancestry outputs for each population.
     for pop_idx, pop in enumerate(args.pops):
         start_node = 2 * pop_idx * args.sample_size
         end_node = 2 * ((pop_idx + 1) * args.sample_size) - 1

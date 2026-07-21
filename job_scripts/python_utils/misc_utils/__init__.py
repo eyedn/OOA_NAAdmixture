@@ -7,8 +7,10 @@
 #           ---
 #           __init__.py
 ###############################################################################
+# small shared workflow helpers; imports stay intentionally minimal.
 
 
+##### set up ##################################################################
 from .log_msg import log_msg
 
 

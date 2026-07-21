@@ -7,8 +7,10 @@
 #           ---
 #           build_global_ancestry_table.py
 ###############################################################################
+# assemble global ancestry rows from simulated samples.
 
 
+##### set up ##################################################################
 from .build_sample_ids import build_sample_ids
 
 
@@ -18,7 +20,12 @@ POP_ID_TO_NAME = {
 }
 
 
-# Build global ancestry proportions from tspop local ancestry calls.
+##### main function ###########################################################
+'''
+build global ancestry proportions from tspop local ancestry calls. Returns one
+row per sample with tree-sequence and VCF identifiers, ancestry proportions,
+and the total genomic span represented by the local ancestry records.
+'''
 def build_global_ancestry_table(ancestry_table, sample_node_rows, pop):
     sample_to_ind = {node: ind_id for node, ind_id, _ in sample_node_rows}
 

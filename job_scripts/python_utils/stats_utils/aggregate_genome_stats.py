@@ -7,8 +7,10 @@
 #           ---
 #           aggregate_genome_stats.py
 ###############################################################################
+# aggregate chromosome statistics and related handoffs at genome scope.
 
 
+##### set up ##################################################################
 from collections import defaultdict
 from pathlib import Path
 import csv
@@ -19,18 +21,25 @@ from .parse_king_file import parse_king_file
 from .read_fam_order import read_q_rows
 
 
-# return whether a table value can be included in numeric summaries
+##### internal functions ######################################################
+'''
+return whether a table value can be included in numeric summaries.
+'''
 def _finite(value):
     return value is not None and not math.isnan(float(value))
 
 
-# read TSV rows into dictionaries while preserving column names
+'''
+read one TSV as dictionaries while preserving column names and row order.
+'''
 def _read_tsv_rows(path):
     with open(path, "r", encoding="utf-8", newline="") as in_file:
         return list(csv.DictReader(in_file, delimiter="\t"))
 
 
-# write dictionary rows to a TSV file
+'''
+write dictionary rows to a TSV using the first row's column order.
+'''
 def _write_tsv_rows(path, rows):
     fieldnames = list(rows[0].keys()) if rows else []
     with open(path, "w", encoding="utf-8", newline="") as out_file:
@@ -44,14 +53,18 @@ def _write_tsv_rows(path, rows):
         writer.writerows(rows)
 
 
-# convert either pandas or simple table objects to row dictionaries
+'''
+convert pandas or simple table objects to a list of row dictionaries.
+'''
 def _table_to_rows(table):
     if hasattr(table, "to_dict"):
         return table.to_dict("records")
     return list(table)
 
 
-# count haplotypes per population from the filtered sample order
+'''
+count diploid haplotypes per population from the filtered FAM and Q row order.
+'''
 def _count_haplotypes_by_pop(q_rows):
     haplotypes_by_pop = defaultdict(int)
     for row in q_rows:
@@ -59,7 +72,9 @@ def _count_haplotypes_by_pop(q_rows):
     return haplotypes_by_pop
 
 
-# read one table type across all chromosome-level outputs
+'''
+read one table type across required chromosome-level outputs in input order.
+'''
 def _read_chrom_tables(stats_dir, table_name, rep, chroms):
     rows = []
     for chrom in chroms:
@@ -69,7 +84,9 @@ def _read_chrom_tables(stats_dir, table_name, rep, chroms):
     return rows
 
 
-# write genome-level TSV and optional parquet outputs
+'''
+write one genome-level table as TSV and, when available, Parquet.
+'''
 def _write_table(stats_dir, table_name, rep, rows):
     out_tsv = stats_dir / f"{table_name}.rep_{rep}.tsv"
     out_parquet = stats_dir / f"{table_name}.rep_{rep}.parquet"
@@ -79,7 +96,10 @@ def _write_table(stats_dir, table_name, rep, rows):
         pd.DataFrame(rows).to_parquet(out_parquet, index=False)
 
 
-# aggregate chromosome ancestry estimates by sequence span
+'''
+aggregate chromosome ancestry estimates using represented sequence span as the
+weight. Returns one genome-level row per sample.
+'''
 def _aggregate_ancestry_rows(rows):
     grouped = {}
     for row in rows:
@@ -126,7 +146,9 @@ def _aggregate_ancestry_rows(rows):
     )
 
 
-# sum one-dimensional SFS bins across chromosomes
+'''
+sum one-dimensional SFS bins across chromosomes for each population.
+'''
 def _aggregate_sfs_rows(rows):
     grouped = defaultdict(float)
     for row in rows:
@@ -148,7 +170,9 @@ def _aggregate_sfs_rows(rows):
     ]
 
 
-# sum pairwise two-dimensional SFS bins across chromosomes
+'''
+sum pairwise two-dimensional SFS bins across chromosomes.
+'''
 def _aggregate_sfs_2d_rows(rows):
     grouped = defaultdict(float)
     for row in rows:
@@ -180,7 +204,10 @@ def _aggregate_sfs_2d_rows(rows):
     ]
 
 
-# aggregate pi by span and theta by segregating sites
+'''
+aggregate pi by sequence span and theta by segregating sites. Pi receives the
+sample-derived finite-sample correction from final ADMIXTURE FAM order.
+'''
 def _aggregate_pi_theta_rows(rows, haplotypes_by_pop):
     grouped = defaultdict(list)
     for row in rows:
@@ -229,7 +256,9 @@ def _aggregate_pi_theta_rows(rows, haplotypes_by_pop):
     return aggregated
 
 
-# combine LD-decay bins across chromosome windows
+'''
+combine LD-decay bins across chromosome windows using summed r2 and pair counts.
+'''
 def _aggregate_ld_decay_rows(rows):
     grouped = defaultdict(lambda: {"sum_r2": 0.0, "n_pairs": 0})
     for row in rows:
@@ -254,12 +283,17 @@ def _aggregate_ld_decay_rows(rows):
     return aggregated
 
 
-# aggregate chromosome statistics into genome-level replicate tables
+##### main function ###########################################################
+'''
+aggregate chromosome statistics and genome-level KING and ADMIXTURE handoffs
+into one table set for a simulation replicate.
+'''
 def aggregate_genome_stats(args):
     stats_dir = Path(args.stats_dir)
     admixture_dir = Path(args.admixture_dir)
     king_dir = Path(args.king_dir)
 
+    # aggregate span-weighted ancestry, then join ADMIXTURE in final FAM order.
     log_msg(f"aggregating chromosome stats rep={args.rep}")
     ancestry_rows = _read_chrom_tables(
         stats_dir,
@@ -284,6 +318,7 @@ def aggregate_genome_stats(args):
         row["eur_q"] = q_row.get("eur_q")
     _write_table(stats_dir, "ancestry", args.rep, ancestry)
 
+    # combine population-specific genome KING outputs into one kinship table.
     king_rows = []
     for pop in args.pops:
         king_path = (
@@ -293,6 +328,7 @@ def aggregate_genome_stats(args):
         king_rows.extend(_table_to_rows(king_table))
     _write_table(stats_dir, "kinship", args.rep, king_rows)
 
+    # aggregate chromosome summaries using each statistic's preserved contract.
     pi_theta = _read_chrom_tables(
         stats_dir,
         "pi_theta_stats",

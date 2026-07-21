@@ -4,28 +4,33 @@
 #           Aydin Loid Karatas
 #           ---
 #           University of Southern California
-#           Department of Quantitative and Computational Biology 
+#           Department of Quantitative and Computational Biology
 #           Mooney Lab
 #           ---
-#           calc_genome_stats.sh
+#           calc_sim_genome_rep_stats.sh
 ###############################################################################
 
+# workflow: merge simulation chromosomes and calculate genome statistics.
 
+##### set up ##################################################################
 set -euo pipefail
 
+# load the software environment used for VCF, PLINK, ADMIXTURE, and Python.
 module purge
 ml gcc/13.3.0 htslib/1.19.1 bcftools/1.19 plink2/2.00a4.3 conda
 source /apps/conda/miniforge3/25.3.0/etc/profile.d/conda.sh
 conda activate OOA_NAAdmixture
 export PATH="${HOME}/.conda/envs/OOA_NAAdmixture/bin:${PATH}"
 
+# load shared logging and require one Slurm task per replicate.
 project_dir="$(pwd)"
 source "${project_dir}/other_scripts/log_msg.sh"
 
 : "${SLURM_ARRAY_TASK_ID:?ERROR: run as a Slurm array}"
 
 
-# input variables
+##### variables ###############################################################
+# read fixed inputs followed by chromosome and population arrays.
 vcf_dir="$1"
 plink_bed_dir="$2"
 pop_info_dir="$3"
@@ -49,7 +54,7 @@ done
 shift 1 # skip the "--" from input arguments
 pops=( "$@" )
 
-# derived variables
+# derive replicate-specific paths shared by all genome-level stages.
 rep="${SLURM_ARRAY_TASK_ID}"
 num_threads="${SLURM_CPUS_PER_TASK:-1}"
 genome_prefix="${genetic_map}_${rep}_genome_all"
@@ -65,6 +70,8 @@ if (( rep < 1 || rep > num_reps )); then
     exit 1
 fi
 
+##### genome PLINK input ######################################################
+# create output directories and merge chromosome VCFs for this replicate.
 mkdir -p "${admixture_dir}" "${king_dir}" "${stats_dir}" "${plink_bed_dir}"
 
 # concatenate chromosome-local VCFs for one autosomal replicate
@@ -97,7 +104,8 @@ if [[ ! -s "${genome_bed_prefix}.bed" || ! -s "${genome_bed_prefix}.bim" \
     exit 1
 fi
 
-# run genome-level KING, LD pruning, and supervised ADMIXTURE once per replicate
+##### KING coefficients #######################################################
+# run KING for each population and retain unrelated samples for ADMIXTURE.
 log_msg "running genome-level KING for rep=${rep}"
 : > "${unrelated_keep_path}"
 for pop in "${pops[@]}"; do
@@ -140,6 +148,8 @@ python "${project_dir}/job_scripts/python_utils/write_unrelated_kinship.py" \
     --genetic-map "${genetic_map}" \
     --pops "${pops[@]}"
 
+##### ADMIXTURE ###############################################################
+# LD-prune the combined unrelated samples before supervised ADMIXTURE.
 log_msg "LD-pruning genome-level ADMIXTURE samples for rep=${rep}"
 plink2 \
     --bfile "${genome_bed_prefix}" \
@@ -181,6 +191,8 @@ log_msg "running genome-level supervised ADMIXTURE for rep=${rep}"
         2
 )
 
+##### statistics ##############################################################
+# aggregate chromosome tables and genome-level KING and ADMIXTURE outputs.
 log_msg "aggregating genome-level statistics for rep=${rep}"
 python "${project_dir}/job_scripts/python_utils/aggregate_genome_stats.py" \
     --rep "${rep}" \

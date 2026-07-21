@@ -7,8 +7,10 @@
 #           ---
 #           write_local_ancestry.py
 ###############################################################################
+# write local ancestry intervals for downstream statistics.
 
 
+##### set up ##################################################################
 from .build_sample_ids import build_sample_ids
 
 
@@ -19,7 +21,11 @@ POP_ID_TO_NAME = {
 }
 
 
-# Write tspop local ancestry rows with sample labels.
+##### main function ###########################################################
+'''
+write tspop local ancestry intervals with chromosome, sample, haplotype, and
+ancestral-population labels. The output omits a header for downstream tools.
+'''
 def write_local_ancestry(
     ancestry_table,
     sample_node_rows,

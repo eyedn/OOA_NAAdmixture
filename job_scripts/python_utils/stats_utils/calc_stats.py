@@ -7,8 +7,10 @@
 #           ---
 #           calc_stats.py
 ###############################################################################
+# calculate simulation statistics from tree-sequence and PLINK inputs.
 
 
+##### set up ##################################################################
 from itertools import combinations
 from pathlib import Path
 import csv
@@ -21,6 +23,7 @@ from .parse_king_file import parse_king_file
 from .read_fam_order import read_q_rows
 
 
+##### internal functions ######################################################
 ANCESTRY_COLUMNS = [
     "rep",
     "chrom",
@@ -34,8 +37,9 @@ ANCESTRY_COLUMNS = [
     "span",
 ]
 
-
-# internal: return sample nodes for one pop in tree-sequence sample order
+'''
+internal: return sample nodes for one population in tree-sequence sample order.
+'''
 def _sample_nodes_for_pop(ts, pops, sample_size, pop):
     pop_idx = pops.index(pop)
     start = pop_idx * sample_size
@@ -46,7 +50,10 @@ def _sample_nodes_for_pop(ts, pops, sample_size, pop):
     return nodes
 
 
-# internal: build one-dimensional site-frequency spectrum rows by population
+'''
+internal: build one-dimensional SFS rows for every population. Returns derived
+allele-count bins for one chromosome and replicate.
+'''
 def _build_1d_sfs_rows(ts, rep, pops, sample_size, chrom=None):
     rows = []
     for pop in pops:
@@ -70,7 +77,10 @@ def _build_1d_sfs_rows(ts, rep, pops, sample_size, chrom=None):
     return rows
 
 
-# internal: build pairwise two-dimensional site-frequency spectrum rows
+'''
+internal: build pairwise two-dimensional SFS rows. Returns joint derived-count
+bins for every population pair.
+'''
 def _build_2d_sfs_rows(ts, rep, pops, sample_size, chrom=None):
     rows = []
     for pop1, pop2 in combinations(pops, 2):
@@ -100,11 +110,19 @@ def _build_2d_sfs_rows(ts, rep, pops, sample_size, chrom=None):
     return rows
 
 
-# internal: build pi and Watterson theta rows for each population
+'''
+internal: build separate pi and Watterson theta rows for each population using
+the statistic-specific estimators and one explicit sequence span.
+'''
 def _build_pi_theta_rows(ts, rep, pops, sample_size, mutation_rate, chrom=None):
     rows = []
     for pop in pops:
         sample_nodes = _sample_nodes_for_pop(ts, pops, sample_size, pop)
+
+        # pi calculation
+        pi_value = ts.diversity([sample_nodes], mode="site")[0]
+
+        # theta calculation
         wattersons_const = sum(
             1.0 / value for value in range(1, len(sample_nodes))
         )
@@ -112,8 +130,9 @@ def _build_pi_theta_rows(ts, rep, pops, sample_size, mutation_rate, chrom=None):
             [sample_nodes],
             mode="site",
         )[0]
-        pi_value = ts.diversity([sample_nodes], mode="site")[0]
         theta_value = segregating_sites / wattersons_const
+
+        # append statistics to returned data rows
         rows.append(
             {
                 "rep": rep,
@@ -145,7 +164,16 @@ def _build_pi_theta_rows(ts, rep, pops, sample_size, mutation_rate, chrom=None):
     return rows
 
 
-# internal: build LD-decay summary rows within non-overlapping genome windows
+'''
+internal: build LD-decay summary rows within non-overlapping genome windows:
+    - convert tree-sequence genotypes to diploid genotype arrays
+    - filter variants by minor allele frequency
+    - divide the chromosome into non-overlapping windows
+    - calculate pairwise Rogers–Huff correlations with scikit-allel
+    - square them to obtain r2
+    - bin each r2 values by physical distance of the respective loci pair
+    - record mean and summed r2 plus pair counts
+'''
 def _build_ld_decay_rows(
     ts,
     rep,
@@ -158,11 +186,13 @@ def _build_ld_decay_rows(
 ):
     rows = []
     positions = np.array([site.position for site in ts.sites()])
+
+    # generate the haploid genotype matrix from the tree sequence.
     haploid_genotypes = ts.genotype_matrix().astype(int)
     if haploid_genotypes.shape[1] % 2 != 0:
         raise ValueError("Expected diploid genotypes with an even node count")
 
-    # convert genotypes from tree sequence to a derived allele count matrix
+    # convert haplotype genotype matrix to diploid genotype matrix
     num_individuals = haploid_genotypes.shape[1] // 2
     genotypes = haploid_genotypes.reshape(
         haploid_genotypes.shape[0],
@@ -174,21 +204,27 @@ def _build_ld_decay_rows(
         raise ValueError(
             "Requested populations require more individuals than available"
         )
+
+    # convert matrix to allel.GenotypeArray object
     genotype_array = allel.GenotypeArray(genotypes[:, :requested_individuals])
     allele_counts = genotype_array.count_alleles()
     alt_freq = allele_counts[:, 1] / allele_counts.sum(axis=1)
     maf = np.minimum(alt_freq, 1 - alt_freq)
     keep = maf >= maf_threshold
     positions = positions[keep]
+
+    # generate alternative allele counts of loci that passed the MAF threshold
     alt_counts = genotype_array[keep].to_n_alt()
 
+    # calculate LD decay separately for each population's sample columns.
     for pop in pops:
+        # define individual indexes for the target population.
         pop_idx = pops.index(pop)
         start = pop_idx * sample_size
         end = start + sample_size
         pop_alt_counts = alt_counts[:, start:end]
 
-        # calculate all pairwise r2 within each window
+        # calculate all pairwise r2 within each non-overlapping window
         for window_start in range(0, int(ts.sequence_length), window_size_bp):
             window_end = min(window_start + window_size_bp, ts.sequence_length)
             in_window = np.where(
@@ -197,8 +233,11 @@ def _build_ld_decay_rows(
             if len(in_window) < 2:
                 continue
 
+            # define positions in the window
             window_positions = positions[in_window]
             block = pop_alt_counts[in_window, :]
+
+            # calculate r2 and retain pairs that fall within the window.
             r_values = allel.rogers_huff_r(block)
             row_idx, col_idx = np.triu_indices(len(window_positions), k=1)
             distances = window_positions[col_idx] - window_positions[row_idx]
@@ -207,6 +246,7 @@ def _build_ld_decay_rows(
             distances = distances[valid]
             r2_values = r2_values[valid]
 
+            # bin r2 values by the distance of the respective loci pair
             bin_values = {}
             distance_bins = (
                 ((distances.astype(int) - 1) // distance_bin_bp) + 1
@@ -216,7 +256,7 @@ def _build_ld_decay_rows(
                     float(r2_value)
                 )
 
-            # bin r2 values by their loci distances and summarize
+            # summarize r2 values by window and bin
             for distance_bin, r2_values in sorted(bin_values.items()):
                 rows.append(
                     {
@@ -234,7 +274,10 @@ def _build_ld_decay_rows(
     return rows
 
 
-# internal: join tspop ancestry and supervised ADMIXTURE estimates by sample
+'''
+internal: join tspop ancestry and supervised ADMIXTURE estimates by sample.
+Returns rows with both tree-sequence and VCF identifiers.
+'''
 def _build_ancestry_rows(
     rep,
     pops,
@@ -283,13 +326,19 @@ def _build_ancestry_rows(
     return ancestry_rows
 
 
-# internal: build a pandas table for joined chromosome ancestry rows
+'''
+internal: build a pandas table with the canonical joined-ancestry columns.
+'''
 def _build_ancestry_table(*args, **kwargs):
     rows = _build_ancestry_rows(*args, **kwargs)
     return pd.DataFrame(rows, columns=ANCESTRY_COLUMNS)
 
 
-# generate replicate summaries for ancestry, kinship, pi, theta, SFS, and LD
+'''
+calculate all simulation statistics for one chromosome and replicate. Writes
+joined ancestry, population and combined KING tables, pi, theta, one- and
+two-dimensional SFS tables, and LD-decay summaries.
+'''
 def calc_stats(args):
     stats_dir = Path(args.stats_dir)
     stats_dir.mkdir(parents=True, exist_ok=True)
@@ -311,7 +360,7 @@ def calc_stats(args):
     ts = tszip.decompress(tree_tsz_path)
     log_msg(f"loaded tree sequence rep={args.rep} chr={args.chr}")
 
-    # process tspop and "admixture --supervised" ancestry results
+    # join tspop and supervised ADMIXTURE ancestry results.
     q_path = Path(args.admixture_dir) / (
         f"{args.genetic_map}_{args.rep}_chr{args.chr}_all.2.Q"
     )
@@ -335,7 +384,7 @@ def calc_stats(args):
         index=False
     )
 
-    # process KING kinship tables
+    # standardize population KING outputs and write one combined kinship table.
     king_tables = []
     for pop in args.pops:
         king_path = Path(args.king_dir) / (
@@ -408,7 +457,7 @@ def calc_stats(args):
         )
     )
 
-    # combine summary tables into a singular table 
+    # combine summary tables into one chromosome statistics table.
     tables = {
         "pi_theta_stats": pi_theta,
         "sfs": sfs,

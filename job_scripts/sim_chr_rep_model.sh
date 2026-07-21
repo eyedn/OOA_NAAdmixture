@@ -4,29 +4,35 @@
 #           Aydin Loid Karatas
 #           ---
 #           University of Southern California
-#           Department of Quantitative and Computational Biology 
+#           Department of Quantitative and Computational Biology
 #           Mooney Lab
 #           ---
-#           sim_model.sh
+#           sim_chr_rep_model.sh
 ###############################################################################
 
+# workflow: simulate one chromosome and replicate and write analysis inputs.
 
+##### set up ##################################################################
 set -euo pipefail
 
+# load required HPC modules and conda env
 module purge
 ml gcc/13.3.0 htslib/1.19.1 bcftools/1.19 plink2/2.00a4.3 conda
 source /apps/conda/miniforge3/25.3.0/etc/profile.d/conda.sh
 conda activate OOA_NAAdmixture
 export PATH="${HOME}/.conda/envs/OOA_NAAdmixture/bin:${PATH}"
 
+# load shared functions; note, all scripts should exist in the execution repo
 project_dir="$(pwd)"
 source "${project_dir}/other_scripts/log_msg.sh"
 source "${project_dir}/other_scripts/map_slurm_task.sh"
 
+# require execution as a Slurm array task
 : "${SLURM_ARRAY_TASK_ID:?ERROR: run as a Slurm array}"
 
 
-# input variables
+##### variables ###############################################################
+# read fixed simulation inputs followed by chromosome and population arrays.
 tree_dir="$1"
 pickled_demo_meta="$2"
 vcf_dir="$3"
@@ -72,13 +78,17 @@ done
 shift 1 # skip the "--" from input arguments
 pops=( "$@" )
 
-# derived variables
-read -r rep chr < <(
-    map_slurm_task_to_rep_chr \
+# map the array-task ID to a chrom and rep; note, tasks are ordered
+# chromosome-major, with replicate-minor indexing
+read -r chr rep < <(
+    map_slurm_task_to_chr_rep \
         "${SLURM_ARRAY_TASK_ID}" \
         "${num_reps}" \
+        -- \
         "${chroms[@]}"
 )
+
+# derive task-specific paths and the available Slurm thread count.
 num_threads="${SLURM_CPUS_PER_TASK:-1}"
 prefix="${genetic_map}_${rep}_chr${chr}_all"
 tree_prefix="${tree_dir}/${prefix}"
@@ -89,7 +99,8 @@ plink_vcf_path="${vcf_dir}/${prefix}.biallelic_snps.vcf.gz"
 plink_bed_prefix="${plink_bed_dir}/${prefix}"
 sample_metadata_path="${pop_info_dir}/${genetic_map}_${rep}_chr${chr}.sample_metadata.tsv"
 
-# run coalesent simulation
+##### simulation ##############################################################
+# skip this task when the tree sequence, VCF, and PLINK outputs already exist.
 if [[ -s "${tree_prefix}.ts.tsz" && -s "${vcf_gz_path}" \
     && -s "${plink_bed_prefix}.bed" && -s "${plink_bed_prefix}.bim" \
     && -s "${plink_bed_prefix}.fam" ]]; then
@@ -97,8 +108,13 @@ if [[ -s "${tree_prefix}.ts.tsz" && -s "${vcf_gz_path}" \
     exit 0
 fi
 
+# create all required output directories
 mkdir -p "${tree_dir}" "${pickled_demo_meta}" "${vcf_dir}" \
     "${plink_bed_dir}" "${pop_info_dir}" "${anc_dir}" "${global_anc_dir}"
+
+# pass simulation and demographic parameters to the python simulator script;
+# use msprime to generate a tree sequence, model metadata, an all-sample VCF,
+# sample metadata, and local and global ancestry tables.
 log_msg "running simulation/data generation for rep=${rep} chr=${chr}"
 python "${project_dir}/job_scripts/python_utils/sim_model.py" \
     --tree-prefix "${tree_prefix}" \
@@ -139,7 +155,8 @@ python "${project_dir}/job_scripts/python_utils/sim_model.py" \
     --census-time-offset "${census_time_offset}" \
     --pops "${pops[@]}"
 
-# finalize files for downstream tasks
+##### post-sim logistics ######################################################
+# compress tree sequence file
 if [[ ! -s "${tree_prefix}.ts.tsz" ]]; then
     log_msg "compressing tree sequence for rep=${rep}"
     tszip "${tree_prefix}.ts"
@@ -152,12 +169,15 @@ if [[ -s "${tree_prefix}.ts" ]]; then
     rm "${tree_prefix}.ts"
 fi
 
+# compress vcf file
 log_msg "compressing and indexing all-sample VCF for rep=${rep} chr=${chr}"
 if [[ ! -s "${vcf_gz_path}" ]]; then
     bgzip -f "${vcf_path}"
 fi
 tabix -f -p vcf "${vcf_gz_path}"
 
+# normalize the VCF, remove duplicate variants, and retain biallelic SNPs for
+# PLINK processing.
 log_msg "filtering biallelic SNPs for PLINK for rep=${rep} chr=${chr}"
 bcftools norm \
     --rm-dup all \
@@ -172,6 +192,7 @@ bcftools norm \
         -o "${plink_vcf_path}"
 tabix -p vcf "${plink_vcf_path}"
 
+# generate PLINK binaries
 log_msg "creating PLINK BED for rep=${rep} chr=${chr}"
 plink2 \
     --vcf "${plink_vcf_path}" \
@@ -179,6 +200,7 @@ plink2 \
     --make-bed \
     --out "${plink_bed_prefix}"
 
+# verify that all three PLINK binaries exist
 if [[ ! -s "${plink_bed_prefix}.bed" || ! -s "${plink_bed_prefix}.bim" \
     || ! -s "${plink_bed_prefix}.fam" ]]; then
     echo "ERROR: failed to create complete PLINK BED set" >&2

@@ -4,24 +4,33 @@
 #           Aydin Loid Karatas
 #           ---
 #           University of Southern California
-#           Department of Quantitative and Computational Biology 
+#           Department of Quantitative and Computational Biology
 #           Mooney Lab
 #           ---
-#           3_submit_calc_genome_stats.sh
+#           3_submit_calc_sim_genome_stats.sh
 ###############################################################################
 
+# workflow: submit per-replicate genome statistics after chromosome jobs, then
+# submit the dependent combine job that writes genome-level summary tables.
 
+##### set up ##################################################################
 set -euo pipefail
 
+# determine repo location; all referenced scripts run from this checkout.
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# source shared pipeline constants and timestamped logging.
 source "${script_dir}/other_scripts/const.sh"
 source "${script_dir}/other_scripts/log_msg.sh"
 
 
-# aggregate chromosome statistics and run genome-level ADMIXTURE/KING
+##### genome statistics jobs ##################################################
+# create shared output directories before submitting replicate-level workers.
 mkdir -p "${ADMIXTURE_DIR}" "${KING_DIR}" "${STATS_DIR}"
+
+# submit one worker per replicate; each worker merges all chromosome inputs.
 log_msg "submitting OOA_NAAdmixture genome statistics array
-outdir=${OUTDIR}
+OUT_DIR=${OUT_DIR}
 num_reps=${NUM_REPS}
 sample_size=${SAMPLE_SIZE}
 chroms=${CHROMS[*]}
@@ -29,6 +38,8 @@ pops=${POPS[*]}"
 
 stats_jname="calcGenomeOOANAA"
 mkdir -p "/home1/karatas/logs/${stats_jname}"
+
+# pass chromosome artifacts and analysis settings to the genome worker.
 stats_jid=$(sbatch \
     --parsable \
     --chdir="${script_dir}" \
@@ -44,7 +55,7 @@ stats_jid=$(sbatch \
     --error="/home1/karatas/logs/${stats_jname}/%A_%a.%x.err" \
     --mail-type=ALL \
     --mail-user=karatas@usc.edu \
-    "job_scripts/calc_genome_stats.sh" \
+    "job_scripts/calc_sim_genome_rep_stats.sh" \
         "${VCF_DIR}" \
         "${PLINK_BED_DIR}" \
         "${POP_INFO_DIR}" \
@@ -66,6 +77,8 @@ stats_jid=$(sbatch \
 
 log_msg "submitted genome statistics array; jid=${stats_jid}"
 
+##### genome statistics combination ###########################################
+# combine per-replicate genome tables only after all workers succeed.
 comb_jname="combGenomeOOANAA"
 mkdir -p "/home1/karatas/logs/${comb_jname}"
 comb_jid=$(sbatch \
@@ -83,7 +96,7 @@ comb_jid=$(sbatch \
     --error="/home1/karatas/logs/${comb_jname}/%A.%x.err" \
     --mail-type=ALL \
     --mail-user=karatas@usc.edu \
-    "job_scripts/combine_sim_stats.sh" \
+    "job_scripts/combine_sim_genome_stats.sh" \
         "${STATS_DIR}" \
         "${NUM_REPS}"
 )

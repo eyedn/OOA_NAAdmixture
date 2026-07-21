@@ -7,9 +7,14 @@
 #           ---
 #           build_sample_ids.py
 ###############################################################################
+# construct stable sample identifiers for ancestry outputs.
 
 
-# Build tree-sequence and VCF labels for one population sample.
+##### main function ###########################################################
+'''
+build tree-sequence and VCF identifiers for one population sample. Returns the
+identifier in full tree-sequence order and the population-relative VCF label.
+'''
 def build_sample_ids(pop, sample_ind, pop_start_ind):
     sample_id = f"{pop}_{sample_ind + 1}"
     vcf_sample_id = f"{pop}_{sample_ind - pop_start_ind + 1}"

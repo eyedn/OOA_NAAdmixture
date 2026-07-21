@@ -7,12 +7,18 @@
 #           ---
 #           get_local_ancestry_table.py
 ###############################################################################
+# extract per-sample local ancestry intervals from tree-sequence data.
 
 
+##### set up ##################################################################
 import tspop
 
 
-# Get local ancestry via the census before the first admixture pulse.
+##### main function ###########################################################
+'''
+extract local ancestry intervals through the census placed before the first
+admixture pulse. Returns a copy of the tspop ancestry table.
+'''
 def get_local_ancestry_table(ts, census_time):
     return tspop.get_pop_ancestry(
         ts,

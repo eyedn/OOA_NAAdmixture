@@ -7,12 +7,23 @@
 #           ---
 #           sim_model.py
 ###############################################################################
+# parse one simulation request and hand it to the model runner.
 
 
+##### set up ##################################################################
 import argparse
 from sim_utils.run_simulation import run_simulation
 
 
+##### arguments ###############################################################
+'''
+define command-line arguments for
+    - tree, vcf, metadata, ancestry paths
+    - samples size and random seed
+    - chromosome and genetic map
+    - msprime simulation model
+    - model parameters and labels
+'''
 parser = argparse.ArgumentParser()
 parser.add_argument("--tree-prefix", required=True)
 parser.add_argument("--pickle-prefix", required=True)
@@ -52,6 +63,17 @@ parser.add_argument("--census-time-offset", type=float, required=True)
 parser.add_argument("--pops", nargs="+", required=True)
 
 
+##### main ####################################################################
 if __name__ == "__main__":
     args = parser.parse_args()
+    '''
+    pass complete argument set to run_simulation, which
+        - builds the OOA_NAAdmixture demographic model
+        - simulates ancestry and mutations with msprime
+        - writes the tree sequence
+        - pickles the demography and model metadata
+        - writes the all-sample VCF
+        - writes sample metadata for supervised ADMIXTURE
+        - generates population-specific local and global ancestry tables
+    '''
     run_simulation(args)

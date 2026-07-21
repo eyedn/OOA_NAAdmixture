@@ -7,9 +7,14 @@
 #           ---
 #           write_global_ancestry.py
 ###############################################################################
+# write global ancestry tables for downstream statistics.
 
 
-# Write a TSV of derived global ancestry proportions.
+##### main function ###########################################################
+'''
+write derived global ancestry proportions to a tab-separated table with column
+names and without a pandas index.
+'''
 def write_global_ancestry(global_ancestry_table, out_tsv):
     global_ancestry_table.to_csv(
         out_tsv,
