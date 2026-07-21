@@ -43,14 +43,17 @@ pop_info_dir="$9"
 king_dir="${10}"
 stats_dir="${11}"
 mutation_rate="${12}"
-shift 12
-shift
+admixture_ld_window="${13}"
+admixture_ld_step="${14}"
+admixture_ld_r2="${15}"
+shift 15
+shift 1 # skip the "--" from input arguments
 chroms=()
 while [[ "$1" != "--" ]]; do
     chroms+=( "$1" )
     shift
 done
-shift
+shift 1 # skip the "--" from input arguments
 pops=( "$@" )
 
 # map this chromosome-major task ID and derive all output prefixes.
@@ -93,24 +96,20 @@ plink2 \
     --make-bed \
     --out "${common_bed_prefix}"
 
-if plink2 --help r2-unphased 2>&1 | grep -q -- '--r2-unphased'; then
-    plink2 \
-        --bfile "${common_bed_prefix}" \
-        --keep "${pop_keep}" \
-        --r2-unphased yes-really \
-        --ld-window-kb 2000 \
-        --ld-window-r2 0 \
-        --threads "${num_threads}" \
-        --out "${ld_prefix}"
-else
-    plink2 \
-        --bfile "${common_bed_prefix}" \
-        --keep "${pop_keep}" \
-        --r2 \
-        --ld-window-kb 2000 \
-        --ld-window-r2 0 \
-        --threads "${num_threads}" \
-        --out "${ld_prefix}"
+log_msg "ld prune with PLINK chr=${chr} pop=${pop}"
+plink2 \
+    --bfile "${common_bed_prefix}" \
+    --keep "${pop_keep}" \
+    --threads "${num_threads}" \
+    --indep-pairwise "${admixture_ld_window}" \
+        "${admixture_ld_step}" \
+        "${admixture_ld_r2}" \
+    --out "${ld_prefix}"
+
+#TODO: correct verify step: verify that the LD-pruned SNP list was created.
+if [[ ! -s "${ld_prune_prefix}.prune.in" ]]; then
+    echo "ERROR: missing LD-pruned SNP list ${ld_prune_prefix}.prune.in" >&2
+    exit 1
 fi
 
 # accept the PLINK-version-specific LD output suffix that was produced.

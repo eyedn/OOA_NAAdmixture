@@ -66,7 +66,7 @@ stats_jid=$(sbatch \
         "${NUM_REPS}" \
         "${GENETIC_MAP}" \
         "${MUTATION_RATE}" \
-        "${KIN_CUTOFF=}" \
+        "${KIN_CUTOFF}" \
         "${ADMIXTURE_LD_WINDOW}" \
         "${ADMIXTURE_LD_STEP}" \
         "${ADMIXTURE_LD_R2}" \

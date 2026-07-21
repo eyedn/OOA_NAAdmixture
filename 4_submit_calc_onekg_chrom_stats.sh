@@ -100,6 +100,9 @@ stats_jid=$(sbatch \
         "${ONEKG_OUT_KING_DIR}" \
         "${ONEKG_OUT_STATS_DIR}" \
         "${MUTATION_RATE}" \
+        "${ADMIXTURE_LD_WINDOW}" \
+        "${ADMIXTURE_LD_STEP}" \
+        "${ADMIXTURE_LD_R2}" \
         -- \
         "${CHROMS[@]}" \
         -- \

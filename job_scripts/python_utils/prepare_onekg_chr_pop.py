@@ -17,6 +17,7 @@ import argparse
 import gzip
 from onekg_utils.read_onekg_sample_pops import read_onekg_sample_pops
 from onekg_utils.scan_onekg_vcf import scan_onekg_vcf
+from misc_utils.log_msg import log_msg
 
 
 ##### arguments ###############################################################
@@ -68,6 +69,7 @@ if __name__ == "__main__":
     sites_path = output_dir / f"{prefix}.complete_sites.{args.pop}.tsv"
 
     # write all-sample, population, PLINK keep, and complete-site handoffs.
+    log_msg("writing tmp all-samples list")
     with open(all_samples_path, "w", encoding="utf-8") as out_file:
         out_file.writelines(f"{sample}\n" for sample in ordered_samples)
     pop_samples = [
@@ -75,13 +77,19 @@ if __name__ == "__main__":
     ]
     if not pop_samples:
         raise ValueError(f"No retained samples found for pop={args.pop}")
+    
+    log_msg(f"writing {args.pop}-specific-samples list")
     with open(pop_samples_path, "w", encoding="utf-8") as out_file:
         out_file.writelines(f"{sample}\n" for sample in pop_samples)
+
     # note, the format f"0\t{sample}\n" is due to a vcf being used as the 
     # starting position, where do FID is provided 
+    log_msg(f"writing {args.pop}-specific keep file")
     with open(pop_keep_path, "w", encoding="utf-8") as out_file:
         out_file.writelines(f"0\t{sample}\n" for sample in pop_samples)
     retained_sites = scan["counts_by_pop"][args.pops[0]]
+
+    log_msg(f"writing complete sites file")
     with open(sites_path, "w", encoding="utf-8") as out_file:
         for site in retained_sites:
             chrom, position = site.split(":", 1)

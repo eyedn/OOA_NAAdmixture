@@ -72,6 +72,7 @@ pop_bed_prefix="${out_bed_dir}/${prefix}.${pop}"
 mkdir -p "${out_vcf_dir}" "${out_bed_dir}" "${pop_info_dir}"
 
 # write population sample lists, a PLINK keep file, and complete shared sites.
+log_msg "preparing 1kG vcf chr=${chr} pop=${pop}"
 python "${project_dir}/job_scripts/python_utils/prepare_onekg_chr_pop.py" \
     --vcf-path "${input_vcf}" \
     --unrels-path "${unrels_path}" \
@@ -91,12 +92,13 @@ bcftools view \
     --threads "${num_threads}" \
     -S "${all_samples}" \
     -R "${complete_sites}" \
-    -m2 -M2 -v snps -g ^miss \
+    -m2 -M2 -v snps \
     -Oz -o "${common_vcf}" \
     "${input_vcf}"
 tabix -f -p vcf "${common_vcf}"
 rm -rf "$all_samples"
 
+log_msg "filtering for ${pop} chr=${chr} pop=${pop}"
 bcftools view \
     --threads "${num_threads}" \
     -S "${pop_samples}" \
@@ -105,6 +107,7 @@ bcftools view \
 tabix -f -p vcf "${pop_vcf}"
 
 # retain an indexed intergenic subset for its dedicated diversity statistics.
+log_msg "retain an indexed intergenic subset chr=${chr} pop=${pop}"
 bcftools view \
     --threads "${num_threads}" \
     -R "${intergenic_file}" \
@@ -115,6 +118,7 @@ tabix -f -p vcf "${intergenic_vcf}"
 
 ##### PLINK output ############################################################
 # generate PLINK binaries for the population-specific VCF.
+log_msg "generate PLINK binaries chr=${chr} pop=${pop}"
 plink2 \
     --vcf "${pop_vcf}" \
     --set-all-var-ids '@:#:$r:$a' \
