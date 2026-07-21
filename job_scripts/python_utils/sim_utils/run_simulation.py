@@ -18,16 +18,16 @@ import msprime
 import stdpopsim
 import tskit
 from misc_utils import log_msg
-from ancestry_utils.build_global_ancestry_table import (
+from .build_global_ancestry_table import (
     build_global_ancestry_table
 )
-from ancestry_utils.get_local_ancestry_table import (
+from .get_local_ancestry_table import (
     get_local_ancestry_table
 )
-from ancestry_utils.write_global_ancestry import (
+from .write_global_ancestry import (
     write_global_ancestry
 )
-from ancestry_utils.write_local_ancestry import (
+from .write_local_ancestry import (
     write_local_ancestry
 )
 

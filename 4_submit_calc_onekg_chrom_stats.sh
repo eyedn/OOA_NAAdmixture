@@ -145,4 +145,4 @@ comb_jid=$(sbatch \
         -- \
         "${ONEKG_POPS[@]}"
 )
-log_msg "submitted 1000 Genomes chrom. comb. job; jid=${comb_jname}"
+log_msg "submitted 1000 Genomes chrom. comb. job; jid=${comb_jid}"

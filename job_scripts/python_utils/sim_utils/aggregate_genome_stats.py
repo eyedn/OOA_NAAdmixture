@@ -64,16 +64,6 @@ def _table_to_rows(table):
 
 
 '''
-count diploid haplotypes per population from the filtered FAM and Q row order.
-'''
-def _count_haplotypes_by_pop(q_rows):
-    haplotypes_by_pop = defaultdict(int)
-    for row in q_rows:
-        haplotypes_by_pop[row["pop"]] += 2
-    return haplotypes_by_pop
-
-
-'''
 read one table type across required chromosome-level outputs in input order.
 '''
 def _read_chrom_tables(stats_dir, table_name, rep, chroms):
@@ -207,9 +197,13 @@ def _aggregate_sfs_2d_rows(rows):
 
 '''
 aggregate pi by sequence span and theta by segregating sites. Pi receives the
-sample-derived finite-sample correction from final ADMIXTURE FAM order.
+configured finite-sample correction from all sampled haploid chromosomes.
 '''
-def _aggregate_pi_theta_rows(rows, haplotypes_by_pop):
+def _aggregate_pi_theta_rows(rows, sample_size):
+    num_haplotypes = 2 * sample_size
+    if num_haplotypes < 2:
+        raise ValueError("Sample size must include at least one individual")
+
     grouped = defaultdict(list)
     for row in rows:
         grouped[(int(row["rep"]), row["pop"], row["stat"])].append(row)
@@ -223,12 +217,7 @@ def _aggregate_pi_theta_rows(rows, haplotypes_by_pop):
                 float(row["value"]) * float(row["span"])
                 for row in stat_rows
             ) / total_span
-            haplotypes = haplotypes_by_pop.get(pop)
-            if haplotypes is None or haplotypes < 2:
-                raise ValueError(
-                    f"Missing or invalid haplotype count for pop={pop}"
-                )
-            value *= haplotypes / (haplotypes - 1)
+            value *= num_haplotypes / (num_haplotypes - 1)
             segregating_sites = None
             wattersons_const = None
         elif stat == "theta":
@@ -308,7 +297,6 @@ def aggregate_genome_stats(args):
     q_path = admixture_dir / f"{genome_prefix}.2.Q"
     fam_path = admixture_dir / f"{genome_prefix}.fam"
     q_rows = read_q_rows(args.rep, q_path, fam_path)
-    haplotypes_by_pop = _count_haplotypes_by_pop(q_rows)
     q_by_sample = {
         (row["pop"], row["vcf_sample_id"]): row
         for row in q_rows
@@ -340,7 +328,7 @@ def aggregate_genome_stats(args):
         stats_dir,
         "pi_theta_stats",
         args.rep,
-        _aggregate_pi_theta_rows(pi_theta, haplotypes_by_pop),
+        _aggregate_pi_theta_rows(pi_theta, args.sample_size),
     )
 
     sfs = _read_chrom_tables(stats_dir, "sfs", args.rep, args.chroms)

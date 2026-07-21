@@ -61,7 +61,7 @@ num_threads="${SLURM_CPUS_PER_TASK:-1}"
 genome_prefix="${genetic_map}_${rep}_genome_all"
 merged_vcf_path="${vcf_dir}/${genome_prefix}.biallelic_snps.vcf.gz"
 genome_bed_prefix="${plink_bed_dir}/${genome_prefix}"
-sample_metadata_path="${pop_info_dir}/${genetic_map}_${rep}_chr1.sample_metadata.tsv"
+sample_metadata_path="${pop_info_dir}/${genetic_map}_${rep}_${chroms[0]}.sample_metadata.tsv"
 admixture_prefix="${admixture_dir}/${genome_prefix}"
 unrelated_keep_path="${admixture_dir}/${genome_prefix}.king_unrelated.keep"
 ld_prune_prefix="${admixture_dir}/${genome_prefix}.ld_prune"
@@ -114,7 +114,7 @@ log_msg "running genome-level KING for rep=${rep}"
 for pop in "${pops[@]}"; do
     subset_path="${king_dir}/${genetic_map}_${rep}_genome_${pop}.subset"
     out_prefix="${king_dir}/${genetic_map}_${rep}_genome_${pop}"
-    python "${project_dir}/job_scripts/python_utils/write_pop_subset.py" \
+    python "${project_dir}/job_scripts/python_utils/write_sim_pop_subset.py" \
         --subset-path "${subset_path}" \
         --pop "${pop}" \
         --sample-size "${sample_size}" \
@@ -144,7 +144,8 @@ for pop in "${pops[@]}"; do
     cat "${retained_path}" >> "${unrelated_keep_path}"
 done
 
-python "${project_dir}/job_scripts/python_utils/write_unrelated_kinship.py" \
+python \
+    "${project_dir}/job_scripts/python_utils/write_sim_unrelated_kinship.py" \
     --rep "${rep}" \
     --king-dir "${king_dir}" \
     --stats-dir "${stats_dir}" \
@@ -179,7 +180,7 @@ plink2 \
     --out "${admixture_prefix}"
 
 log_msg "writing genome-level supervised ADMIXTURE pop file for rep=${rep}"
-python "${project_dir}/job_scripts/python_utils/write_admixture_pop.py" \
+python "${project_dir}/job_scripts/python_utils/write_sim_admixture_pop.py" \
     --sample-metadata-path "${sample_metadata_path}" \
     --fam-path "${admixture_prefix}.fam" \
     --pop-path "${admixture_prefix}.pop"
@@ -199,12 +200,13 @@ log_msg "running genome-level supervised ADMIXTURE for rep=${rep}"
 ##### statistics ##############################################################
 # aggregate chromosome tables and genome-level KING and ADMIXTURE outputs.
 log_msg "aggregating genome-level statistics for rep=${rep}"
-python "${project_dir}/job_scripts/python_utils/aggregate_genome_stats.py" \
+python "${project_dir}/job_scripts/python_utils/aggregate_sim_genome_stats.py" \
     --rep "${rep}" \
     --stats-dir "${stats_dir}" \
     --admixture-dir "${admixture_dir}" \
     --king-dir "${king_dir}" \
     --genetic-map "${genetic_map}" \
+    --sample-size "${sample_size}" \
     --chroms "${chroms[@]}" \
     --pops "${pops[@]}"
 

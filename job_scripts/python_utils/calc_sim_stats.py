@@ -13,7 +13,7 @@
 
 ##### set up ##################################################################
 import argparse
-from stats_utils.calc_stats import calc_stats
+from sim_utils.calc_stats import calc_stats
 
 
 ##### arguments ###############################################################

@@ -94,7 +94,7 @@ def _build_onekg_ld_decay_rows(
                         if finite_values else float("nan")
                     ),
                     "sum_r2": float(np.sum(finite_values)),
-                    "n_pairs": len(values),
+                    "n_pairs": len(finite_values),
                 }
             )
     return rows

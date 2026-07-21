@@ -259,6 +259,9 @@ def _build_ld_decay_rows(
 
             # summarize r2 values by window and bin
             for distance_bin, r2_values in sorted(bin_values.items()):
+                finite_values = [
+                    value for value in r2_values if np.isfinite(value)
+                ]
                 rows.append(
                     {
                         "rep": rep,
@@ -267,9 +270,12 @@ def _build_ld_decay_rows(
                         "window_start": int(window_start),
                         "window_end": int(window_end),
                         "distance_bin_bp": int(distance_bin),
-                        "mean_r2": float(np.nanmean(r2_values)),
-                        "sum_r2": float(np.nansum(r2_values)),
-                        "n_pairs": len(r2_values),
+                        "mean_r2": (
+                            float(np.mean(finite_values))
+                            if finite_values else float("nan")
+                        ),
+                        "sum_r2": float(np.sum(finite_values)),
+                        "n_pairs": len(finite_values),
                     }
                 )
     return rows

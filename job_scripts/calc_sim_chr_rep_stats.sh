@@ -95,7 +95,7 @@ for pop in "${pops[@]}"; do
     out_prefix="${king_dir}/${genetic_map}_${rep}_chr${chr}_${pop}"
 
     # create the population-specific sample subset for PLINK.
-    python "${project_dir}/job_scripts/python_utils/write_pop_subset.py" \
+    python "${project_dir}/job_scripts/python_utils/write_sim_pop_subset.py" \
         --subset-path "${subset_path}" \
         --pop "${pop}" \
         --sample-size "${sample_size}" \
@@ -133,7 +133,8 @@ done
 
 # write unrelated-sample kinship summaries for the chromosome and replicate
 # with all populations included
-python "${project_dir}/job_scripts/python_utils/write_unrelated_kinship.py" \
+python \
+    "${project_dir}/job_scripts/python_utils/write_sim_unrelated_kinship.py" \
     --rep "${rep}" \
     --king-dir "${king_dir}" \
     --stats-dir "${stats_dir}" \
@@ -181,7 +182,7 @@ fi
 # generate the supervised ADMIXTURE .pop file from simulation metadata and
 # final .fam order.
 log_msg "writing final supervised ADMIXTURE pop file for rep=${rep} chr=${chr}"
-python "${project_dir}/job_scripts/python_utils/write_admixture_pop.py" \
+python "${project_dir}/job_scripts/python_utils/write_sim_admixture_pop.py" \
     --sample-metadata-path "${sample_metadata_path}" \
     --fam-path "${admixture_prefix}.fam" \
     --pop-path "${admixture_prefix}.pop"

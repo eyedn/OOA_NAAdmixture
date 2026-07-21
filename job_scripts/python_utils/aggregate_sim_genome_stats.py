@@ -5,7 +5,7 @@
 #           Department of Quantitative and Computational Biology
 #           Mooney Lab
 #           ---
-#           aggregate_genome_stats.py
+#           aggregate_sim_genome_stats.py
 ###############################################################################
 
 # overview: aggregate chromosome handoffs into simulation genome statistics.
@@ -13,7 +13,7 @@
 
 ##### set up ##################################################################
 import argparse
-from stats_utils.aggregate_genome_stats import (
+from sim_utils.aggregate_genome_stats import (
     aggregate_genome_stats,
 )
 
@@ -21,7 +21,7 @@ from stats_utils.aggregate_genome_stats import (
 ##### arguments ###############################################################
 '''
 define command-line arguments for the replicate identifier, input/output
-directories, genetic map, chromosomes, and populations.
+directories, genetic map, sample size, chromosomes, and populations.
 '''
 parser = argparse.ArgumentParser()
 parser.add_argument("--rep", type=int, required=True)
@@ -29,6 +29,7 @@ parser.add_argument("--stats-dir", required=True)
 parser.add_argument("--admixture-dir", required=True)
 parser.add_argument("--king-dir", required=True)
 parser.add_argument("--genetic-map", required=True)
+parser.add_argument("--sample-size", type=int, required=True)
 parser.add_argument("--chroms", nargs="+", required=True)
 parser.add_argument("--pops", nargs="+", required=True)
 

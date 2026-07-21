@@ -5,7 +5,7 @@
 #           Department of Quantitative and Computational Biology
 #           Mooney Lab
 #           ---
-#           write_unrelated_kinship.py
+#           write_sim_unrelated_kinship.py
 ###############################################################################
 
 # overview: collect KING unrelated-pair output into the shared kinship schema.
@@ -16,7 +16,7 @@ from pathlib import Path
 import argparse
 import csv
 import pandas as pd
-from stats_utils.parse_king_file import parse_king_file
+from sim_utils.parse_king_file import parse_king_file
 
 
 ##### arguments ###############################################################

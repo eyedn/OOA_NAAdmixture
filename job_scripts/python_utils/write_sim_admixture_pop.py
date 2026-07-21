@@ -5,7 +5,7 @@
 #           Department of Quantitative and Computational Biology
 #           Mooney Lab
 #           ---
-#           write_admixture_pop.py
+#           write_sim_admixture_pop.py
 ###############################################################################
 
 # overview: write supervised labels in the exact final FAM sample order.
@@ -13,8 +13,8 @@
 
 ##### set up ##################################################################
 import argparse
-from stats_utils.read_fam_order import read_fam_order
-from stats_utils.read_sample_metadata import read_sample_metadata
+from sim_utils.read_fam_order import read_fam_order
+from sim_utils.read_sample_metadata import read_sample_metadata
 
 
 ##### arguments ###############################################################

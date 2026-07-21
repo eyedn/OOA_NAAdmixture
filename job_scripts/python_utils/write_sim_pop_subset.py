@@ -5,7 +5,7 @@
 #           Department of Quantitative and Computational Biology
 #           Mooney Lab
 #           ---
-#           write_pop_subset.py
+#           write_sim_pop_subset.py
 ###############################################################################
 
 # overview: write one population's PLINK and KING keep-file subset.

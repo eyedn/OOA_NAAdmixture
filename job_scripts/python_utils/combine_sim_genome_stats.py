@@ -14,8 +14,8 @@
 ##### set up ##################################################################
 from pathlib import Path
 import argparse
-from stats_utils.combine_table_paths import combine_table_paths
-from stats_utils.write_combined_stats_table import write_combined_stats_table
+from sim_utils.combine_table_paths import combine_table_paths
+from sim_utils.write_combined_stats_table import write_combined_stats_table
 
 
 TABLE_NAMES = [

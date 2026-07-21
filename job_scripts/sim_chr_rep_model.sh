@@ -100,15 +100,17 @@ plink_vcf_path="${vcf_dir}/${prefix}.biallelic_snps.vcf.gz"
 plink_bed_prefix="${plink_bed_dir}/${prefix}"
 sample_metadata_path="${pop_info_dir}/${genetic_map}_${rep}_chr${chr}.sample_metadata.tsv"
 
+# derive a unique seed for each chromosome/replicate combination
+seed=$((rep + chr))
 
 ##### simulation ##############################################################
-# skip this task when the tree sequence, VCF, and PLINK outputs already exist.
-if [[ -s "${tree_prefix}.ts.tsz" && -s "${vcf_gz_path}" \
-    && -s "${plink_bed_prefix}.bed" && -s "${plink_bed_prefix}.bim" \
-    && -s "${plink_bed_prefix}.fam" ]]; then
-    log_msg "simulation outputs exist for rep=${rep} chr=${chr}; skipping"
-    exit 0
-fi
+# # skip this task when the tree sequence, VCF, and PLINK outputs already exist.
+# if [[ -s "${tree_prefix}.ts.tsz" && -s "${vcf_gz_path}" \
+#     && -s "${plink_bed_prefix}.bed" && -s "${plink_bed_prefix}.bim" \
+#     && -s "${plink_bed_prefix}.fam" ]]; then
+#     log_msg "simulation outputs exist for rep=${rep} chr=${chr}; skipping"
+#     exit 0
+# fi
 
 # create all required output directories
 mkdir -p "${tree_dir}" "${pickled_demo_meta}" "${vcf_dir}" \
@@ -126,7 +128,7 @@ python "${project_dir}/job_scripts/python_utils/sim_model.py" \
     --anc-dir "${anc_dir}" \
     --global-anc-dir "${global_anc_dir}" \
     --sample-size "${sample_size}" \
-    --seed "${rep}" \
+    --seed "${seed}" \
     --msprime-model "${msprime_model}" \
     --chromosome "${chr}" \
     --genetic-map "${genetic_map}" \
