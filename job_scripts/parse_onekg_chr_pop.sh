@@ -78,7 +78,8 @@ python "${project_dir}/job_scripts/python_utils/prepare_onekg_chr_pop.py" \
     --chrom "${chr}" \
     --pop "${pop}" \
     --pops "${pops[@]}"
-all_samples="${pop_info_dir}/${prefix}.all.${pop}.samples"
+# these path should matches their analogous variables in the above py. script
+all_samples="${pop_info_dir}/${prefix}.all.${pop}.samples.tmp"
 pop_samples="${pop_info_dir}/${prefix}.${pop}.samples"
 complete_sites="${pop_info_dir}/${prefix}.complete_sites.${pop}.tsv"
 
@@ -92,6 +93,8 @@ bcftools view \
     -Oz -o "${common_vcf}" \
     "${input_vcf}"
 tabix -f -p vcf "${common_vcf}"
+rm -rf "$all_samples"
+
 bcftools view \
     --threads "${num_threads}" \
     -S "${pop_samples}" \

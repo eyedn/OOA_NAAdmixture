@@ -47,13 +47,13 @@ stats_jid=$(sbatch \
     --cpus-per-task="${STATS_CPUS_PER_TASK}" \
     --mem="${STATS_MEM}" \
     --time=1-00:00:00 \
-    --partition=qcb \
-    --account=jazlynmo_738 \
+    --partition="${PARTITION}" \
+    --account="${ACCOUNT}" \
     --nodes=1 \
     --output="/home1/karatas/logs/${stats_jname}/%A_%a.%x.out" \
     --error="/home1/karatas/logs/${stats_jname}/%A_%a.%x.err" \
-    --mail-type=ALL \
-    --mail-user=karatas@usc.edu \
+    --mail-type="${MAIL_TYPE}" \
+    --mail-user="${MAIL_USER}" \
     "job_scripts/calc_sim_chr_rep_stats.sh" \
         "${TREE_DIR}" \
         "${PLINK_BED_DIR}" \
@@ -92,13 +92,13 @@ comb_jid=$(sbatch \
     --mem="${COMB_MEM}" \
     --time=1-00:00:00 \
     --cpus-per-task=1 \
-    --partition=qcb \
-    --account=jazlynmo_738 \
+    --partition="${PARTITION}" \
+    --account="${ACCOUNT}" \
     --nodes=1 \
     --output="/home1/karatas/logs/${comb_jname}/%A_%a.%x.out" \
     --error="/home1/karatas/logs/${comb_jname}/%A_%a.%x.err" \
-    --mail-type=ALL \
-    --mail-user=karatas@usc.edu \
+    --mail-type="${MAIL_TYPE}" \
+    --mail-user="${MAIL_USER}" \
     "job_scripts/combine_sim_chr_stats.sh" \
         "${STATS_DIR}" \
         "${NUM_REPS}" \

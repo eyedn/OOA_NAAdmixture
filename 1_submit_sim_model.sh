@@ -69,13 +69,13 @@ sim_jid=$(sbatch \
     --cpus-per-task="${SIM_CPUS_PER_TASK}" \
     --mem="${SIM_MEM}" \
     --time=1-00:00:00 \
-    --partition=qcb \
-    --account=jazlynmo_738 \
+    --partition="${PARTITION}" \
+    --account="${ACCOUNT}" \
     --nodes=1 \
     --output="/home1/karatas/logs/${jname}/%A_%a.%x.out" \
     --error="/home1/karatas/logs/${jname}/%A_%a.%x.err" \
-    --mail-type=ALL \
-    --mail-user=karatas@usc.edu \
+    --mail-type="${MAIL_TYPE}" \
+    --mail-user="${MAIL_USER}" \
     "job_scripts/sim_chr_rep_model.sh" \
         "${TREE_DIR}" \
         "${PICKLED_DEMO_META}" \

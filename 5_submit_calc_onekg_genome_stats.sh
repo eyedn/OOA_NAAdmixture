@@ -25,61 +25,6 @@ source "${script_dir}/other_scripts/const.sh"
 source "${script_dir}/other_scripts/log_msg.sh"
 
 
-##### chromosome handoff validation ###########################################
-# require every table and PLINK artifact needed by downstream genome workers.
-required_tables=(
-    ancestry
-    kinship
-    kinship_unrelated
-    pi_theta_stats
-    pi_theta_stats_full_chrom
-    sfs
-    sfs_2d
-    ld_decay
-)
-for chr in "${CHROMS[@]}"; do
-    for table_name in "${required_tables[@]}"; do
-        for extension in tsv parquet; do
-            path="${ONEKG_OUT_STATS_DIR}/${table_name}.rep_0."
-            path+="chr${chr}.${extension}"
-            if [[ ! -s "${path}" ]]; then
-                echo "ERROR: missing chromosome output ${path}" >&2
-                exit 1
-            fi
-        done
-    done
-    for extension in tsv parquet; do
-        path="${ONEKG_OUT_STATS_DIR}/variant_qc.chr${chr}.${extension}"
-        if [[ ! -s "${path}" ]]; then
-            echo "ERROR: missing chromosome output ${path}" >&2
-            exit 1
-        fi
-    done
-    for bed_extension in bed bim fam; do
-        path="${ONEKG_OUT_PLINK_BED_DIR}/onekg.rep_0.chr${chr}.all."
-        path+="${bed_extension}"
-        if [[ ! -s "${path}" ]]; then
-            echo "ERROR: missing chromosome BED artifact ${path}" >&2
-            exit 1
-        fi
-    done
-    for pop in "${ONEKG_POPS[@]}"; do
-        path="${ONEKG_OUT_STATS_DIR}/allele_counts.rep_0."
-        path+="chr${chr}.${pop}.tsv"
-        if [[ ! -s "${path}" ]]; then
-            echo "ERROR: missing chromosome intermediate ${path}" >&2
-            exit 1
-        fi
-        path="${ONEKG_OUT_POP_INFO_DIR}/onekg.rep_0."
-        path+="chr${chr}.${pop}.keep"
-        if [[ ! -s "${path}" ]]; then
-            echo "ERROR: missing chromosome sample file ${path}" >&2
-            exit 1
-        fi
-    done
-done
-
-
 ##### genome statistics jobs ##################################################
 # submit one population-specific worker after all chromosome handoffs validate.
 pop_jname="statsOnekgGenomePop"
@@ -92,17 +37,22 @@ pop_jid=$(sbatch \
     --cpus-per-task="${STATS_CPUS_PER_TASK}" \
     --mem="${STATS_MEM}" \
     --time=1-00:00:00 \
-    --partition=qcb \
-    --account=jazlynmo_738 \
+    --partition="${PARTITION}" \
+    --account="${ACCOUNT}" \
     --nodes=1 \
     --output="/home1/karatas/logs/${pop_jname}/%A_%a.%x.out" \
     --error="/home1/karatas/logs/${pop_jname}/%A_%a.%x.err" \
-    --mail-type=ALL \
-    --mail-user=karatas@usc.edu \
+    --mail-type="${MAIL_TYPE}" \
+    --mail-user="${MAIL_USER}" \
     "job_scripts/calc_onekg_genome_pop_stats.sh" \
-        "${ONEKG_OUT_PLINK_BED_DIR}" "${ONEKG_OUT_POP_INFO_DIR}" \
-        "${ONEKG_OUT_KING_DIR}" "${ONEKG_OUT_STATS_DIR}" \
-        -- "${CHROMS[@]}" -- "${ONEKG_POPS[@]}"
+        "${ONEKG_OUT_PLINK_BED_DIR}" \
+        "${ONEKG_OUT_POP_INFO_DIR}" \
+        "${ONEKG_OUT_KING_DIR}" \
+        "${ONEKG_OUT_STATS_DIR}" \
+        -- \
+        "${CHROMS[@]}" \
+        -- \
+        "${ONEKG_POPS[@]}"
 )
 log_msg "submitted 1000 Genomes genome stats. job; jid=${pop_jid}"
 
@@ -118,18 +68,25 @@ comb_jid=$(sbatch \
     --job-name="${comb_jname}" \
     --mem="${COMB_MEM}" \
     --time=1-00:00:00 \
-    --partition=qcb \
-    --account=jazlynmo_738 \
+    --partition="${PARTITION}" \
+    --account="${ACCOUNT}" \
     --nodes=1 \
     --output="/home1/karatas/logs/${comb_jname}/%A.%x.out" \
     --error="/home1/karatas/logs/${comb_jname}/%A.%x.err" \
-    --mail-type=ALL \
-    --mail-user=karatas@usc.edu \
+    --mail-type="${MAIL_TYPE}" \
+    --mail-user="${MAIL_USER}" \
     "job_scripts/combine_onekg_genome_stats.sh" \
-        "${ONEKG_UNRELS_FILE}" "${ONEKG_PLINK_FAM_FILE}" \
-        "${ONEKG_OUT_PLINK_BED_DIR}" "${ONEKG_OUT_ADMIXTURE_DIR}" \
-        "${ONEKG_OUT_STATS_DIR}" "${ADMIXTURE_LD_WINDOW}" \
-        "${ADMIXTURE_LD_STEP}" "${ADMIXTURE_LD_R2}" \
-        -- "${CHROMS[@]}" -- "${ONEKG_POPS[@]}"
+        "${ONEKG_UNRELS_FILE}" \
+        "${ONEKG_PLINK_FAM_FILE}" \
+        "${ONEKG_OUT_PLINK_BED_DIR}" \
+        "${ONEKG_OUT_ADMIXTURE_DIR}" \
+        "${ONEKG_OUT_STATS_DIR}" \
+        "${ADMIXTURE_LD_WINDOW}" \
+        "${ADMIXTURE_LD_STEP}" \
+        "${ADMIXTURE_LD_R2}" \
+        -- \
+        "${CHROMS[@]}" \
+        -- \
+        "${ONEKG_POPS[@]}"
 )
 log_msg "submitted 1000 Genomes genome comb. job; jid=${comb_jid}"

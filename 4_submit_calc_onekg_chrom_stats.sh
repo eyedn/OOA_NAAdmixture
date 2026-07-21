@@ -45,13 +45,13 @@ parse_jid=$(sbatch \
     --cpus-per-task="${STATS_CPUS_PER_TASK}" \
     --mem="${STATS_MEM}" \
     --time=1-00:00:00 \
-    --partition=qcb \
-    --account=jazlynmo_738 \
+    --partition="${PARTITION}" \
+    --account="${ACCOUNT}" \
     --nodes=1 \
     --output="/home1/karatas/logs/${parse_jname}/%A_%a.%x.out" \
     --error="/home1/karatas/logs/${parse_jname}/%A_%a.%x.err" \
-    --mail-type=ALL \
-    --mail-user=karatas@usc.edu \
+    --mail-type="${MAIL_TYPE}" \
+    --mail-user="${MAIL_USER}" \
     "job_scripts/parse_onekg_chr_pop.sh" \
         "${ONEKG_VCF_PREFIX}" \
         "${ONEKG_VCF_SUFFIX}" \
@@ -79,13 +79,13 @@ stats_jid=$(sbatch \
     --cpus-per-task="${STATS_CPUS_PER_TASK}" \
     --mem="${STATS_MEM}" \
     --time=1-00:00:00 \
-    --partition=qcb \
-    --account=jazlynmo_738 \
+    --partition="${PARTITION}" \
+    --account="${ACCOUNT}" \
     --nodes=1 \
     --output="/home1/karatas/logs/${stats_jname}/%A_%a.%x.out" \
     --error="/home1/karatas/logs/${stats_jname}/%A_%a.%x.err" \
-    --mail-type=ALL \
-    --mail-user=karatas@usc.edu \
+    --mail-type="${MAIL_TYPE}" \
+    --mail-user="${MAIL_USER}" \
     "job_scripts/calc_onekg_chr_pop_stats.sh" \
         "${ONEKG_VCF_PREFIX}" \
         "${ONEKG_VCF_SUFFIX}" \
@@ -118,19 +118,27 @@ comb_jid=$(sbatch \
     --array="1-${#CHROMS[@]}%${MAX_JOBS}" \
     --mem="${COMB_MEM}" \
     --time=1-00:00:00 \
-    --partition=qcb \
-    --account=jazlynmo_738 \
+    --partition="${PARTITION}" \
+    --account="${ACCOUNT}" \
     --nodes=1 \
     --output="/home1/karatas/logs/${comb_jname}/%A_%a.%x.out" \
     --error="/home1/karatas/logs/${comb_jname}/%A_%a.%x.err" \
-    --mail-type=ALL \
-    --mail-user=karatas@usc.edu \
+    --mail-type="${MAIL_TYPE}" \
+    --mail-user="${MAIL_USER}" \
     "job_scripts/combine_onekg_chr_stats.sh" \
-        "${ONEKG_UNRELS_FILE}" "${ONEKG_PLINK_FAM_FILE}" \
-        "${ONEKG_OUT_VCF_DIR}" "${ONEKG_OUT_PLINK_BED_DIR}" \
-        "${ONEKG_OUT_POP_INFO_DIR}" "${ONEKG_OUT_ADMIXTURE_DIR}" \
-        "${ONEKG_OUT_STATS_DIR}" "${ADMIXTURE_LD_WINDOW}" \
-        "${ADMIXTURE_LD_STEP}" "${ADMIXTURE_LD_R2}" \
-        -- "${CHROMS[@]}" -- "${ONEKG_POPS[@]}"
+        "${ONEKG_UNRELS_FILE}" \
+        "${ONEKG_PLINK_FAM_FILE}" \
+        "${ONEKG_OUT_VCF_DIR}" \
+        "${ONEKG_OUT_PLINK_BED_DIR}" \
+        "${ONEKG_OUT_POP_INFO_DIR}" \
+        "${ONEKG_OUT_ADMIXTURE_DIR}" \
+        "${ONEKG_OUT_STATS_DIR}" \
+        "${ADMIXTURE_LD_WINDOW}" \
+        "${ADMIXTURE_LD_STEP}" \
+        "${ADMIXTURE_LD_R2}" \
+        -- \
+        "${CHROMS[@]}" \
+        -- \
+        "${ONEKG_POPS[@]}"
 )
 log_msg "submitted 1000 Genomes chrom. comb. job; jid=${comb_jname}"

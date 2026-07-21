@@ -60,7 +60,9 @@ if __name__ == "__main__":
     ordered_samples = [
         sample for sample in vcf_samples if sample in sample_pops
     ]
-    all_samples_path = output_dir / f"{prefix}.all.{args.pop}.samples"
+
+    # these path should matches their analogous variables in the bash script
+    all_samples_path = output_dir / f"{prefix}.all.{args.pop}.samples.tmp"
     pop_samples_path = output_dir / f"{prefix}.{args.pop}.samples"
     pop_keep_path = output_dir / f"{prefix}.{args.pop}.keep"
     sites_path = output_dir / f"{prefix}.complete_sites.{args.pop}.tsv"

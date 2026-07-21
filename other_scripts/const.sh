@@ -17,13 +17,20 @@
 # codebase directory
 PROJECT_DIR="/home1/karatas/OOA_NAAdmixture"
 
-# job array specifications
+# slurm specifications
 MAX_JOBS="100"
 SIM_CPUS_PER_TASK="4"
 SIM_MEM="8G"
 STATS_CPUS_PER_TASK="8"
-STATS_MEM="256G"
-COMB_MEM="256G"
+STATS_MEM="128G"
+COMB_MEM="128G"
+PARTITION="qcb"
+# ACCOUNT="jazlynmo_738"
+ACCOUNT="qcb_640"
+MAIL_TYPE="ALL"
+MAIL_USER="karatas@usc.edu"
+
+# chromosome structure specifications
 # CHROMS=(1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22)
 CHROMS=(22)
 GENETIC_MAP="HapMapII_GRCh38"
