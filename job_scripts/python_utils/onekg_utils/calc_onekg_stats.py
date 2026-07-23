@@ -22,7 +22,7 @@ from .read_onekg_sample_pops import read_onekg_sample_pops
 from .read_tsv_rows import read_tsv_rows
 from .scan_onekg_vcf import scan_onekg_vcf
 from .write_stats_table import write_stats_table
-
+from misc_utils.log_msg import log_msg
 
 ##### internal functions #####################################################
 '''
@@ -72,7 +72,9 @@ def _build_onekg_ld_decay_rows(
     rows = []
     for pop, sample_indexes in sample_indexes_by_pop.items():
         pop_alt_counts = alt_counts[:, sample_indexes]
-        r2_values = np.asarray(allel.rogers_huff_r(pop_alt_counts)) ** 2
+        r2_values = np.atleast_1d(
+            allel.rogers_huff_r(pop_alt_counts)
+        ) ** 2
         grouped = {}
         for distance_bin, r2_value in zip(
             distance_bins[valid_distances],
@@ -487,6 +489,11 @@ calculate chromosome statistics or aggregate genome statistics for one
 population. Writes canonical diversity, folded-SFS, LD, KING, and QC tables.
 '''
 def calc_onekg_stats(args):
+    # validate the requested chromosome or genome analysis.
+    log_msg(
+        f"starting 1000G statistics level={args.analysis_level} "
+        f"pop={args.pop}"
+    )
     stats_dir = Path(args.stats_dir)
     stats_dir.mkdir(parents=True, exist_ok=True)
 
@@ -522,7 +529,8 @@ def calc_onekg_stats(args):
     elif not args.chroms:
         raise ValueError("Missing genome argument: --chroms")
 
-    # normalize KING output before writing the unrelated-kinship table.
+    # parse KING output and write the unrelated-kinship table.
+    log_msg(f"reading KING table pop={args.pop} path={args.king_path}")
     with open(args.king_path, "r", encoding="utf-8") as in_file:
         lines = [line.split() for line in in_file if line.strip()]
     if not lines:
@@ -552,9 +560,17 @@ def calc_onekg_stats(args):
         stats_dir / f"kinship_unrelated.{king_suffix}",
         king_rows,
     )
+    log_msg(
+        f"wrote KING table pop={args.pop} "
+        f"path={stats_dir / f'kinship_unrelated.{king_suffix}'}"
+    )
 
-    # chromosome jobs scan genotypes and calculate population statistics.
+    # scan chromosome inputs and calculate population statistics.
     if args.analysis_level == "chromosome":
+        log_msg(
+            f"reading chromosome sample metadata chr={args.chrom} "
+            f"path={args.unrels_path}"
+        )
         sample_pops = read_onekg_sample_pops(
             args.unrels_path,
             args.fam_path,
@@ -562,6 +578,10 @@ def calc_onekg_stats(args):
         )
         open_vcf = gzip.open if args.vcf_path.endswith(".gz") else open
         open_ld_vcf = gzip.open if args.ld_vcf_path.endswith(".gz") else open
+        log_msg(
+            f"scanning chromosome VCF chr={args.chrom} pop={args.pop} "
+            f"path={args.vcf_path}"
+        )
         with open_vcf(args.vcf_path, "rt", encoding="utf-8") as vcf_file:
             scan = scan_onekg_vcf(vcf_file, sample_pops, args.pops)
 
@@ -571,6 +591,10 @@ def calc_onekg_stats(args):
         chrom_len, callable_span = _read_onekg_chr_lengths(
             args.chr_lens_path,
             args.chrom,
+        )
+        log_msg(
+            f"calculating LD decay chr={args.chrom} pop={args.pop} "
+            f"path={args.ld_vcf_path}"
         )
         with open_ld_vcf(
             args.ld_vcf_path,
@@ -589,6 +613,10 @@ def calc_onekg_stats(args):
                 args.ld_decay_distance_bin_bp,
                 args.ld_decay_maf_threshold,
             )
+        log_msg(
+            f"scanning intergenic VCF chr={args.chrom} pop={args.pop} "
+            f"path={args.intergenic_vcf_path}"
+        )
         intergenic_sample_pops = {
             sample: pop
             for sample, pop in sample_pops.items()
@@ -621,6 +649,11 @@ def calc_onekg_stats(args):
                 bed_file,
                 args.chrom,
             )
+        # construct diversity statistics and the folded SFS.
+        log_msg(
+            f"calculating pi/theta and folded SFS chr={args.chrom} "
+            f"pop={args.pop}"
+        )
         pi_theta_intergenic = _build_pi_theta_rows(
             0,
             args.chrom,
@@ -691,9 +724,18 @@ def calc_onekg_stats(args):
             ): ld_decay,
         }
         for output_name, rows in outputs.items():
+            log_msg(
+                f"writing chromosome table chr={args.chrom} pop={args.pop} "
+                f"path={stats_dir / output_name}"
+            )
             write_stats_table(stats_dir / output_name, rows)
+        log_msg(
+            f"completed 1000G chromosome statistics chr={args.chrom} "
+            f"pop={args.pop}"
+        )
         return
 
+    # aggregate chromosome tables into genome-wide population statistics.
     for table_name in (
         "pi_theta_stats_intergenic",
         "pi_theta_stats_full_callable_chrom",
@@ -703,31 +745,47 @@ def calc_onekg_stats(args):
             path = stats_dir / (
                 f"{table_name}.rep_0.chr{chrom}.{args.pop}.tsv"
             )
+            log_msg(
+                f"reading chromosome diversity table chr={chrom} "
+                f"pop={args.pop} path={path}"
+            )
             rows.extend(read_tsv_rows(path))
         aggregated = _aggregate_pi_theta_rows(rows)
+        output_path = stats_dir / f"{table_name}.rep_0.{args.pop}"
+        log_msg(
+            f"writing genome diversity table pop={args.pop} path={output_path}"
+        )
         write_stats_table(
-            stats_dir / f"{table_name}.rep_0.{args.pop}",
+            output_path,
             aggregated,
         )
 
+    # aggregate folded SFS and LD decay across chromosome outputs.
     sfs_rows = []
     ld_rows = []
     for chrom in args.chroms:
+        sfs_path = stats_dir / f"sfs.rep_0.chr{chrom}.{args.pop}.tsv"
+        ld_path = stats_dir / f"ld_decay.rep_0.chr{chrom}.{args.pop}.tsv"
+        log_msg(
+            f"reading chromosome SFS and LD tables chr={chrom} "
+            f"pop={args.pop}"
+        )
         sfs_rows.extend(
-            read_tsv_rows(
-                stats_dir / f"sfs.rep_0.chr{chrom}.{args.pop}.tsv"
-            )
+            read_tsv_rows(sfs_path)
         )
         ld_rows.extend(
-            read_tsv_rows(
-                stats_dir / f"ld_decay.rep_0.chr{chrom}.{args.pop}.tsv"
-            )
+            read_tsv_rows(ld_path)
         )
+    sfs_output_path = stats_dir / f"sfs.rep_0.{args.pop}"
+    ld_output_path = stats_dir / f"ld_decay.rep_0.{args.pop}"
+    log_msg(f"writing genome folded SFS pop={args.pop} path={sfs_output_path}")
     write_stats_table(
-        stats_dir / f"sfs.rep_0.{args.pop}",
+        sfs_output_path,
         _aggregate_folded_sfs_rows(sfs_rows),
     )
+    log_msg(f"writing genome LD decay pop={args.pop} path={ld_output_path}")
     write_stats_table(
-        stats_dir / f"ld_decay.rep_0.{args.pop}",
+        ld_output_path,
         _aggregate_ld_rows(ld_rows),
     )
+    log_msg(f"completed 1000G genome statistics pop={args.pop}")

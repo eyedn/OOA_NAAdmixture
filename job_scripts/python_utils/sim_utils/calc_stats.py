@@ -19,9 +19,9 @@ import allel
 import numpy as np
 import pandas as pd
 import tszip
-from misc_utils import log_msg
 from .parse_king_file import parse_king_file
 from .read_fam_order import read_q_rows
+from misc_utils.log_msg import log_msg
 
 
 ##### internal functions ######################################################
@@ -239,7 +239,7 @@ def _build_ld_decay_rows(
             block = pop_alt_counts[in_window, :]
 
             # calculate r2 and retain pairs that fall within the window.
-            r_values = allel.rogers_huff_r(block)
+            r_values = np.atleast_1d(allel.rogers_huff_r(block))
             row_idx, col_idx = np.triu_indices(len(window_positions), k=1)
             distances = window_positions[col_idx] - window_positions[row_idx]
             r2_values = np.asarray(r_values) ** 2
@@ -348,6 +348,8 @@ joined ancestry, population and combined KING tables, pi, theta, one- and
 two-dimensional SFS tables, and LD-decay summaries.
 '''
 def calc_stats(args):
+    # validate inputs and load the chromosome tree sequence.
+    log_msg(f"starting simulation statistics rep={args.rep} chr={args.chr}")
     stats_dir = Path(args.stats_dir)
     stats_dir.mkdir(parents=True, exist_ok=True)
 
@@ -368,7 +370,7 @@ def calc_stats(args):
     ts = tszip.decompress(tree_tsz_path)
     log_msg(f"loaded tree sequence rep={args.rep} chr={args.chr}")
 
-    # join tspop and supervised ADMIXTURE ancestry results.
+    # join tspop and supervised ADMIXTURE ancestry results, then write them.
     q_path = Path(args.admixture_dir) / (
         f"{args.genetic_map}_{args.rep}_chr{args.chr}_all.2.Q"
     )
@@ -382,44 +384,73 @@ def calc_stats(args):
         fam_path=args.admixture_fam_path,
         chrom=args.chr,
     )
+    ancestry_tsv_path = (
+        stats_dir / f"ancestry.rep_{args.rep}.chr{args.chr}.tsv"
+    )
+    ancestry_parquet_path = (
+        stats_dir / f"ancestry.rep_{args.rep}.chr{args.chr}.parquet"
+    )
+    log_msg(
+        f"writing ancestry table rep={args.rep} chr={args.chr} "
+        f"path={ancestry_tsv_path}"
+    )
     ancestry_table.to_csv(
-        stats_dir / f"ancestry.rep_{args.rep}.chr{args.chr}.tsv",
+        ancestry_tsv_path,
         sep="\t",
-        index=False
+        index=False,
     )
     ancestry_table.to_parquet(
-        stats_dir / f"ancestry.rep_{args.rep}.chr{args.chr}.parquet",
+        ancestry_parquet_path,
         index=False
     )
 
-    # standardize population KING outputs and write one combined kinship table.
+    # parse population KING outputs and write a combined kinship table.
     king_tables = []
     for pop in args.pops:
         king_path = Path(args.king_dir) / (
             f"{args.genetic_map}_{args.rep}_chr{args.chr}_{pop}.kin0"
         )
+        log_msg(
+            f"parsing KING table rep={args.rep} chr={args.chr} pop={pop} "
+            f"path={king_path}"
+        )
         king_table = parse_king_file(king_path, args.rep, pop)
         king_table.insert(1, "chrom", args.chr)
+        king_output_path = Path(args.king_dir) / (
+            f"{args.genetic_map}_{args.rep}_chr{args.chr}_{pop}.tsv"
+        )
+        log_msg(
+            f"writing KING table rep={args.rep} chr={args.chr} pop={pop} "
+            f"path={king_output_path}"
+        )
         king_table.to_csv(
-            Path(args.king_dir) / (
-                f"{args.genetic_map}_{args.rep}_chr{args.chr}_{pop}.tsv"
-            ),
+            king_output_path,
             sep="\t",
             index=False
         )
         king_tables.append(king_table)
     king_combined = pd.concat(king_tables, ignore_index=True)
+    kinship_tsv_path = (
+        stats_dir / f"kinship.rep_{args.rep}.chr{args.chr}.tsv"
+    )
+    kinship_parquet_path = (
+        stats_dir / f"kinship.rep_{args.rep}.chr{args.chr}.parquet"
+    )
+    log_msg(
+        f"writing combined KING table rep={args.rep} chr={args.chr} "
+        f"path={kinship_tsv_path}"
+    )
     king_combined.to_csv(
-        stats_dir / f"kinship.rep_{args.rep}.chr{args.chr}.tsv",
+        kinship_tsv_path,
         sep="\t",
         index=False
     )
     king_combined.to_parquet(
-        stats_dir / f"kinship.rep_{args.rep}.chr{args.chr}.parquet",
+        kinship_parquet_path,
         index=False
     )
 
-    # derive and process pi and theta from the tree sequence
+    # calculate pi and theta from the tree sequence.
     log_msg(f"calculating pi/theta rep={args.rep} chr={args.chr}")
     pi_theta = pd.DataFrame(
         _build_pi_theta_rows(
@@ -431,8 +462,9 @@ def calc_stats(args):
             args.chr,
         )
     )
+    log_msg(f"completed pi/theta rep={args.rep} chr={args.chr}")
 
-    # derive and process 1D and 2D sfs from the tree sequence
+    # calculate one- and two-dimensional SFS from the tree sequence.
     log_msg(f"calculating SFS rep={args.rep} chr={args.chr}")
     sfs = pd.DataFrame(
         _build_1d_sfs_rows(
@@ -452,8 +484,9 @@ def calc_stats(args):
             args.chr,
         )
     )
+    log_msg(f"completed SFS rep={args.rep} chr={args.chr}")
 
-    # derive and process ld decay from the tree sequence
+    # calculate LD decay from the tree sequence.
     log_msg(f"calculating LD decay rep={args.rep} chr={args.chr}")
     ld_decay = pd.DataFrame(
         _build_ld_decay_rows(
@@ -467,8 +500,9 @@ def calc_stats(args):
             args.ld_decay_maf_threshold,
         )
     )
+    log_msg(f"completed LD decay rep={args.rep} chr={args.chr}")
 
-    # combine summary tables into one chromosome statistics table.
+    # write each chromosome statistic table in TSV and Parquet formats.
     tables = {
         "pi_theta_stats": pi_theta,
         "sfs": sfs,
@@ -476,13 +510,23 @@ def calc_stats(args):
         "ld_decay": ld_decay,
     }
     for table_name, table in tables.items():
+        tsv_path = (
+            stats_dir / f"{table_name}.rep_{args.rep}.chr{args.chr}.tsv"
+        )
+        parquet_path = (
+            stats_dir / f"{table_name}.rep_{args.rep}.chr{args.chr}.parquet"
+        )
+        log_msg(
+            f"writing {table_name} rep={args.rep} chr={args.chr} "
+            f"path={tsv_path}"
+        )
         table.to_csv(
-            stats_dir / f"{table_name}.rep_{args.rep}.chr{args.chr}.tsv",
+            tsv_path,
             sep="\t",
             index=False,
         )
         table.to_parquet(
-            stats_dir / f"{table_name}.rep_{args.rep}.chr{args.chr}.parquet",
+            parquet_path,
             index=False,
         )
-    log_msg(f"wrote chromosome stats rep={args.rep} chr={args.chr}")
+    log_msg(f"completed simulation statistics rep={args.rep} chr={args.chr}")
