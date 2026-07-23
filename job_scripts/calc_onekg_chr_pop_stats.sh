@@ -37,15 +37,16 @@ unrels_path="$3"
 fam_path="$4"
 chr_lens_path="$5"
 intergenic_file="$6"
-out_vcf_dir="$7"
-out_bed_dir="$8"
-king_dir="$9"
-stats_dir="${10}"
-mutation_rate="${11}"
-ld_decay_window_size_bp="${12}"
-ld_decay_distance_bin_bp="${13}"
-ld_decay_maf_threshold="${14}"
-shift 14
+span_incl_file="$7"
+out_vcf_dir="$8"
+out_bed_dir="$9"
+king_dir="${10}"
+stats_dir="${11}"
+mutation_rate="${12}"
+ld_decay_window_size_bp="${13}"
+ld_decay_distance_bin_bp="${14}"
+ld_decay_maf_threshold="${15}"
+shift 15
 shift 1 # skip the "--" from input arguments
 chroms=()
 while [[ "$1" != "--" ]]; do
@@ -89,6 +90,7 @@ python "${project_dir}/job_scripts/python_utils/calc_onekg_stats.py" \
     --ld-vcf-path "${common_vcf}" \
     --intergenic-vcf-path "${intergenic_vcf}" \
     --intergenic-bed-path "${intergenic_file}" \
+    --span-incl-bed-path "${span_incl_file}" \
     --unrels-path "${unrels_path}" \
     --fam-path "${fam_path}" \
     --chr-lens-path "${chr_lens_path}" \

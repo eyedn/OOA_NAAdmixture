@@ -434,10 +434,9 @@ def _read_onekg_chr_lengths(path, chrom):
     raise ValueError(f"Chromosome {chrom} is absent from chromosome lengths")
 
 '''
-calculate the union span of BED intervals for one chromosome. Coordinates use
-zero-based, half-open BED semantics, and adjacent intervals are merged.
+parse positive zero-based, half-open BED intervals for one chromosome.
 '''
-def _calc_bed_union_span(rows, chrom):
+def _read_bed_intervals(rows, chrom, source_name):
     target_chrom = str(chrom).lower().removeprefix("chr")
     intervals = []
     for line_number, raw_line in enumerate(rows, start=1):
@@ -469,19 +468,58 @@ def _calc_bed_union_span(rows, chrom):
 
     if not intervals:
         raise ValueError(
-            f"Chromosome {chrom} has no positive BED span"
+            f"Chromosome {chrom} has no positive BED span in {source_name}"
         )
 
+
+    return intervals
+
+'''
+merge sorted or unsorted half-open intervals, including adjacent intervals.
+'''
+def _merge_bed_intervals(intervals):
     intervals.sort()
-    span = 0
+    merged = []
     current_start, current_end = intervals[0]
     for start, end in intervals[1:]:
         if start <= current_end:
             current_end = max(current_end, end)
         else:
-            span += current_end - current_start
+            merged.append((current_start, current_end))
             current_start, current_end = start, end
-    return span + current_end - current_start
+    merged.append((current_start, current_end))
+    return merged
+
+'''
+calculate the shared span of two BED inputs using half-open coordinates.
+'''
+def _calc_bed_intersection_span(intergenic_rows, included_rows, chrom):
+    intergenic = _merge_bed_intervals(
+        _read_bed_intervals(intergenic_rows, chrom, "intergenic BED")
+    )
+    included = _merge_bed_intervals(
+        _read_bed_intervals(included_rows, chrom, "included-span BED")
+    )
+    intergenic_index = 0
+    included_index = 0
+    span = 0
+    while intergenic_index < len(intergenic) and included_index < len(included):
+        intergenic_start, intergenic_end = intergenic[intergenic_index]
+        included_start, included_end = included[included_index]
+        overlap_start = max(intergenic_start, included_start)
+        overlap_end = min(intergenic_end, included_end)
+        if overlap_start < overlap_end:
+            span += overlap_end - overlap_start
+        if intergenic_end <= included_end:
+            intergenic_index += 1
+        else:
+            included_index += 1
+    if span == 0:
+        raise ValueError(
+            f"Chromosome {chrom} has an empty BED intersection between "
+            "intergenic and included-span inputs"
+        )
+    return span
 
 ##### main function ###########################################################
 '''
@@ -506,6 +544,7 @@ def calc_onekg_stats(args):
             "ld_vcf_path": args.ld_vcf_path,
             "intergenic_vcf_path": args.intergenic_vcf_path,
             "intergenic_bed_path": args.intergenic_bed_path,
+            "span_incl_bed_path": args.span_incl_bed_path,
             "unrels_path": args.unrels_path,
             "fam_path": args.fam_path,
             "chr_lens_path": args.chr_lens_path,
@@ -644,10 +683,20 @@ def calc_onekg_stats(args):
             args.intergenic_bed_path,
             "r",
             encoding="utf-8",
-        ) as bed_file:
-            intergenic_span = _calc_bed_union_span(
-                bed_file,
+        ) as intergenic_bed_file, open(
+            args.span_incl_bed_path,
+            "r",
+            encoding="utf-8",
+        ) as included_bed_file:
+            intergenic_span = _calc_bed_intersection_span(
+                intergenic_bed_file,
+                included_bed_file,
                 args.chrom,
+            )
+        if intergenic_span > callable_span:
+            raise ValueError(
+                f"Chromosome {args.chrom} intergenic intersection span "
+                f"{intergenic_span} exceeds callable span {callable_span}"
             )
         # construct diversity statistics and the folded SFS.
         log_msg(

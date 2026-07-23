@@ -193,7 +193,12 @@ ONEKG_NONADMIXED_POP_LABELS=(YRI CEU)
 ONEKG_ADMIXED_POP_LABEL="ASW"
 
 # paths related to GRCH38.p14
-INTERGENTIC_FILE="/home1/karatas/references/GRCh38.p14/gencodeV49.canonicalIntergenic.bed"
+REF_DIR="/home1/karatas/references"
+INTERGENTIC_FILE="${REF_DIR}/GRCh38.p14/gencodeV49.canonicalIntergenic.bed"
+
+# paths related to the 1kG strick mask span and the ENCODE exclusion list span
+SPAN_INCL_FILE="${REF_DIR}/20160622_genome_mask_GRCh38/kept.bed"
+SPAN_EXCL_FILE="${REF_DIR}/20160622_genome_mask_GRCh38/exclude_merged_strict.bed"
 
 # input and output directories for the 1000 Genomes empirical analogue
 # note, a valid VCF path uses "${ONEKG_VCF_PREFIX}${CHR}${ONEKG_VCF_SUFFIX}"
@@ -206,7 +211,7 @@ ONEKG_PLINK_BED_DIR="${ONEKG_DIR}/plinkFiles_strictmask"
 ONEKG_PLINK_BED_FILE="${ONEKG_PLINK_BED_DIR}/allPops.allChroms.snps.QCIndivsForAuto_UnrelsOnly.bed"
 ONEKG_PLINK_BIM_FILE="${ONEKG_PLINK_BED_DIR}/allPops.allChroms.snps.QCIndivsForAuto_UnrelsOnly.bim"
 ONEKG_PLINK_FAM_FILE="${ONEKG_PLINK_BED_DIR}/allPops.allChroms.snps.QCIndivsForAuto_UnrelsOnly.fam"
-ONEKG_CHR_LENS="/home1/karatas/proj/1000GenomeNYGC_hg38_karatas/ONEKG_chr_lens.tsv"
+ONEKG_CHR_LENS="${ONEKG_DIR}/ONEKG_chr_lens.tsv"
 
 ONEKG_OUT_DIR="/home1/karatas/scratch/OOA_NAAdmixture_1kG"
 ONEKG_OUT_VCF_DIR="${ONEKG_OUT_DIR}/vcfs"

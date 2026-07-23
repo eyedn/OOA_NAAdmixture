@@ -94,6 +94,7 @@ stats_jid=$(sbatch \
         "${ONEKG_PLINK_FAM_FILE}" \
         "${ONEKG_CHR_LENS}" \
         "${INTERGENTIC_FILE}" \
+        "${SPAN_INCL_FILE}" \
         "${ONEKG_OUT_VCF_DIR}" \
         "${ONEKG_OUT_PLINK_BED_DIR}" \
         "${ONEKG_OUT_KING_DIR}" \
