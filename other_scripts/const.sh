@@ -211,7 +211,7 @@ ONEKG_PLINK_BED_DIR="${ONEKG_DIR}/plinkFiles_strictmask"
 ONEKG_PLINK_BED_FILE="${ONEKG_PLINK_BED_DIR}/allPops.allChroms.snps.QCIndivsForAuto_UnrelsOnly.bed"
 ONEKG_PLINK_BIM_FILE="${ONEKG_PLINK_BED_DIR}/allPops.allChroms.snps.QCIndivsForAuto_UnrelsOnly.bim"
 ONEKG_PLINK_FAM_FILE="${ONEKG_PLINK_BED_DIR}/allPops.allChroms.snps.QCIndivsForAuto_UnrelsOnly.fam"
-ONEKG_CHR_LENS="${ONEKG_DIR}/ONEKG_chr_lens.tsv"
+ONEKG_CHR_LENS="/home1/karatas/proj/1000GenomeNYGC_hg38_karatas/ONEKG_chr_lens.tsv"
 
 ONEKG_OUT_DIR="/home1/karatas/scratch/OOA_NAAdmixture_1kG"
 ONEKG_OUT_VCF_DIR="${ONEKG_OUT_DIR}/vcfs"
