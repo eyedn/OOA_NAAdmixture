@@ -2,380 +2,213 @@
 # Aydin Karatas
 # ___
 # University of Southern California
-# Department of Quantitative and Computational Biology
+# Department of Quantitative and Computational Biology 
 # Mooney Lab
 # ___
 # sfs.R
 # ______________________________________________________________________________
 
-# pattern: Imperative Shell
-
 
 library(tidyverse)
+library(nanoparquet)
+library(glue)
+library(ggridges)
 library(scales)
 
-source("analysis_scripts/analysis_utils.R")
-
-
-# constants ----
-RARE.MAF.CUTOFF <- 0.05
-
-
-# read and harmonize SFS tables ----
-sfs.schema <- c(
-  rep = "integer",
-  chrom = "character",
-  pop = "character",
-  derived_allele_count = "integer",
-  minor_allele_count = "integer",
-  count = "double"
-)
-
-sfs <- read.harmonized.table(
-  sim.table = "sfs",
-  empirical.table = "sfs",
-  schema = sfs.schema,
-  sim.required = c(
-    "rep", "pop", "derived_allele_count", "count"
-  ),
-  empirical.required = c(
-    "rep", "pop", "minor_allele_count", "count"
-  )
-)
-
-sfs.chroms <- discover.chromosomes(ONEKG.STATS.DIR, "sfs")
-variant.qc.chroms <- discover.chromosomes(ONEKG.STATS.DIR, "variant_qc")
-if (!identical(sfs.chroms, variant.qc.chroms)) {
-  stop(
-    "Empirical SFS and variant-QC chromosome outputs do not match",
-    call. = FALSE
-  )
-}
-
-# empirical target haplotype counts ----
-variant.qc.path <- require.genome.file(ONEKG.STATS.DIR, "variant_qc")
-variant.qc.paths <- c(
-  file.path(
-    ONEKG.STATS.DIR,
-    paste0("variant_qc.chr", variant.qc.chroms, ".parquet")
-  ),
-  variant.qc.path
-)
-variant.qc.tables <- read.parquet.paths(variant.qc.paths)
-variant.qc.chrom.labels <- c(variant.qc.chroms, "all")
-target.columns <- c(
-  AFR = "retained_YRI_samples",
-  EUR = "retained_CEU_samples",
-  ADMIXED = "retained_ASW_samples"
-)
-target.haplotype.map <- map2_dfr(
-  variant.qc.tables,
-  variant.qc.chrom.labels,
-  function(variant.qc, chrom) {
-    missing.target.columns <- setdiff(target.columns, names(variant.qc))
-    if (length(missing.target.columns) > 0) {
-      stop(
-        "Variant-QC table is missing retained sample count(s): ",
-        paste(missing.target.columns, collapse = ", "),
-        call. = FALSE
-      )
-    }
-    tibble(
-      chrom = chrom,
-      pop_role = names(target.columns),
-      num_haplotypes = 2L * vapply(
-        target.columns,
-        function(column) {
-          values <- unique(as.integer(variant.qc[[column]]))
-          values <- values[!is.na(values)]
-          if (length(values) != 1 || values <= 0) {
-            stop(
-              "Variant-QC retained sample count must be one ",
-              "positive value: ",
-              column,
-              call. = FALSE
-            )
-          }
-          values
-        },
-        integer(1)
-      )
-    )
+# read in data ----
+data.dir <- "~/scratch/OOA_NAAdmixture_small/stats"
+sfs1D.chr <- map_dfr(
+  1:22,
+  \(chr) {
+    file.path(data.dir, glue("sfs.chr{chr}.parquet")) |>
+      read_parquet() 
   }
 )
 
-
-# callable spans ----
-span.schema <- c(
-  rep = "integer",
-  chrom = "character",
-  pop = "character",
-  stat = "character",
-  value = "double",
-  ne_value = "double",
-  mutation_rate = "double",
-  span = "double",
-  segregating_sites = "double",
-  wattersons_const = "double"
-)
-
-span.tables <- read.harmonized.table(
-  sim.table = "pi_theta_stats",
-  empirical.table = "pi_theta_stats_full_callable_chrom",
-  schema = span.schema,
-  sim.required = c("rep", "pop", "stat"),
-  empirical.required = c("rep", "pop", "stat")
-) |>
-  filter(analysis_level == "chromosome", stat == "pi") |>
-  distinct(data_source, rep, pop_role, chrom, span)
-
-if (any(is.na(span.tables$span))) {
-  stop("Chromosome pi/theta span metadata is missing", call. = FALSE)
-}
-
-genome.spans <- span.tables |>
-  group_by(data_source, rep, pop_role) |>
-  summarize(span = sum(span), .groups = "drop") |>
-  mutate(chrom = "all")
-
-span.map <- bind_rows(span.tables, genome.spans)
-
-
-# project simulation spectra and normalize both sources ----
-project.one.spectrum <- function(data, chrom, pop.role) {
-  source.haplotypes <- infer.source.haplotypes(data)
-  target <- target.haplotype.map |>
-    filter(
-      .data$chrom == .env$chrom,
-      .data$pop_role == .env$pop.role
-    ) |>
-    pull(num_haplotypes)
-  if (length(target) != 1) {
-    stop("Missing unique target haplotype count", call. = FALSE)
-  }
-  projected <- project.unfolded.sfs(
-    data,
-    source.haplotypes,
-    target
+sfs1D.genWide <- read_parquet(
+  file.path(data.dir, "sfs.parquet")
+) %>%
+  mutate(
+    chrom = "all"
   )
-  fold.projected.sfs(projected, target) |>
-    mutate(num_haplotypes = target)
-}
 
-sim.sfs <- sfs |>
-  filter(data_source == "simulation") |>
-  group_by(
-    rep, chrom, pop, pop_role, data_source, analysis_level
-  ) |>
-  group_modify(
-    ~project.one.spectrum(
-      .x,
-      .y$chrom[[1]],
-      .y$pop_role[[1]]
-    )
-  ) |>
-  ungroup()
+sfs1D <- bind_rows(sfs1D.chr, sfs1D.genWide) %>%
+  filter(derived_allele_count != "0")
 
-empirical.sfs <- sfs |>
-  filter(data_source == "empirical") |>
-  transmute(
-    rep, chrom, pop, pop_role, data_source, analysis_level,
-    minor_allele_count,
-    count
-  ) |>
-  left_join(
-    target.haplotype.map,
-    by = c("chrom", "pop_role")
-  )
-if (any(is.na(empirical.sfs$num_haplotypes))) {
-  stop("Empirical SFS target haplotype metadata is missing", call. = FALSE)
-}
-
-sfs.comparable <- bind_rows(sim.sfs, empirical.sfs) |>
-  left_join(
-    span.map,
-    by = c("data_source", "rep", "pop_role", "chrom")
-  )
-if (any(is.na(sfs.comparable$span))) {
-  stop("Required SFS callable-span metadata is missing", call. = FALSE)
-}
-
-sfs.normalized <- sfs.comparable |>
-  group_by(
-    rep, chrom, pop, pop_role, data_source,
-    analysis_level, num_haplotypes, span
-  ) |>
-  group_modify(
-    ~normalize.folded.sfs(
-      .x,
-      .y$num_haplotypes[[1]],
-      .y$span[[1]]
-    )
-  ) |>
-  ungroup()
-
-
-# folded-spectrum summaries and distances ----
-sfs.metrics <- sfs.normalized |>
-  group_by(
-    rep, chrom, pop, pop_role, data_source, analysis_level
-  ) |>
+# summarize sfs ----
+sfs1D.summary <- sfs1D %>%
+  mutate(
+    derived_allele_count = as.numeric(derived_allele_count),
+    count = as.numeric(count),
+    pop = factor(pop, levels = c("AFR", "ADX", "EUR"))
+  ) %>%
+  group_by(rep, chrom, pop) %>%
+  mutate(
+    fraction = count / sum(count)
+  ) %>%
+  ungroup() %>%
+  group_by(chrom, pop, derived_allele_count) %>%
   summarize(
-    singleton_fraction = sum(
-      fraction[minor_allele_count == 1],
-      na.rm = TRUE
-    ),
-    doubleton_fraction = sum(
-      fraction[minor_allele_count == 2],
-      na.rm = TRUE
-    ),
-    mac_le_5_fraction = sum(
-      fraction[minor_allele_count <= 5],
-      na.rm = TRUE
-    ),
-    rare_maf_fraction = sum(
-      fraction[minor_allele_frequency <= RARE.MAF.CUTOFF],
-      na.rm = TRUE
-    ),
+    mean.frac = mean(fraction),
+    sd.frac = sd(fraction),
+    mean.count = mean(count),
+    sd.count = sd(count),
     .groups = "drop"
-  )
+  ) 
 
-sfs.metric.predictive <- sfs.metrics |>
-  pivot_longer(
-    ends_with("_fraction"),
-    names_to = "metric",
-    values_to = "value"
-  ) |>
-  predictive.summary(
-    value.column = "value",
-    group.columns = c(
-      "analysis_level", "chrom", "pop_role", "metric"
-    )
-  )
-
-empirical.spectra <- sfs.normalized |>
-  filter(data_source == "empirical") |>
-  select(chrom, pop_role, minor_allele_count, fraction)
-
-sfs.distance <- sfs.normalized |>
-  filter(data_source == "simulation") |>
-  group_by(rep, chrom, pop_role, analysis_level) |>
-  group_modify(
-    ~{
-      empirical <- empirical.spectra |>
-        filter(
-          chrom == .y$chrom[[1]],
-          pop_role == .y$pop_role[[1]]
-        )
-      tibble(
-        hellinger_distance = spectrum.hellinger(.x, empirical)
-      )
-    }
-  ) |>
-  ungroup()
-
-sfs.rare.contrasts <- population.contrasts(
-  sfs.metrics,
-  value.column = "rare_maf_fraction",
-  group.columns = c(
-    "rep", "chrom", "data_source", "analysis_level"
-  ),
-  metric.type = "positive"
-)
-
-
-# folded-SFS figures ----
-sfs.envelope <- sfs.normalized |>
-  filter(data_source == "simulation") |>
-  group_by(
-    analysis_level, chrom, pop_role, minor_allele_frequency
-  ) |>
-  summarize(
-    median = median(fraction, na.rm = TRUE),
-    lower = quantile(fraction, 0.025, na.rm = TRUE),
-    upper = quantile(fraction, 0.975, na.rm = TRUE),
-    .groups = "drop"
-  )
-
-sfs.empirical <- sfs.normalized |>
-  filter(data_source == "empirical")
-
-sfs.shape.plot <- ggplot(
-  sfs.envelope |> filter(analysis_level == "genome"),
+# plot pseudo log raw counts ----
+ggplot(
+  sfs1D.summary %>% filter(chrom == "1", derived_allele_count <= 10),
   aes(
-    x = minor_allele_frequency,
-    y = median,
-    color = pop_role,
-    fill = pop_role
+    x = derived_allele_count,
+    y = mean.count,
+    color = pop,
+    fill = pop
   )
 ) +
   geom_ribbon(
-    aes(ymin = lower, ymax = upper),
-    alpha = 0.15,
+    aes(
+      ymin = pmax(0, mean.count - 2 * sd.count),
+      ymax = mean.count + 2 * sd.count
+    ),
+    alpha = 0.20,
     color = NA
   ) +
-  geom_line(linewidth = 1) +
-  geom_point(
-    data = sfs.empirical |> filter(analysis_level == "genome"),
-    aes(y = fraction),
-    size = 1.6
+  geom_line(
+    linewidth = 1
   ) +
-  scale_color_manual(values = POP.COLORS) +
-  scale_fill_manual(values = POP.COLORS) +
-  scale_y_continuous(trans = pseudo_log_trans()) +
+  facet_wrap(
+    ~factor(chrom, levels = rev(chrom.levels)),
+    ncol = 6
+  ) +
+  scale_color_manual(
+    values = pop_cols
+  ) +
+  scale_fill_manual(
+    values = pop_cols
+  ) +
+  scale_y_continuous(
+    trans = pseudo_log_trans(base = 10)
+  ) +
   labs(
-    x = "Minor allele frequency",
-    y = "Fraction of segregating sites",
-    title = "Projected and folded 1D SFS"
+    x = "Derived allele count",
+    y = "Mean number of sites",
+    title = "One-dimensional Site Frequency Spectrum",
+    subtitle = "Lines represent the mean count across replicates; shaded ribbons denote ±2 SD"
   ) +
-  theme_bw(base_size = 16)
+  theme_bw(base_size = 24) +
+  theme(
+    legend.position = "top",
+    legend.title = element_blank(),
+    panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    strip.text = element_text(face = "bold"),
+    panel.spacing = unit(1, "lines")
+  )
 
-sfs.density.plot <- ggplot(
-  sfs.normalized |> filter(analysis_level == "genome"),
+# plot pseudo log frequency ----
+ggplot(
+  sfs1D.summary %>% filter(chrom == "1", derived_allele_count <= 10),
   aes(
-    x = minor_allele_frequency,
-    y = sites_per_mb,
-    color = data_source
+    x = derived_allele_count,
+    y = mean.frac,
+    color = pop,
+    fill = pop
   )
 ) +
-  geom_line(aes(group = interaction(rep, data_source)), alpha = 0.35) +
-  facet_wrap(~pop_role, scales = "free_y") +
-  scale_y_continuous(trans = pseudo_log_trans()) +
-  labs(
-    x = "Minor allele frequency",
-    y = "Sites per callable Mb",
-    title = "Folded-SFS site density"
+  geom_ribbon(
+    aes(
+      ymin = pmax(0, mean.frac - 2 * sd.frac),
+      ymax = mean.frac + 2 * sd.frac
+    ),
+    alpha = 0.20,
+    color = NA
   ) +
-  theme_bw(base_size = 16) +
-  theme(legend.title = element_blank())
+  geom_line(
+    linewidth = 1
+  ) +
+  facet_wrap(
+    ~factor(chrom, levels = rev(chrom.levels)),
+    ncol = 6
+  ) +
+  scale_color_manual(
+    values = pop_cols
+  ) +
+  scale_fill_manual(
+    values = pop_cols
+  ) +
+  scale_y_continuous(
+    trans = pseudo_log_trans(base = 10)
+  ) +
+  labs(
+    x = "Derived allele count",
+    y = "Mean fraction of segregating sites",
+    title = "Normalized One-dimensional Site Frequency Spectrum",
+    subtitle = "Lines represent the mean fraction across replicates; shaded ribbons denote ±2 SD"
+  ) +
+  theme_bw(base_size = 24) +
+  theme(
+    legend.position = "top",
+    legend.title = element_blank(),
+    panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    strip.text = element_text(face = "bold"),
+    panel.spacing = unit(1, "lines")
+  )
 
-sfs.rare.contrast.plot <- ggplot(
-  sfs.rare.contrasts |> filter(analysis_level == "genome"),
-  aes(x = contrast, y = value, color = data_source)
+# plot number of segregating sites per chromosome ----
+segsites.summary <- sfs1D %>%
+  filter(chrom != "all") %>%
+  mutate(
+    count = as.numeric(count),
+    pop = factor(pop, levels = c("AFR", "ADX", "EUR")),
+    chrom = factor(as.integer(chrom), levels = 1:22)
+  ) %>%
+  group_by(rep, chrom, pop) %>%
+  summarize(
+    segregating_sites = sum(count),
+    .groups = "drop"
+  ) %>%
+  group_by(chrom, pop) %>%
+  summarize(
+    mean.segsites = mean(segregating_sites),
+    sd.segsites = sd(segregating_sites),
+    .groups = "drop"
+  )
+
+ggplot(
+  segsites.summary,
+  aes(
+    x = chrom,
+    y = mean.segsites,
+    fill = pop
+  )
 ) +
-  geom_boxplot(
-    data = \(data) filter(data, data_source == "simulation"),
-    outlier.shape = NA
+  geom_col(
+    position = position_dodge(width = 0.9),
+    width = 0.8
   ) +
-  geom_point(
-    data = \(data) filter(data, data_source == "empirical"),
-    size = 2.5
+  geom_errorbar(
+    aes(
+      ymin = pmax(0, mean.segsites - 2 * sd.segsites),
+      ymax = mean.segsites + 2 * sd.segsites
+    ),
+    position = position_dodge(width = 0.9),
+    width = 0.25,
+    linewidth = 0.6
+  ) +
+  scale_fill_manual(
+    values = pop_cols
   ) +
   labs(
-    x = "Population contrast",
-    y = "Log ratio of rare-variant mass",
-    title = "Rare-variant population contrasts"
+    x = "Chromosome",
+    y = "Mean number of segregating sites",
+    title = "Segregating sites by chromosome and population",
+    subtitle = "Bars represent the mean across replicates; error bars denote ±2 SD"
   ) +
-  theme_bw(base_size = 16) +
-  theme(legend.title = element_blank())
-
-
-# interactive results ----
-# Raw counts enter comparisons only after simulation projection and folding.
-print(sfs.metrics)
-print(sfs.metric.predictive)
-print(sfs.distance)
-print(sfs.rare.contrasts)
-print(sfs.shape.plot)
-print(sfs.density.plot)
-print(sfs.rare.contrast.plot)
+  theme_bw(base_size = 24) +
+  theme(
+    legend.position = "top",
+    legend.title = element_blank(),
+    panel.grid.minor = element_blank()
+  )
