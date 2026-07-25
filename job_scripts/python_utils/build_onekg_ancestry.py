@@ -8,14 +8,19 @@
 #           build_onekg_ancestry.py
 ###############################################################################
 
-# overview: build empirical ancestry tables from sample labels and ADMIXTURE 
+# overview: build empirical ancestry tables from sample labels and ADMIXTURE
 # outputs.
+
+# pattern: Imperative Shell
 
 
 ##### set up ##################################################################
 from pathlib import Path
 import argparse
 from onekg_utils.orient_admixture_rows import orient_admixture_rows
+from onekg_utils.orient_multik_admixture_rows import (
+    orient_multik_admixture_rows,
+)
 from onekg_utils.read_onekg_sample_pops import read_onekg_sample_pops
 from onekg_utils.write_stats_table import write_stats_table
 
@@ -30,7 +35,12 @@ parser.add_argument("--unrels-path", required=True)
 parser.add_argument("--source-fam-path", required=True)
 parser.add_argument("--admixture-fam-path", required=True)
 parser.add_argument("--supervised-q-path", required=True)
-parser.add_argument("--unsupervised-q-path", required=True)
+parser.add_argument(
+    "--unsupervised-q-path",
+    action="append",
+    required=True,
+    metavar="K=PATH",
+)
 parser.add_argument("--stats-dir", required=True)
 parser.add_argument("--chrom")
 parser.add_argument("--afr-pop", required=True)
@@ -49,10 +59,50 @@ if __name__ == "__main__":
     )
     with open(args.admixture_fam_path, "r", encoding="utf-8") as in_file:
         samples = [line.split()[1] for line in in_file if line.strip()]
-    
-    # read and orient supervised and unsupervised Q matrices in FAM order.
-    q_sets = []
-    for q_path in (args.supervised_q_path, args.unsupervised_q_path):
+
+    # read and orient supervised K=2 estimates in final FAM order.
+    with open(args.supervised_q_path, "r", encoding="utf-8") as in_file:
+        supervised_values = [
+            line.split() for line in in_file if line.strip()
+        ]
+    if len(supervised_values) != len(samples):
+        raise ValueError(
+            f"Q/FAM row count mismatch for {args.supervised_q_path}"
+        )
+    supervised_rows = [
+        {
+            "sample": sample,
+            "pop": sample_pops[sample],
+            "q1": float(q_values[0]),
+            "q2": float(q_values[1]),
+        }
+        for sample, q_values in zip(samples, supervised_values)
+    ]
+    supervised = orient_admixture_rows(
+        supervised_rows,
+        args.afr_pop,
+        args.eur_pop,
+    )
+
+    # map each unsupervised K to its explicitly preserved Q-file path.
+    unsupervised_q_paths = {}
+    for q_spec in args.unsupervised_q_path:
+        k_text, separator, q_path = q_spec.partition("=")
+        if not separator or not k_text.isdigit() or not q_path:
+            raise ValueError(
+                "Unsupervised Q paths must use the format K=PATH"
+            )
+        k = int(k_text)
+        if k in unsupervised_q_paths:
+            raise ValueError(f"Duplicate unsupervised ADMIXTURE K={k}")
+        unsupervised_q_paths[k] = q_path
+    if 2 not in unsupervised_q_paths:
+        raise ValueError("Unsupervised ADMIXTURE K=2 is required")
+
+    # orient all unsupervised matrices and build one long-form row set.
+    unsupervised_by_k = {}
+    multik_rows = []
+    for k, q_path in sorted(unsupervised_q_paths.items()):
         with open(q_path, "r", encoding="utf-8") as in_file:
             values = [line.split() for line in in_file if line.strip()]
         if len(values) != len(samples):
@@ -61,16 +111,44 @@ if __name__ == "__main__":
             {
                 "sample": sample,
                 "pop": sample_pops[sample],
-                "q1": float(q_values[0]),
-                "q2": float(q_values[1]),
+                "q_values": [float(value) for value in q_values],
             }
             for sample, q_values in zip(samples, values)
         ]
-        q_sets.append(
-            orient_admixture_rows(raw_rows, args.afr_pop, args.eur_pop)
+        oriented = orient_multik_admixture_rows(
+            raw_rows,
+            args.afr_pop,
+            args.eur_pop,
+            k,
         )
-    supervised, unsupervised = q_sets
-    
+        unsupervised_by_k[k] = oriented
+        for oriented_row in oriented:
+            row = {"rep": 0}
+            if args.chrom is not None:
+                row["chrom"] = args.chrom
+            row.update(
+                {
+                    "pop": oriented_row["pop"],
+                    "sample_id": "NA",
+                    "vcf_sample_id": oriented_row["sample"],
+                    "k": k,
+                    "afr_component": oriented_row["afr_component"],
+                    "eur_component": oriented_row["eur_component"],
+                    "afr_unsupervised_q": (
+                        oriented_row["afr_unsupervised_q"]
+                    ),
+                    "eur_unsupervised_q": (
+                        oriented_row["eur_unsupervised_q"]
+                    ),
+                    "uncaptured_unsupervised_q": (
+                        oriented_row["uncaptured_unsupervised_q"]
+                    ),
+                    "span": "NA",
+                }
+            )
+            multik_rows.append(row)
+    unsupervised = unsupervised_by_k[2]
+
     # join both ADMIXTURE results into the canonical ancestry table schema.
     rows = []
     for supervised_row, unsupervised_row in zip(supervised, unsupervised):
@@ -99,3 +177,7 @@ if __name__ == "__main__":
     suffix = f".chr{args.chrom}" if args.chrom is not None else ""
     output = Path(args.stats_dir) / f"ancestry.rep_0{suffix}"
     write_stats_table(output, rows)
+    multik_output = (
+        Path(args.stats_dir) / f"ancestry_multik.rep_0{suffix}"
+    )
+    write_stats_table(multik_output, multik_rows)

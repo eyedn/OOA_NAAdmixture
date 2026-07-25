@@ -142,6 +142,8 @@ comb_jid=$(sbatch \
         "${ADMIXTURE_LD_STEP}" \
         "${ADMIXTURE_LD_R2}" \
         -- \
+        "${ONEKG_ADMIXTURE_KS[@]}" \
+        -- \
         "${CHROMS[@]}" \
         -- \
         "${ONEKG_POPS[@]}"

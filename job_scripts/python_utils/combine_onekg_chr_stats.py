@@ -10,6 +10,8 @@
 
 # overview: combine 1000 Genomes chromosome stats. across population outputs.
 
+# pattern: Imperative Shell
+
 
 ##### set up ##################################################################
 from itertools import combinations
@@ -114,6 +116,17 @@ if __name__ == "__main__":
     write_stats_table(
         stats_dir / f"ancestry.rep_0.chr{args.chrom}",
         ancestry_rows,
+    )
+    ancestry_multik_rows = read_tsv_rows(
+        stats_dir / f"ancestry_multik.rep_0.chr{args.chrom}.tsv"
+    )
+    write_stats_table(
+        stats_dir / f"ancestry_multik.chr{args.chrom}",
+        ancestry_multik_rows,
+    )
+    write_stats_table(
+        stats_dir / f"ancestry_multik.rep_0.chr{args.chrom}",
+        ancestry_multik_rows,
     )
 
     qc_rows = read_tsv_rows(

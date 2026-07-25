@@ -28,7 +28,7 @@ source "${project_dir}/other_scripts/log_msg.sh"
 
 
 ##### variables ###############################################################
-# read fixed inputs followed by chromosome and population arrays.
+# read fixed inputs followed by K, chromosome, and population arrays.
 unrels_path="$1"
 source_fam_path="$2"
 bed_dir="$3"
@@ -38,6 +38,12 @@ ld_window="$6"
 ld_step="$7"
 ld_r2="$8"
 shift 8
+shift
+admixture_ks=()
+while [[ "$1" != "--" ]]; do
+    admixture_ks+=( "$1" )
+    shift
+done
 shift
 chroms=()
 while [[ "$1" != "--" ]]; do
@@ -106,12 +112,26 @@ python "${project_dir}/job_scripts/python_utils/write_onekg_admixture_pop.py" \
         "onekg.rep_0.genome.all.bed" 2
     cp "onekg.rep_0.genome.all.2.Q" \
         "onekg.rep_0.genome.all.supervised.2.Q"
-    "${admixture_exec}" \
-        -j"${num_threads}" \
-        "onekg.rep_0.genome.all.bed" 2
-    cp "onekg.rep_0.genome.all.2.Q" \
-        "onekg.rep_0.genome.all.unsupervised.2.Q"
+    for k in "${admixture_ks[@]}"; do
+        "${admixture_exec}" \
+            -j"${num_threads}" \
+            "onekg.rep_0.genome.all.bed" "${k}"
+        cp "onekg.rep_0.genome.all.${k}.Q" \
+            "onekg.rep_0.genome.all.unsupervised.${k}.Q"
+    done
 )
+unsupervised_q_args=()
+for k in "${admixture_ks[@]}"; do
+    q_path="${admixture_prefix}.unsupervised.${k}.Q"
+    if [[ ! -s "${q_path}" ]]; then
+        echo "ERROR: missing unsupervised ADMIXTURE Q file ${q_path}" >&2
+        exit 1
+    fi
+    unsupervised_q_args+=(
+        "--unsupervised-q-path"
+        "${k}=${q_path}"
+    )
+done
 
 
 ##### statistics ##############################################################
@@ -121,7 +141,7 @@ python "${project_dir}/job_scripts/python_utils/build_onekg_ancestry.py" \
     --source-fam-path "${source_fam_path}" \
     --admixture-fam-path "${admixture_prefix}.fam" \
     --supervised-q-path "${admixture_prefix}.supervised.2.Q" \
-    --unsupervised-q-path "${admixture_prefix}.unsupervised.2.Q" \
+    "${unsupervised_q_args[@]}" \
     --stats-dir "${stats_dir}" \
     --afr-pop "${pops[0]}" \
     --eur-pop "${pops[1]}" \

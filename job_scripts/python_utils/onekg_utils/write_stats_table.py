@@ -11,6 +11,8 @@
 # overview: write empirical statistics tables in canonical TSV and Parquet
 # formats.
 
+# pattern: Imperative Shell
+
 
 ##### set up ##################################################################
 from pathlib import Path
@@ -27,6 +29,11 @@ EMPTY_TABLE_COLUMNS = {
         "rep", "chrom", "pop", "sample_id", "vcf_sample_id",
         "afr_tspop", "eur_tspop", "afr_q", "eur_q",
         "afr_unsupervised_q", "eur_unsupervised_q", "span",
+    ],
+    "ancestry_multik": [
+        "rep", "chrom", "pop", "sample_id", "vcf_sample_id", "k",
+        "afr_component", "eur_component", "afr_unsupervised_q",
+        "eur_unsupervised_q", "uncaptured_unsupervised_q", "span",
     ],
     "kinship": ["rep", "chrom", "pop", "id1", "id2", "kinship"],
     "kinship_unrelated": [

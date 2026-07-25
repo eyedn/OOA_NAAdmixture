@@ -10,6 +10,8 @@
 
 # overview: combine 1000 Genomes genome stats. across population outputs.
 
+# pattern: Imperative Shell
+
 
 ##### set up ##################################################################
 from pathlib import Path
@@ -86,3 +88,10 @@ if __name__ == "__main__":
 
     ancestry_rows = read_tsv_rows(stats_dir / "ancestry.rep_0.tsv")
     write_stats_table(stats_dir / "ancestry", ancestry_rows)
+    ancestry_multik_rows = read_tsv_rows(
+        stats_dir / "ancestry_multik.rep_0.tsv"
+    )
+    write_stats_table(
+        stats_dir / "ancestry_multik",
+        ancestry_multik_rows,
+    )
