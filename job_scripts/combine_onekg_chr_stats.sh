@@ -174,8 +174,10 @@ for k in "${unsupervised_ks[@]}"; do
 done
 
 # run empirical-only fastStructure in its Python 2.7 environment.
+log_msg "deactivate ${conda_env}; activate ${faststructure_conda_env}"
+conda deactivate
+conda activate "${faststructure_conda_env}"
 (
-    conda activate "${faststructure_conda_env}"
     for k in "${unsupervised_ks[@]}"; do
         python "${faststructure_structure_py}" \
             -K "${k}" \
@@ -189,6 +191,9 @@ done
         --input="${faststructure_prefix}" \
         | tee "${faststructure_choose_k_path}"
 )
+log_msg "deactivate ${faststructure_conda_env}; activate ${conda_env}"
+conda deactivate
+conda activate "${conda_env}"
 faststructure_q_args=()
 for k in "${unsupervised_ks[@]}"; do
     q_path="${faststructure_prefix}.${k}.meanQ"
