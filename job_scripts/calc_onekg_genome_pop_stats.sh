@@ -16,11 +16,14 @@
 ##### set up ##################################################################
 set -euo pipefail
 
+conda_env="$1"
+shift
+
 # load the software environment used for PLINK and Python statistics.
 module purge
 ml gcc/13.3.0 plink2/2.00a4.3 conda
 source /apps/conda/miniforge3/25.3.0/etc/profile.d/conda.sh
-conda activate OOA_NAAdmixture
+conda activate "${conda_env}"
 
 # load shared logging and require a population-indexed Slurm task.
 project_dir="$(pwd)"

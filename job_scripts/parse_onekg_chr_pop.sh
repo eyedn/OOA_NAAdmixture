@@ -16,11 +16,14 @@
 ##### set up ##################################################################
 set -euo pipefail
 
+conda_env="$1"
+shift
+
 # load the software environment used for VCF, PLINK, and Python preparation.
 module purge
 ml gcc/13.3.0 htslib/1.19.1 bcftools/1.19 plink2/2.00a4.3 conda
 source /apps/conda/miniforge3/25.3.0/etc/profile.d/conda.sh
-conda activate OOA_NAAdmixture
+conda activate "${conda_env}"
 
 # load shared logging and chromosome-population task mapping.
 project_dir="$(pwd)"

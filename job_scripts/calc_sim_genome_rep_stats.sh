@@ -16,18 +16,26 @@
 ##### set up ##################################################################
 set -euo pipefail
 
+conda_env="$1"
+admixture_exec="$2"
+shift 2
+
 # load the software environment used for VCF, PLINK, ADMIXTURE, and Python.
 module purge
 ml gcc/13.3.0 htslib/1.19.1 bcftools/1.19 plink2/2.00a4.3 conda
 source /apps/conda/miniforge3/25.3.0/etc/profile.d/conda.sh
-conda activate OOA_NAAdmixture
-export PATH="${HOME}/.conda/envs/OOA_NAAdmixture/bin:${PATH}"
+conda activate "${conda_env}"
+export PATH="${HOME}/.conda/envs/${conda_env}/bin:${PATH}"
 
 # load shared logging and require one Slurm task per replicate.
 project_dir="$(pwd)"
 source "${project_dir}/other_scripts/log_msg.sh"
 
 : "${SLURM_ARRAY_TASK_ID:?ERROR: run as a Slurm array}"
+if [[ ! -x "${admixture_exec}" ]]; then
+    echo "ERROR: ADMIXTURE executable is not executable: ${admixture_exec}" >&2
+    exit 1
+fi
 
 
 ##### variables ###############################################################
@@ -188,7 +196,7 @@ python "${project_dir}/job_scripts/python_utils/write_sim_admixture_pop.py" \
 log_msg "running genome-level supervised ADMIXTURE for rep=${rep}"
 (
     cd "${admixture_dir}"
-    "${HOME}/software/ADMIXTURE/admixture_linux-1.4.0/admixture" \
+    "${admixture_exec}" \
         --supervised \
         -j"${num_threads}" \
         -s "${rep}" \

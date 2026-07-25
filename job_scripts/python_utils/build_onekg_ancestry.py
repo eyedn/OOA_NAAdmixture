@@ -8,18 +8,21 @@
 #           build_onekg_ancestry.py
 ###############################################################################
 
-# overview: build empirical ancestry tables from sample labels and ADMIXTURE
-# outputs.
+# overview: build empirical ADMIXTURE and fastStructure ancestry tables.
 
 
 
 ##### set up ##################################################################
 from pathlib import Path
 import argparse
-from onekg_utils.orient_admixture_rows import orient_admixture_rows
-from onekg_utils.normalize_multik_admixture_rows import (
-    normalize_multik_admixture_rows,
+from onekg_utils.build_multik_ancestry_rows import (
+    build_multik_ancestry_rows,
 )
+from onekg_utils.orient_admixture_rows import orient_admixture_rows
+from onekg_utils.parse_faststructure_choose_k import (
+    parse_faststructure_choose_k,
+)
+from onekg_utils.parse_k_path_specs import parse_k_path_specs
 from onekg_utils.read_onekg_sample_pops import read_onekg_sample_pops
 from onekg_utils.write_stats_table import write_stats_table
 
@@ -35,11 +38,20 @@ parser.add_argument("--source-fam-path", required=True)
 parser.add_argument("--admixture-fam-path", required=True)
 parser.add_argument("--supervised-q-path", required=True)
 parser.add_argument(
-    "--unsupervised-q-path",
+    "--admixture-q-path",
     action="append",
     required=True,
     metavar="K=PATH",
 )
+parser.add_argument(
+    "--faststructure-q-path",
+    action="append",
+    required=True,
+    metavar="K=PATH",
+)
+parser.add_argument("--faststructure-choose-k-path", required=True)
+parser.add_argument("--faststructure-prior", required=True)
+parser.add_argument("--faststructure-seed", required=True, type=int)
 parser.add_argument("--stats-dir", required=True)
 parser.add_argument("--chrom")
 parser.add_argument("--afr-pop", required=True)
@@ -83,56 +95,45 @@ if __name__ == "__main__":
         args.eur_pop,
     )
 
-    # map each unsupervised K to its explicitly preserved Q-file path.
-    unsupervised_q_paths = {}
-    for q_spec in args.unsupervised_q_path:
-        k_text, separator, q_path = q_spec.partition("=")
-        if not separator or not k_text.isdigit() or not q_path:
-            raise ValueError(
-                "Unsupervised Q paths must use the format K=PATH"
-            )
-        k = int(k_text)
-        if k in unsupervised_q_paths:
-            raise ValueError(f"Duplicate unsupervised ADMIXTURE K={k}")
-        unsupervised_q_paths[k] = q_path
-    if 2 not in unsupervised_q_paths:
-        raise ValueError("Unsupervised ADMIXTURE K=2 is required")
-
-    # preserve every unsupervised matrix in K-then-FAM row order.
-    multik_rows = []
-    for k, q_path in sorted(unsupervised_q_paths.items()):
-        with open(q_path, "r", encoding="utf-8") as in_file:
-            values = [line.split() for line in in_file if line.strip()]
-        if len(values) != len(samples):
-            raise ValueError(f"Q/FAM row count mismatch for {q_path}")
-        raw_rows = [
-            {
-                "sample": sample,
-                "pop": sample_pops[sample],
-                "q_values": [float(value) for value in q_values],
-            }
-            for sample, q_values in zip(samples, values)
-        ]
-        normalized = normalize_multik_admixture_rows(raw_rows, k)
-        for normalized_row in normalized:
-            row = {"rep": 0}
-            if args.chrom is not None:
-                row["chrom"] = args.chrom
-            row.update(
-                {
-                    "pop": normalized_row["pop"],
-                    "sample_id": "NA",
-                    "vcf_sample_id": normalized_row["sample"],
-                    "k": k,
-                    "component_1_q": normalized_row["component_1_q"],
-                    "component_2_q": normalized_row["component_2_q"],
-                    "component_3_q": normalized_row["component_3_q"],
-                    "component_4_q": normalized_row["component_4_q"],
-                    "component_5_q": normalized_row["component_5_q"],
-                    "span": "NA",
-                }
-            )
-            multik_rows.append(row)
+    # read both unsupervised tools against one authoritative final FAM order.
+    admixture_q_paths = parse_k_path_specs(
+        args.admixture_q_path,
+        "ADMIXTURE",
+    )
+    faststructure_q_paths = parse_k_path_specs(
+        args.faststructure_q_path,
+        "fastStructure",
+    )
+    if sorted(admixture_q_paths) != sorted(faststructure_q_paths):
+        raise ValueError(
+            "ADMIXTURE and fastStructure must use the same K values"
+        )
+    values_by_tool = {}
+    for tool_name, paths in (
+        ("ADMIXTURE", admixture_q_paths),
+        ("fastStructure", faststructure_q_paths),
+    ):
+        values_by_k = {}
+        for k, q_path in sorted(paths.items()):
+            with open(q_path, "r", encoding="utf-8") as in_file:
+                values_by_k[k] = [
+                    [float(value) for value in line.split()]
+                    for line in in_file
+                    if line.strip()
+                ]
+        values_by_tool[tool_name] = values_by_k
+    admixture_multik_rows = build_multik_ancestry_rows(
+        samples,
+        sample_pops,
+        values_by_tool["ADMIXTURE"],
+        args.chrom,
+    )
+    faststructure_multik_rows = build_multik_ancestry_rows(
+        samples,
+        sample_pops,
+        values_by_tool["fastStructure"],
+        args.chrom,
+    )
 
     # format supervised estimates in the canonical ancestry table schema.
     rows = []
@@ -154,9 +155,39 @@ if __name__ == "__main__":
         )
         rows.append(row)
     suffix = f".chr{args.chrom}" if args.chrom is not None else ""
-    output = Path(args.stats_dir) / f"ancestry.rep_0{suffix}"
-    write_stats_table(output, rows)
-    multik_output = (
-        Path(args.stats_dir) / f"ancestry_multik.rep_0{suffix}"
+    stats_dir = Path(args.stats_dir)
+    write_stats_table(
+        stats_dir / f"ancestry_ADMIXTURE_super.rep_0{suffix}",
+        rows,
     )
-    write_stats_table(multik_output, multik_rows)
+    write_stats_table(
+        stats_dir / f"ancestry_ADMIXTURE_multik.rep_0{suffix}",
+        admixture_multik_rows,
+    )
+    write_stats_table(
+        stats_dir / f"ancestry_fastStructure_multik.rep_0{suffix}",
+        faststructure_multik_rows,
+    )
+    with open(
+        args.faststructure_choose_k_path,
+        "r",
+        encoding="utf-8",
+    ) as in_file:
+        choose_k_report = in_file.read()
+    choose_k_row = parse_faststructure_choose_k(
+        choose_k_report,
+        args.faststructure_prior,
+        args.faststructure_seed,
+        sorted(faststructure_q_paths),
+        args.chrom,
+    )
+    write_stats_table(
+        stats_dir / f"fastStructure_chooseK.rep_0{suffix}",
+        [choose_k_row],
+    )
+
+    # remove superseded empirical filenames after all replacement tables exist.
+    for old_family in ("ancestry", "ancestry_multik"):
+        old_prefix = stats_dir / f"{old_family}.rep_0{suffix}"
+        for extension in ("tsv", "parquet"):
+            Path(f"{old_prefix}.{extension}").unlink(missing_ok=True)

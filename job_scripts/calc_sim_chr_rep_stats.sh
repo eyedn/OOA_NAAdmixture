@@ -16,12 +16,16 @@
 ##### set up ##################################################################
 set -euo pipefail
 
+conda_env="$1"
+admixture_exec="$2"
+shift 2
+
 # load required HPC modules and conda env
 module purge
 ml gcc/13.3.0 htslib/1.19.1 plink2/2.00a4.3 conda
 source /apps/conda/miniforge3/25.3.0/etc/profile.d/conda.sh
-conda activate OOA_NAAdmixture
-export PATH="${HOME}/.conda/envs/OOA_NAAdmixture/bin:${PATH}"
+conda activate "${conda_env}"
+export PATH="${HOME}/.conda/envs/${conda_env}/bin:${PATH}"
 
 # load shared functions; note, all scripts should exist in the execution repo
 project_dir="$(pwd)"
@@ -30,6 +34,10 @@ source "${project_dir}/other_scripts/map_slurm_task.sh"
 
 # require execution as a Slurm array task
 : "${SLURM_ARRAY_TASK_ID:?ERROR: run as a Slurm array}"
+if [[ ! -x "${admixture_exec}" ]]; then
+    echo "ERROR: ADMIXTURE executable is not executable: ${admixture_exec}" >&2
+    exit 1
+fi
 
 
 ##### variables ###############################################################
@@ -191,7 +199,7 @@ python "${project_dir}/job_scripts/python_utils/write_sim_admixture_pop.py" \
 log_msg "running supervised ADMIXTURE for rep=${rep} chr=${chr}"
 (
     cd "${admixture_dir}"
-    "${HOME}/software/ADMIXTURE/admixture_linux-1.4.0/admixture" \
+    "${admixture_exec}" \
         --supervised \
         -j"${num_threads}" \
         -s "${rep}" \

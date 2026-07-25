@@ -25,14 +25,23 @@ EMPTY_TABLE_COLUMNS = {
     "allele_counts": [
         "rep", "chrom", "position", "pop", "ref_count", "alt_count",
     ],
-    "ancestry": [
+    "ancestry_ADMIXTURE_super": [
         "rep", "chrom", "pop", "sample_id", "vcf_sample_id",
         "afr_tspop", "eur_tspop", "afr_q", "eur_q", "span",
     ],
-    "ancestry_multik": [
+    "ancestry_ADMIXTURE_multik": [
         "rep", "chrom", "pop", "sample_id", "vcf_sample_id", "k",
         "component_1_q", "component_2_q", "component_3_q",
         "component_4_q", "component_5_q", "span",
+    ],
+    "ancestry_fastStructure_multik": [
+        "rep", "chrom", "pop", "sample_id", "vcf_sample_id", "k",
+        "component_1_q", "component_2_q", "component_3_q",
+        "component_4_q", "component_5_q", "span",
+    ],
+    "fastStructure_chooseK": [
+        "rep", "chrom", "prior", "seed", "k_min", "k_max",
+        "max_marginal_likelihood_k", "model_components_k",
     ],
     "kinship": ["rep", "chrom", "pop", "id1", "id2", "kinship"],
     "kinship_unrelated": [

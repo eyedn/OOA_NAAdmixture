@@ -24,12 +24,34 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${script_dir}/other_scripts/const.sh"
 source "${script_dir}/other_scripts/log_msg.sh"
 
+if [[ -z ${OOA_NAADMIXTURE_CONDA} \
+    || -z ${FASTSTRUCTURE_CONDA_ENV} \
+    || -z ${FASTSTRUCTURE_PRIOR} \
+    || -z ${FASTSTRUCTURE_CV} \
+    || ${#ONEKG_UNSUPERVISED_KS[@]} -eq 0 ]]; then
+    echo "ERROR: inference environments and settings must be configured" >&2
+    exit 1
+fi
+if [[ ! -x "${ADMIXTURE_EXEC}" ]]; then
+    echo "ERROR: ADMIXTURE executable is not executable: ${ADMIXTURE_EXEC}" >&2
+    exit 1
+fi
+for faststructure_script in \
+    "${FASTSTRUCTURE_STRUCTURE_PY}" \
+    "${FASTSTRUCTURE_CHOOSE_K_PY}"; do
+    if [[ ! -f "${faststructure_script}" ]]; then
+        echo "ERROR: missing fastStructure script ${faststructure_script}" >&2
+        exit 1
+    fi
+done
+
 
 ##### chromosome-population pipeline jobs #####################################
 # create empirical output directories shared by preparation and statistics jobs.
 mkdir -p "${ONEKG_OUT_VCF_DIR}" "${ONEKG_OUT_PLINK_BED_DIR}" \
     "${ONEKG_OUT_POP_INFO_DIR}" "${ONEKG_OUT_ADMIXTURE_DIR}" \
-    "${ONEKG_OUT_KING_DIR}" "${ONEKG_OUT_STATS_DIR}"
+    "${ONEKG_OUT_FASTSTRUCTURE_DIR}" "${ONEKG_OUT_KING_DIR}" \
+    "${ONEKG_OUT_STATS_DIR}"
 
 # use chromosome-major, population-minor task IDs in both worker arrays.
 array_size=$((${#CHROMS[@]} * ${#ONEKG_POPS[@]}))
@@ -53,6 +75,7 @@ parse_jid=$(sbatch \
     --mail-type="${MAIL_TYPE}" \
     --mail-user="${MAIL_USER}" \
     "job_scripts/parse_onekg_chr_pop.sh" \
+        "${OOA_NAADMIXTURE_CONDA}" \
         "${ONEKG_VCF_PREFIX}" \
         "${ONEKG_VCF_SUFFIX}" \
         "${ONEKG_UNRELS_FILE}" \
@@ -88,6 +111,7 @@ stats_jid=$(sbatch \
     --mail-type="${MAIL_TYPE}" \
     --mail-user="${MAIL_USER}" \
     "job_scripts/calc_onekg_chr_pop_stats.sh" \
+        "${OOA_NAADMIXTURE_CONDA}" \
         "${ONEKG_VCF_PREFIX}" \
         "${ONEKG_VCF_SUFFIX}" \
         "${ONEKG_UNRELS_FILE}" \
@@ -131,6 +155,14 @@ comb_jid=$(sbatch \
     --mail-type="${MAIL_TYPE}" \
     --mail-user="${MAIL_USER}" \
     "job_scripts/combine_onekg_chr_stats.sh" \
+        "${OOA_NAADMIXTURE_CONDA}" \
+        "${ADMIXTURE_EXEC}" \
+        "${FASTSTRUCTURE_CONDA_ENV}" \
+        "${FASTSTRUCTURE_STRUCTURE_PY}" \
+        "${FASTSTRUCTURE_CHOOSE_K_PY}" \
+        "${FASTSTRUCTURE_PRIOR}" \
+        "${FASTSTRUCTURE_CV}" \
+        "${ONEKG_OUT_FASTSTRUCTURE_DIR}" \
         "${ONEKG_UNRELS_FILE}" \
         "${ONEKG_PLINK_FAM_FILE}" \
         "${ONEKG_OUT_VCF_DIR}" \
@@ -142,7 +174,7 @@ comb_jid=$(sbatch \
         "${ADMIXTURE_LD_STEP}" \
         "${ADMIXTURE_LD_R2}" \
         -- \
-        "${ONEKG_ADMIXTURE_KS[@]}" \
+        "${ONEKG_UNSUPERVISED_KS[@]}" \
         -- \
         "${CHROMS[@]}" \
         -- \

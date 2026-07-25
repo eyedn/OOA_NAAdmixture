@@ -17,6 +17,16 @@
 # codebase directory
 PROJECT_DIR="/home1/karatas/OOA_NAAdmixture"
 
+# software environments and inference executables
+OOA_NAADMIXTURE_CONDA="OOA_NAAdmixture"
+FASTSTRUCTURE_CONDA_ENV="fastStructure"
+ADMIXTURE_EXEC="/home1/karatas/software/ADMIXTURE/admixture_linux-1.4.0/admixture"
+FASTSTRUCTURE_DIR="/home1/karatas/software/fastStructure"
+FASTSTRUCTURE_STRUCTURE_PY="${FASTSTRUCTURE_DIR}/structure.py"
+FASTSTRUCTURE_CHOOSE_K_PY="${FASTSTRUCTURE_DIR}/chooseK.py"
+FASTSTRUCTURE_PRIOR="simple"
+FASTSTRUCTURE_CV="0"
+
 # slurm specifications
 MAX_JOBS="100"
 SIM_CPUS_PER_TASK="4"
@@ -27,14 +37,13 @@ SIM_COMB_MEM="128G"
 ONEKG_STATS_CPUS_PER_TASK="8"
 ONEKG_STATS_MEM="64G"
 ONEKG_COMB_MEM="64G"
-PARTITION="qcbr" # typically use "qcb"; can use "qcbr"
-ACCOUNT="qcb_640" # typically use "jazlynmo_738"; can use "qcb_640" 
+PARTITION="qcb" # typically use "qcb"; can use "qcbr"
+ACCOUNT="jazlynmo_738" # typically use "jazlynmo_738"; can use "qcb_640"
 MAIL_TYPE="ALL"
 MAIL_USER="karatas@usc.edu"
 
 # chromosome structure specifications
-# CHROMS=(1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22)
-CHROMS=(22)
+CHROMS=(1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22)
 GENETIC_MAP="HapMapII_GRCh38"
 
 # statistics specification
@@ -194,7 +203,7 @@ ADMIX_PRIORADMIX_PROPS_BY_GENERATION=(
 ONEKG_POPS=(YRI CEU ASW)
 ONEKG_NONADMIXED_POP_LABELS=(YRI CEU)
 ONEKG_ADMIXED_POP_LABEL="ASW"
-ONEKG_ADMIXTURE_KS=(2 3 4 5)
+ONEKG_UNSUPERVISED_KS=(2 3 4 5)
 
 # paths related to GRCH38.p14
 REF_DIR="/home1/karatas/references"
@@ -224,5 +233,6 @@ ONEKG_OUT_POP_INFO_DIR="${ONEKG_OUT_DIR}/pop_info"
 # ONEKG_OUT_ANC_DIR="${ONEKG_OUT_DIR}/local_ancestry"
 # ONEKG_OUT_GLOBAL_ANC_DIR="${ONEKG_OUT_DIR}/global_ancestry"
 ONEKG_OUT_ADMIXTURE_DIR="${ONEKG_OUT_DIR}/admixture"
+ONEKG_OUT_FASTSTRUCTURE_DIR="${ONEKG_OUT_DIR}/fastStructure"
 ONEKG_OUT_KING_DIR="${ONEKG_OUT_DIR}/king"
 ONEKG_OUT_STATS_DIR="${ONEKG_OUT_DIR}/stats"

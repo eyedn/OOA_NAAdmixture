@@ -24,6 +24,11 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${script_dir}/other_scripts/const.sh"
 source "${script_dir}/other_scripts/log_msg.sh"
 
+if [[ -z ${OOA_NAADMIXTURE_CONDA} ]]; then
+    echo "ERROR: OOA_NAADMIXTURE_CONDA must be configured" >&2
+    exit 1
+fi
+
 
 ##### pre-simulation prep #####################################################
 # create comma-separated lists of admixture variables from constants for
@@ -77,6 +82,7 @@ sim_jid=$(sbatch \
     --mail-type="${MAIL_TYPE}" \
     --mail-user="${MAIL_USER}" \
     "job_scripts/sim_chr_rep_model.sh" \
+        "${OOA_NAADMIXTURE_CONDA}" \
         "${TREE_DIR}" \
         "${PICKLED_DEMO_META}" \
         "${VCF_DIR}" \

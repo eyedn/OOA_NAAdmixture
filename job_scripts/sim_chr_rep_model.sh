@@ -16,12 +16,15 @@
 ##### set up ##################################################################
 set -euo pipefail
 
+conda_env="$1"
+shift
+
 # load required HPC modules and conda env
 module purge
 ml gcc/13.3.0 htslib/1.19.1 bcftools/1.19 plink2/2.00a4.3 conda
 source /apps/conda/miniforge3/25.3.0/etc/profile.d/conda.sh
-conda activate OOA_NAAdmixture
-export PATH="${HOME}/.conda/envs/OOA_NAAdmixture/bin:${PATH}"
+conda activate "${conda_env}"
+export PATH="${HOME}/.conda/envs/${conda_env}/bin:${PATH}"
 
 # load shared functions; note, all scripts should exist in the execution repo
 project_dir="$(pwd)"

@@ -8,7 +8,7 @@
 #           normalize_multik_admixture_rows.py
 ###############################################################################
 
-# overview: validate multi-K ADMIXTURE rows and preserve raw component order.
+# overview: validate unsupervised ancestry rows and preserve component order.
 
 
 
@@ -28,7 +28,7 @@ component columns. Components above K are represented by "NA".
 def normalize_multik_admixture_rows(rows, k):
     if k < 2 or k > MAX_COMPONENTS:
         raise ValueError(
-            f"ADMIXTURE K must be between 2 and {MAX_COMPONENTS}"
+            f"Ancestry K must be between 2 and {MAX_COMPONENTS}"
         )
     if any(len(row["q_values"]) != k for row in rows):
         raise ValueError(f"Every Q row must contain exactly {k} components")

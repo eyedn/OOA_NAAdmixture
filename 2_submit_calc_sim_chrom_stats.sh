@@ -23,6 +23,15 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${script_dir}/other_scripts/const.sh"
 source "${script_dir}/other_scripts/log_msg.sh"
 
+if [[ -z ${OOA_NAADMIXTURE_CONDA} ]]; then
+    echo "ERROR: OOA_NAADMIXTURE_CONDA must be configured" >&2
+    exit 1
+fi
+if [[ ! -x "${ADMIXTURE_EXEC}" ]]; then
+    echo "ERROR: ADMIXTURE executable is not executable: ${ADMIXTURE_EXEC}" >&2
+    exit 1
+fi
+
 
 ##### chromosome statistics jobs ##############################################
 # create output directories for ADMIXTURE, KING, and stats outputs
@@ -55,6 +64,8 @@ stats_jid=$(sbatch \
     --mail-type="${MAIL_TYPE}" \
     --mail-user="${MAIL_USER}" \
     "job_scripts/calc_sim_chr_rep_stats.sh" \
+        "${OOA_NAADMIXTURE_CONDA}" \
+        "${ADMIXTURE_EXEC}" \
         "${TREE_DIR}" \
         "${PLINK_BED_DIR}" \
         "${POP_INFO_DIR}" \
@@ -103,6 +114,7 @@ comb_jid=$(sbatch \
     --mail-type="${MAIL_TYPE}" \
     --mail-user="${MAIL_USER}" \
     "job_scripts/combine_sim_chr_stats.sh" \
+        "${OOA_NAADMIXTURE_CONDA}" \
         "${STATS_DIR}" \
         "${NUM_REPS}" \
         -- \

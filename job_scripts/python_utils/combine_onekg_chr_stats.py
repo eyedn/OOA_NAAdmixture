@@ -104,28 +104,28 @@ if __name__ == "__main__":
     )
 
     # write chromosome-level ancestry and variant-QC handoffs.
-    ancestry_rows = read_tsv_rows(
-        stats_dir / f"ancestry.rep_0.chr{args.chrom}.tsv"
-    )
-    write_stats_table(
-        stats_dir / f"ancestry.chr{args.chrom}",
-        ancestry_rows,
-    )
-    write_stats_table(
-        stats_dir / f"ancestry.rep_0.chr{args.chrom}",
-        ancestry_rows,
-    )
-    ancestry_multik_rows = read_tsv_rows(
-        stats_dir / f"ancestry_multik.rep_0.chr{args.chrom}.tsv"
-    )
-    write_stats_table(
-        stats_dir / f"ancestry_multik.chr{args.chrom}",
-        ancestry_multik_rows,
-    )
-    write_stats_table(
-        stats_dir / f"ancestry_multik.rep_0.chr{args.chrom}",
-        ancestry_multik_rows,
-    )
+    ancestry_tables = [
+        "ancestry_ADMIXTURE_super",
+        "ancestry_ADMIXTURE_multik",
+        "ancestry_fastStructure_multik",
+        "fastStructure_chooseK",
+    ]
+    for table_name in ancestry_tables:
+        rows = read_tsv_rows(
+            stats_dir / f"{table_name}.rep_0.chr{args.chrom}.tsv"
+        )
+        write_stats_table(
+            stats_dir / f"{table_name}.chr{args.chrom}",
+            rows,
+        )
+        write_stats_table(
+            stats_dir / f"{table_name}.rep_0.chr{args.chrom}",
+            rows,
+        )
+    for old_family in ("ancestry", "ancestry_multik"):
+        old_prefix = stats_dir / f"{old_family}.chr{args.chrom}"
+        for extension in ("tsv", "parquet"):
+            Path(f"{old_prefix}.{extension}").unlink(missing_ok=True)
 
     qc_rows = read_tsv_rows(
         stats_dir

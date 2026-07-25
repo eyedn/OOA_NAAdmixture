@@ -1,0 +1,9 @@
+name: fastStructure
+channels:
+  - conda-forge
+dependencies:
+  - python=2.7
+  - numpy
+  - scipy
+  - cython=0.24
+  - gsl
