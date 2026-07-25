@@ -10,8 +10,6 @@
 
 # overview: combine 1000 Genomes genome stats. across population outputs.
 
-# pattern: Imperative Shell
-
 
 ##### set up ##################################################################
 from pathlib import Path

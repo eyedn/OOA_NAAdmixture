@@ -27,13 +27,12 @@ EMPTY_TABLE_COLUMNS = {
     ],
     "ancestry": [
         "rep", "chrom", "pop", "sample_id", "vcf_sample_id",
-        "afr_tspop", "eur_tspop", "afr_q", "eur_q",
-        "afr_unsupervised_q", "eur_unsupervised_q", "span",
+        "afr_tspop", "eur_tspop", "afr_q", "eur_q", "span",
     ],
     "ancestry_multik": [
         "rep", "chrom", "pop", "sample_id", "vcf_sample_id", "k",
-        "afr_component", "eur_component", "afr_unsupervised_q",
-        "eur_unsupervised_q", "uncaptured_unsupervised_q", "span",
+        "component_1_q", "component_2_q", "component_3_q",
+        "component_4_q", "component_5_q", "span",
     ],
     "kinship": ["rep", "chrom", "pop", "id1", "id2", "kinship"],
     "kinship_unrelated": [

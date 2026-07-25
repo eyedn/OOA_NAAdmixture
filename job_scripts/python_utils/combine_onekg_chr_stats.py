@@ -10,8 +10,6 @@
 
 # overview: combine 1000 Genomes chromosome stats. across population outputs.
 
-# pattern: Imperative Shell
-
 
 ##### set up ##################################################################
 from itertools import combinations

@@ -143,7 +143,7 @@ done
 
 
 ##### statistics ##############################################################
-# orient ancestry estimates and combine population statistics by chromosome.
+# parse supervised ancestry and unsupervised components, then combine stats.
 python "${project_dir}/job_scripts/python_utils/build_onekg_ancestry.py" \
     --unrels-path "${unrels_path}" \
     --source-fam-path "${source_fam_path}" \

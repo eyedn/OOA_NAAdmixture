@@ -11,15 +11,14 @@
 # overview: build empirical ancestry tables from sample labels and ADMIXTURE
 # outputs.
 
-# pattern: Imperative Shell
 
 
 ##### set up ##################################################################
 from pathlib import Path
 import argparse
 from onekg_utils.orient_admixture_rows import orient_admixture_rows
-from onekg_utils.orient_multik_admixture_rows import (
-    orient_multik_admixture_rows,
+from onekg_utils.normalize_multik_admixture_rows import (
+    normalize_multik_admixture_rows,
 )
 from onekg_utils.read_onekg_sample_pops import read_onekg_sample_pops
 from onekg_utils.write_stats_table import write_stats_table
@@ -99,8 +98,7 @@ if __name__ == "__main__":
     if 2 not in unsupervised_q_paths:
         raise ValueError("Unsupervised ADMIXTURE K=2 is required")
 
-    # orient all unsupervised matrices and build one long-form row set.
-    unsupervised_by_k = {}
+    # preserve every unsupervised matrix in K-then-FAM row order.
     multik_rows = []
     for k, q_path in sorted(unsupervised_q_paths.items()):
         with open(q_path, "r", encoding="utf-8") as in_file:
@@ -115,43 +113,30 @@ if __name__ == "__main__":
             }
             for sample, q_values in zip(samples, values)
         ]
-        oriented = orient_multik_admixture_rows(
-            raw_rows,
-            args.afr_pop,
-            args.eur_pop,
-            k,
-        )
-        unsupervised_by_k[k] = oriented
-        for oriented_row in oriented:
+        normalized = normalize_multik_admixture_rows(raw_rows, k)
+        for normalized_row in normalized:
             row = {"rep": 0}
             if args.chrom is not None:
                 row["chrom"] = args.chrom
             row.update(
                 {
-                    "pop": oriented_row["pop"],
+                    "pop": normalized_row["pop"],
                     "sample_id": "NA",
-                    "vcf_sample_id": oriented_row["sample"],
+                    "vcf_sample_id": normalized_row["sample"],
                     "k": k,
-                    "afr_component": oriented_row["afr_component"],
-                    "eur_component": oriented_row["eur_component"],
-                    "afr_unsupervised_q": (
-                        oriented_row["afr_unsupervised_q"]
-                    ),
-                    "eur_unsupervised_q": (
-                        oriented_row["eur_unsupervised_q"]
-                    ),
-                    "uncaptured_unsupervised_q": (
-                        oriented_row["uncaptured_unsupervised_q"]
-                    ),
+                    "component_1_q": normalized_row["component_1_q"],
+                    "component_2_q": normalized_row["component_2_q"],
+                    "component_3_q": normalized_row["component_3_q"],
+                    "component_4_q": normalized_row["component_4_q"],
+                    "component_5_q": normalized_row["component_5_q"],
                     "span": "NA",
                 }
             )
             multik_rows.append(row)
-    unsupervised = unsupervised_by_k[2]
 
-    # join both ADMIXTURE results into the canonical ancestry table schema.
+    # format supervised estimates in the canonical ancestry table schema.
     rows = []
-    for supervised_row, unsupervised_row in zip(supervised, unsupervised):
+    for supervised_row in supervised:
         row = {"rep": 0}
         if args.chrom is not None:
             row["chrom"] = args.chrom
@@ -164,12 +149,6 @@ if __name__ == "__main__":
                 "eur_tspop": "NA",
                 "afr_q": supervised_row["afr_unsupervised_q"],
                 "eur_q": supervised_row["eur_unsupervised_q"],
-                "afr_unsupervised_q": (
-                    unsupervised_row["afr_unsupervised_q"]
-                ),
-                "eur_unsupervised_q": (
-                    unsupervised_row["eur_unsupervised_q"]
-                ),
                 "span": "NA",
             }
         )
