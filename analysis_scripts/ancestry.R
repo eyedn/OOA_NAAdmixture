@@ -2,7 +2,7 @@
 # Aydin Karatas
 # ___
 # University of Southern California
-# Department of Quantitative and Computational Biology 
+# Department of Quantitative and Computational Biology
 # Mooney Lab
 # ___
 # ancestry.R
@@ -10,225 +10,196 @@
 
 
 library(tidyverse)
-library(nanoparquet)
-library(glue)
-library(ggridges)
+library(scales)
+
+source("analysis_scripts/analysis_utils.R")
 
 
-# read in data ----
-data.dir <- "~/scratch/OOA_NAAdmixture_small/stats"
-anc.chr <- map_dfr(
-  1:22,
-  \(chr) {
-    file.path(data.dir, glue("ancestry.chr{chr}.parquet")) |>
-      read_parquet() |>
-      mutate(
-        afr_tspop = as.numeric(afr_tspop),
-        eur_tspop = as.numeric(eur_tspop),
-        afr_q = as.numeric(afr_q),
-        eur_q = as.numeric(eur_q)
-      )
-  }
+# read and harmonize ancestry tables ----
+anc.schema <- c(
+  rep = "integer",
+  chrom = "character",
+  pop = "character",
+  sample_id = "character",
+  vcf_sample_id = "character",
+  afr_tspop = "double",
+  eur_tspop = "double",
+  afr_q = "double",
+  eur_q = "double",
+  afr_unsupervised_q = "double",
+  eur_unsupervised_q = "double",
+  span = "double"
 )
 
-anc.genWide <- read_parquet(
-  file.path(data.dir, "ancestry.parquet")
-) %>%
+anc <- read.harmonized.table(
+  sim.table = "ancestry",
+  empirical.table = "ancestry",
+  schema = anc.schema,
+  sim.required = c(
+    "rep", "pop", "sample_id", "vcf_sample_id",
+    "afr_tspop", "eur_tspop", "afr_q", "eur_q", "span"
+  ),
+  empirical.required = c(
+    "rep", "pop", "sample_id", "vcf_sample_id", "afr_q", "eur_q",
+    "afr_unsupervised_q", "eur_unsupervised_q"
+  )
+) |>
   mutate(
-    afr_tspop = as.numeric(afr_tspop),
-    eur_tspop = as.numeric(eur_tspop),
-    afr_q = as.numeric(afr_q),
-    eur_q = as.numeric(eur_q),
-    chrom = "all"
-  )
-
-anc <- bind_rows(anc.chr, anc.genWide)
-
-# summarize data ----
-anc.adx <- anc %>%
-  filter(pop == "ADX", chrom != "all")
-
-chrom.levels <- c(as.character(22:1), "all")
-
-anc.summary <- anc.adx %>%
-  group_by(chrom, rep) %>%
-  summarize(
-    mean = mean(afr_tspop, na.rm = TRUE),
-    sd   = sd(afr_tspop, na.rm = TRUE),
-    .groups = "drop"
-  )
-
-# ridge line plots of mean ancestry ----
-anc.summary.medians <- anc.summary %>%
-  group_by(chrom) %>%
-  summarize(
-    median = median(mean),
-    .groups = "drop"
-  ) %>%
-  mutate(
-    y = match(chrom, chrom.levels)
-  )
-
-ggplot(
-  anc.summary,
-  aes(
-    x = mean,
-    y = factor(chrom, levels = chrom.levels),
-    fill = factor(chrom, levels = chrom.levels)
-  )
-) +
-  geom_density_ridges(
-    linewidth = 1,
-    scale = 1.5,
-    rel_min_height = 0.005,
-    alpha = 0.7,
-    color = "black"
-  ) +
-  geom_point(
-    data = anc.summary.medians,
-    aes(
-      x = median,
-      y = y + 0.35,
-      fill = factor(chrom, levels = chrom.levels)
-    ),
-    inherit.aes = FALSE,
-    shape = 23,
-    stroke = 1,
-    color = "black",
-    size = 3
-  ) +
-  labs(
-    x = "Mean African ancestry",
-    y = "Chromosome",
-    title = "Mean African Ancestry of ADX across replicates"
-  ) +
-  theme_bw(base_size = 24) +
-  theme(
-    legend.position = "none",
-    panel.grid.minor = element_blank()
-  )
-
-# ridgel line plots of sd ancestry ----
-anc.summary.sd.medians <- anc.summary %>%
-  group_by(chrom) %>%
-  summarize(
-    median = median(sd),
-    .groups = "drop"
-  ) %>%
-  mutate(
-    y = match(chrom, chrom.levels)
-  )
-
-ggplot(
-  anc.summary,
-  aes(
-    x = sd,
-    y = factor(chrom, levels = chrom.levels),
-    fill = factor(chrom, levels = chrom.levels)
-  )
-) +
-  geom_density_ridges(
-    linewidth = 1,
-    scale = 1.5,
-    rel_min_height = 0.005,
-    alpha = 0.7,
-    color = "black"
-  ) +
-  geom_point(
-    data = anc.summary.sd.medians,
-    aes(
-      x = median,
-      y = y + 0.35,
-      fill = factor(chrom, levels = chrom.levels)
-    ),
-    inherit.aes = FALSE,
-    shape = 23,
-    stroke = 1,
-    color = "black",
-    size = 3
-  ) +
-  labs(
-    x = "Standard deviation of African ancestry",
-    y = "Chromosome",
-    title = "Standard Deviation of African Ancestry of ADX across Replicates"
-  ) +
-  theme_bw(base_size = 24) +
-  theme(
-    legend.position = "none",
-    panel.grid.minor = element_blank()
-  )
-
-# mean density curves ----
-breaks <- seq(0, 1, by = 0.05)
-
-hist.df <- anc %>%
-  filter(pop == "ADX") %>%
-  group_by(chrom, rep) %>%
-  group_modify(~{
-    h <- hist(
-      .x$afr_tspop,
-      breaks = breaks,
-      plot = FALSE
+    comparison_afr = if_else(
+      data_source == "simulation",
+      afr_tspop,
+      afr_q
     )
-    tibble(
-      xmin  = head(h$breaks, -1),
-      xmax  = tail(h$breaks, -1),
-      xmid  = h$mids,
-      count = h$counts,
-      frac = h$counts / sum(h$counts)
-    )
-  }) %>%
-  ungroup()
+  )
 
-hist.summary <- hist.df %>%
-  group_by(chrom, xmin, xmax, xmid) %>%
+
+# ancestry distribution summaries ----
+anc.admixed <- anc |>
+  filter(pop_role == "ADMIXED")
+
+anc.sample.summary <- anc.admixed |>
+  group_by(data_source, analysis_level, chrom, rep) |>
   summarize(
-    mean.frac = mean(frac),
-    sd.frac   = sd(frac),
+    mean = mean(comparison_afr, na.rm = TRUE),
+    sd = sd(comparison_afr, na.rm = TRUE),
+    median = median(comparison_afr, na.rm = TRUE),
+    iqr = IQR(comparison_afr, na.rm = TRUE),
+    lower_tail = quantile(
+      comparison_afr,
+      0.025,
+      na.rm = TRUE,
+      names = FALSE
+    ),
+    upper_tail = quantile(
+      comparison_afr,
+      0.975,
+      na.rm = TRUE,
+      names = FALSE
+    ),
     .groups = "drop"
   )
 
-ggplot(
-  hist.summary,
+anc.predictive.summary <- predictive.summary(
+  anc.sample.summary,
+  value.column = "mean",
+  group.columns = c("analysis_level", "chrom")
+)
+
+anc.chromosome.deviation <- anc.sample.summary |>
+  select(data_source, rep, chrom, analysis_level, mean) |>
+  group_by(data_source, rep) |>
+  mutate(genome_mean = mean[chrom == "all"][1]) |>
+  ungroup() |>
+  filter(analysis_level == "chromosome") |>
+  mutate(chromosome_to_genome_deviation = mean - genome_mean)
+
+
+# ancestry figures ----
+anc.distribution.plot <- ggplot(
+  anc.admixed |> filter(analysis_level == "genome"),
   aes(
-    x = xmid,
-    y = mean.frac,
-    fill = factor(chrom, levels = rev(chrom.levels))
+    x = comparison_afr,
+    color = data_source,
+    linetype = data_source,
+    group = interaction(data_source, rep)
   )
 ) +
-  geom_col(
-    width = diff(breaks)[1] * 0.95,
-    color = "black",
-    linewidth = 0.5
+  stat_ecdf(linewidth = 1.1) +
+  geom_rug(
+    data = \(data) filter(data, data_source == "empirical"),
+    aes(color = data_source),
+    sides = "b",
+    alpha = 0.45
   ) +
-  geom_errorbar(
-    aes(
-      ymin = pmax(0, mean.frac - 2 * sd.frac),
-      ymax = mean.frac + 2 * sd.frac
-    ),
-    width = 0,
-    linewidth = 0.5,
-    color = "black"
-  ) +
-  facet_wrap(
-    ~factor(chrom, levels = rev(chrom.levels)),
-    ncol = 6
-  ) +
-  scale_x_continuous(
-    limits = c(0, 1),
-    breaks = seq(0, 1, 0.2)
+  scale_color_manual(
+    values = c(simulation = "#4B1FA8", empirical = "black")
   ) +
   labs(
     x = "African ancestry",
-    y = "Mean fraction of individuals per bin",
-    title = "African Ancestry Distributions of ADX across chromosomes",
-    subtitle = "Bars represent the mean histogram across replicates; error bars denote ±2 SD"
+    y = "Cumulative fraction",
+    title = "Admixed ancestry: simulation and empirical observation"
   ) +
-  theme_bw(base_size = 24) +
-  theme(
-    legend.position = "none",
-    panel.grid.minor = element_blank(),
-    strip.background = element_blank(),
-    strip.text = element_text(face = "bold"),
-    panel.spacing = unit(1, "lines")
+  theme_bw(base_size = 16) +
+  theme(legend.title = element_blank())
+
+anc.chromosome.envelope <- anc.sample.summary |>
+  filter(data_source == "simulation", analysis_level == "chromosome") |>
+  pivot_longer(c(mean, sd), names_to = "summary", values_to = "value") |>
+  group_by(chrom, summary) |>
+  summarize(
+    median = median(value, na.rm = TRUE),
+    lower = quantile(value, 0.025, na.rm = TRUE),
+    upper = quantile(value, 0.975, na.rm = TRUE),
+    .groups = "drop"
   )
+
+anc.chromosome.empirical <- anc.sample.summary |>
+  filter(data_source == "empirical", analysis_level == "chromosome") |>
+  pivot_longer(c(mean, sd), names_to = "summary", values_to = "value")
+
+anc.chromosome.plot <- ggplot(
+  anc.chromosome.envelope,
+  aes(x = as.integer(chrom), y = median)
+) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.25) +
+  geom_line(linewidth = 1) +
+  geom_point(
+    data = anc.chromosome.empirical,
+    aes(y = value),
+    color = "#D55E00",
+    size = 2
+  ) +
+  facet_wrap(~summary, scales = "free_y") +
+  scale_x_continuous(
+    breaks = as.integer(unique(anc.chromosome.envelope$chrom))
+  ) +
+  labs(
+    x = "Chromosome",
+    y = "African ancestry summary",
+    title = "Chromosome ancestry predictive envelope"
+  ) +
+  theme_bw(base_size = 16)
+
+anc.calibration.data <- bind_rows(
+  anc.admixed |>
+    filter(data_source == "simulation") |>
+    transmute(
+      data_source,
+      chrom,
+      reference = afr_tspop,
+      estimate = afr_q
+    ),
+  anc.admixed |>
+    filter(data_source == "empirical") |>
+    transmute(
+      data_source,
+      chrom,
+      reference = afr_unsupervised_q,
+      estimate = afr_q
+    )
+)
+
+anc.calibration.plot <- ggplot(
+  anc.calibration.data,
+  aes(x = reference, y = estimate, color = data_source)
+) +
+  geom_point(alpha = 0.3) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+  facet_wrap(~data_source) +
+  coord_equal(xlim = c(0, 1), ylim = c(0, 1)) +
+  labs(
+    x = "Tree-sequence truth or unsupervised estimate",
+    y = "Supervised estimate",
+    title = "Ancestry calibration"
+  ) +
+  theme_bw(base_size = 16) +
+  theme(legend.position = "none")
+
+
+# interactive results ----
+print(anc.sample.summary)
+print(anc.predictive.summary)
+print(anc.chromosome.deviation)
+print(anc.distribution.plot)
+print(anc.chromosome.plot)
+print(anc.calibration.plot)

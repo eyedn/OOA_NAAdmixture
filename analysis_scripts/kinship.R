@@ -2,305 +2,163 @@
 # Aydin Karatas
 # ___
 # University of Southern California
-# Department of Quantitative and Computational Biology 
+# Department of Quantitative and Computational Biology
 # Mooney Lab
 # ___
-# ancestry.R
+# kinship.R
 # ______________________________________________________________________________
+
+# pattern: Imperative Shell
 
 
 library(tidyverse)
-library(nanoparquet)
-library(glue)
-library(ggridges)
 library(scales)
 
-# read in data ----
-data.dir <- "~/scratch/OOA_NAAdmixture_small/stats"
-kin.chr <- map_dfr(
-  1:22,
-  \(chr) {
-    file.path(data.dir, glue("kinship_unrelated.chr{chr}.parquet")) |>
-      read_parquet() 
-  }
+source("analysis_scripts/analysis_utils.R")
+
+
+# constants ----
+KIN_CUTOFF <- 0.0442
+
+
+# read and harmonize unrelated-kinship tables ----
+kin.schema <- c(
+  rep = "integer",
+  chrom = "character",
+  pop = "character",
+  sample1 = "character",
+  sample2 = "character",
+  kinship = "double"
 )
 
-kin.genWide <- read_parquet(
-  file.path(data.dir, "kinship.parquet")
-) %>%
-  mutate(
-    chrom = "all"
-  )
-
-kin <- bind_rows(kin.chr, kin.genWide) %>%
-  mutate(
-    kinship = as.numeric(kinship),
-    pop = factor(pop, levels = c("AFR", "ADX", "EUR"))
-  )
-
-# summarize kinship structure ----
-kin.summary <- kin %>%
-  group_by(rep, chrom, pop) %>%
-  summarize(
-    mean = mean(kinship),
-    sd = sd(kinship),
-    .groups = "drop"
-  )
-
-pop_cols <- c(
-  AFR = "#56B4E9",
-  ADX = "#4B1FA8",
-  EUR = "#fb8072"
+kin <- read.harmonized.table(
+  sim.table = "kinship_unrelated",
+  empirical.table = "kinship_unrelated",
+  schema = kin.schema,
+  sim.required = c(
+    "rep", "pop", "sample1", "sample2", "kinship"
+  ),
+  empirical.required = c(
+    "rep", "pop", "sample1", "sample2", "kinship"
+  ),
+  empirical.rename = c(id1 = "sample1", id2 = "sample2")
 )
 
-chrom.levels <- c(as.character(22:1), "all")
 
-# ridgeline of mean pairwise kinship ----
-kin.summary.mean.medians <- kin.summary %>%
-  group_by(chrom, pop) %>%
+# pairwise and per-individual summaries ----
+kin.summary <- kin |>
+  group_by(
+    data_source, analysis_level, chrom, rep, pop, pop_role
+  ) |>
   summarize(
-    median = median(mean),
-    .groups = "drop"
-  ) %>%
-  mutate(
-    y = match(chrom, chrom.levels)
-  )
-
-ggplot(
-  kin.summary,
-  aes(
-    x = mean,
-    y = factor(chrom, levels = chrom.levels),
-    fill = pop
-  )
-) +
-  geom_density_ridges(
-    linewidth = 1,
-    scale = 1.5,
-    rel_min_height = 0.005,
-    alpha = 0.7,
-    color = "black"
-  ) +
-  geom_point(
-    data = kin.summary.mean.medians,
-    aes(
-      x = median,
-      y = y + 0.35,
-      fill = pop
-    ),
-    inherit.aes = FALSE,
-    shape = 23,
-    stroke = 1,
-    color = "black",
-    size = 3
-  ) +
-  scale_fill_manual(
-    values = pop_cols,
-    breaks = c("AFR", "ADX", "EUR")
-  ) +
-  labs(
-    x = "Mean Pairwise Kinship",
-    y = "Chromosome",
-    title = "Mean Pairwise Kinship across replicates"
-  ) +
-  theme_bw(base_size = 24) +
-  theme(
-    legend.position = "none",
-    panel.grid.minor = element_blank()
-  )
-
-# ridgeline of sd pairwise kinship ----
-kin.summary.sd.medians <- kin.summary %>%
-  group_by(chrom, pop) %>%
-  summarize(
-    median = median(sd),
-    .groups = "drop"
-  ) %>%
-  mutate(
-    y = match(chrom, chrom.levels)
-  )
-
-ggplot(
-  kin.summary,
-  aes(
-    x = sd,
-    y = factor(chrom, levels = chrom.levels),
-    fill = pop
-  )
-) +
-  geom_density_ridges(
-    linewidth = 1,
-    scale = 1.5,
-    rel_min_height = 0.005,
-    alpha = 0.7,
-    color = "black"
-  ) +
-  geom_point(
-    data = kin.summary.sd.medians,
-    aes(
-      x = median,
-      y = y + 0.35,
-      fill = pop
-    ),
-    inherit.aes = FALSE,
-    shape = 23,
-    stroke = 1,
-    color = "black",
-    size = 3
-  ) +
-  scale_fill_manual(
-    values = pop_cols,
-    breaks = c("AFR", "ADX", "EUR")
-  ) +
-  labs(
-    x = "Standard deviation of Pairwise Kinship",
-    y = "Chromosome",
-    title = "Standard deviation of Pairwise Kinship across replicates"
-  ) +
-  theme_bw(base_size = 24) +
-  theme(
-    legend.position = "none",
-    panel.grid.minor = element_blank()
-  )
-
-# mean histogram of pairwise kinship ----
-break_width <- 0.01
-
-breaks <- seq(
-  floor(min(kin$kinship, na.rm = TRUE) / break_width) * break_width,
-  ceiling(max(kin$kinship, na.rm = TRUE) / break_width) * break_width,
-  by = break_width
-)
-
-kin.hist.df <- kin %>%
-  group_by(rep, chrom, pop) %>%
-  group_modify(~{
-    h <- hist(
-      .x$kinship,
-      breaks = breaks,
-      plot = FALSE
-    )
-    tibble(
-      xmin  = head(h$breaks, -1),
-      xmax  = tail(h$breaks, -1),
-      xmid  = h$mids,
-      count = h$counts,
-      frac = h$counts / sum(h$counts)
-    )
-  }) %>%
-  ungroup()
-
-kin.hist.summary <- kin.hist.df %>%
-  group_by(pop, chrom, xmin, xmax, xmid) %>%
-  summarize(
-    mean.frac = mean(frac),
-    sd.frac   = sd(frac),
+    mean = mean(kinship, na.rm = TRUE),
+    median = median(kinship, na.rm = TRUE),
+    sd = sd(kinship, na.rm = TRUE),
+    q05 = quantile(kinship, 0.05, na.rm = TRUE),
+    q95 = quantile(kinship, 0.95, na.rm = TRUE),
+    negative_fraction = mean(kinship < 0, na.rm = TRUE),
+    above_cutoff_fraction = mean(kinship > KIN_CUTOFF, na.rm = TRUE),
     .groups = "drop"
   )
 
-ggplot(
-  kin.hist.summary,
-  aes(
-    x = xmid,
-    y = mean.frac,
-    fill = pop
-  )
-) +
-  geom_col(
-    width = diff(breaks)[1] * 0.95,
-    color = "black",
-    linewidth = 0.5
-  ) +
-  # geom_errorbar(
-  #   aes(
-  #     ymin = pmax(0, mean.frac - 2 * sd.frac),
-  #     ymax = mean.frac + 2 * sd.frac
-  #   ),
-  #   width = 0,
-  #   linewidth = 0.5,
-  #   color = "black"
-  # ) +
-  facet_wrap(
-    ~factor(chrom, levels = rev(chrom.levels)),
-    ncol = 6
-  ) +
-  scale_fill_manual(
-    values = pop_cols,
-    breaks = c("AFR", "ADX", "EUR")
-  ) +
-  labs(
-    x = "Pairwise Kinship",
-    y = "Mean fraction of individuals per bin",
-    title = "Pairwise kinship distributions of ADX across chromosomes",
-    subtitle = "Bars represent the mean histogram across replicates; error bars denote ±2 SD"
-  ) +
-  theme_bw(base_size = 24) +
-  theme(
-    legend.position = "none",
-    panel.grid.minor = element_blank(),
-    strip.background = element_blank(),
-    strip.text = element_text(face = "bold"),
-    panel.spacing = unit(1, "lines")
-  )
-
-# per-individual average kinship -----
 kin.long <- bind_rows(
-  kin %>%
+  kin |>
     transmute(
-      rep,
-      chrom,
-      pop,
-      sample = sample1,
-      partner = sample2,
-      kinship
+      rep, chrom, pop, pop_role, data_source, analysis_level,
+      sample = sample1, partner = sample2, kinship
     ),
-  
-  kin %>%
+  kin |>
     transmute(
-      rep,
-      chrom,
-      pop,
-      sample = sample2,
-      partner = sample1,
-      kinship
+      rep, chrom, pop, pop_role, data_source, analysis_level,
+      sample = sample2, partner = sample1, kinship
     )
 )
 
-individual.kin <- kin.long %>%
-  group_by(rep, chrom, pop, sample) %>%
-  summarize(
-    mean.kinship = mean(kinship),
-    .groups = "drop"
-  )
+individual.kin <- kin.long |>
+  group_by(
+    rep, chrom, pop, pop_role, data_source, analysis_level, sample
+  ) |>
+  summarize(mean_kinship = mean(kinship, na.rm = TRUE), .groups = "drop")
 
-ggplot(
-  individual.kin,
+kin.contrasts <- population.contrasts(
+  kin.summary,
+  value.column = "mean",
+  group.columns = c(
+    "rep", "chrom", "data_source", "analysis_level"
+  ),
+  metric.type = "kinship"
+)
+
+
+# kinship figures ----
+kin.distribution.plot <- ggplot(
+  kin |> filter(analysis_level == "genome"),
   aes(
-    pop,
-    mean.kinship,
-    fill = pop,
-    color = pop
+    x = kinship,
+    color = data_source,
+    group = interaction(data_source, rep)
   )
+) +
+  stat_ecdf(linewidth = 1) +
+  facet_wrap(~pop_role, scales = "free_x") +
+  labs(
+    x = "Pairwise kinship coefficient",
+    y = "Cumulative fraction",
+    title = "Unrelated-sample kinship distributions"
+  ) +
+  theme_bw(base_size = 16) +
+  theme(legend.title = element_blank())
+
+kin.individual.plot <- ggplot(
+  individual.kin |> filter(analysis_level == "genome"),
+  aes(x = pop_role, y = mean_kinship, color = data_source)
 ) +
   geom_violin(
-    linewidth = 0.75,
-    alpha = 0.35,
-    trim = FALSE
+    data = \(data) filter(data, data_source == "simulation"),
+    aes(fill = pop_role),
+    alpha = 0.2,
+    position = position_dodge(width = 0.8)
   ) +
-  geom_boxplot(
-    width = 0.18,
-    linewidth = 0.75,
-    outlier.shape = NA,
-    fill = "white"
+  geom_point(
+    data = \(data) filter(data, data_source == "empirical"),
+    position = position_jitter(width = 0.08),
+    alpha = 0.45
   ) +
-  geom_jitter(
-    width = 0.08,
-    size = 0.7,
-    alpha = 0.2
+  scale_fill_manual(values = POP.COLORS) +
+  labs(
+    x = "Population role",
+    y = "Per-individual mean kinship",
+    title = "Per-individual kinship distributions"
   ) +
-  scale_fill_manual(
-    values = pop_cols
-  ) +
-  scale_color_manual(
-    values = pop_cols
+  theme_bw(base_size = 16) +
+  theme(legend.title = element_blank())
+
+kin.tail.plot <- ggplot(
+  kin |> filter(analysis_level == "genome", kinship >= 0),
+  aes(
+    x = kinship,
+    color = data_source,
+    group = interaction(data_source, rep)
   )
+) +
+  stat_ecdf(aes(y = after_stat(1 - y)), linewidth = 1) +
+  geom_vline(xintercept = KIN_CUTOFF, linetype = "dashed") +
+  facet_wrap(~pop_role) +
+  scale_y_log10(labels = label_percent()) +
+  labs(
+    x = "Pairwise kinship coefficient",
+    y = "Upper-tail fraction",
+    title = "Unrelated-kinship upper tail"
+  ) +
+  theme_bw(base_size = 16) +
+  theme(legend.title = element_blank())
+
+
+# interactive results ----
+# Pairwise rows are dependent, so summaries are descriptive and no pair-level
+# inferential p-values are calculated.
+print(kin.summary)
+print(kin.contrasts)
+print(kin.distribution.plot)
+print(kin.individual.plot)
+print(kin.tail.plot)
