@@ -19,7 +19,7 @@ from onekg_utils.aggregate_folded_2d_sfs_rows import (
 )
 from onekg_utils.aggregate_variant_qc_rows import aggregate_variant_qc_rows
 from onekg_utils.read_tsv_rows import read_tsv_rows
-from onekg_utils.write_stats_table import write_stats_table
+from shared_utils.write_stats_table import write_stats_table
 
 
 ##### arguments ###############################################################

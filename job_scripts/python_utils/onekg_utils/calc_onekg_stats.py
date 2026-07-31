@@ -21,8 +21,8 @@ import numpy as np
 from .read_onekg_sample_pops import read_onekg_sample_pops
 from .read_tsv_rows import read_tsv_rows
 from .scan_onekg_vcf import scan_onekg_vcf
-from .write_stats_table import write_stats_table
-from misc_utils.log_msg import log_msg
+from shared_utils.log_msg import log_msg
+from shared_utils.write_stats_table import write_stats_table
 
 ##### internal functions #####################################################
 '''

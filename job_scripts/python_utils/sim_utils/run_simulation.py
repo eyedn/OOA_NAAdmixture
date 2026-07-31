@@ -17,7 +17,7 @@ import pickle
 import msprime
 import stdpopsim
 import tskit
-from misc_utils import log_msg
+from shared_utils import log_msg
 from .build_global_ancestry_table import (
     build_global_ancestry_table
 )

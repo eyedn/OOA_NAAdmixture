@@ -20,6 +20,9 @@ from sim_utils.write_combined_stats_table import write_combined_stats_table
 
 TABLE_NAMES = [
     "ancestry",
+    "ancestry_ADMIXTURE_multik",
+    "ancestry_fastStructure_multik",
+    "fastStructure_chooseK",
     "kinship",
     "kinship_unrelated",
     "pi_theta_stats",

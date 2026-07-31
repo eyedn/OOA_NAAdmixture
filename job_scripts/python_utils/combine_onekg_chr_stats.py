@@ -17,7 +17,7 @@ from pathlib import Path
 import argparse
 from onekg_utils.build_folded_2d_sfs_rows import build_folded_2d_sfs_rows
 from onekg_utils.read_tsv_rows import read_tsv_rows
-from onekg_utils.write_stats_table import write_stats_table
+from shared_utils.write_stats_table import write_stats_table
 
 
 ##### arguments ###############################################################

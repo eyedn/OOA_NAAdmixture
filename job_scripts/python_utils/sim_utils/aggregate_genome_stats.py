@@ -17,7 +17,7 @@ from pathlib import Path
 import csv
 import math
 import pandas as pd
-from misc_utils import log_msg
+from shared_utils import log_msg
 from .parse_king_file import parse_king_file
 from .read_fam_order import read_q_rows
 
@@ -294,7 +294,7 @@ def aggregate_genome_stats(args):
     ancestry = _aggregate_ancestry_rows(ancestry_rows)
 
     genome_prefix = f"{args.genetic_map}_{args.rep}_genome_all"
-    q_path = admixture_dir / f"{genome_prefix}.2.Q"
+    q_path = admixture_dir / f"{genome_prefix}.supervised.2.Q"
     fam_path = admixture_dir / f"{genome_prefix}.fam"
     q_rows = read_q_rows(args.rep, q_path, fam_path)
     q_by_sample = {

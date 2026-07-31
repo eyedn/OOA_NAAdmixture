@@ -21,7 +21,7 @@ import pandas as pd
 import tszip
 from .parse_king_file import parse_king_file
 from .read_fam_order import read_q_rows
-from misc_utils.log_msg import log_msg
+from shared_utils.log_msg import log_msg
 
 
 ##### internal functions ######################################################
@@ -372,7 +372,8 @@ def calc_stats(args):
 
     # join tspop and supervised ADMIXTURE ancestry results, then write them.
     q_path = Path(args.admixture_dir) / (
-        f"{args.genetic_map}_{args.rep}_chr{args.chr}_all.2.Q"
+        f"{args.genetic_map}_{args.rep}_chr{args.chr}_all"
+        ".supervised.2.Q"
     )
     log_msg(f"parsing ADMIXTURE Q rep={args.rep} chr={args.chr} path={q_path}")
     ancestry_table = _build_ancestry_table(

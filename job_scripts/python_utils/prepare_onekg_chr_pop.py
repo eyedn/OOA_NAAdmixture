@@ -17,7 +17,7 @@ import argparse
 import gzip
 from onekg_utils.read_onekg_sample_pops import read_onekg_sample_pops
 from onekg_utils.scan_onekg_vcf import scan_onekg_vcf
-from misc_utils.log_msg import log_msg
+from shared_utils.log_msg import log_msg
 
 
 ##### arguments ###############################################################

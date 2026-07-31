@@ -11,20 +11,19 @@
 # overview: build empirical ADMIXTURE and fastStructure ancestry tables.
 
 
-
 ##### set up ##################################################################
 from pathlib import Path
 import argparse
-from onekg_utils.build_multik_ancestry_rows import (
+from shared_utils.build_multik_ancestry_rows import (
     build_multik_ancestry_rows,
 )
 from onekg_utils.orient_admixture_rows import orient_admixture_rows
-from onekg_utils.parse_faststructure_choose_k import (
+from shared_utils.parse_faststructure_choose_k import (
     parse_faststructure_choose_k,
 )
-from onekg_utils.parse_k_path_specs import parse_k_path_specs
+from shared_utils.parse_k_path_specs import parse_k_path_specs
 from onekg_utils.read_onekg_sample_pops import read_onekg_sample_pops
-from onekg_utils.write_stats_table import write_stats_table
+from shared_utils.write_stats_table import write_stats_table
 
 
 ##### arguments ###############################################################

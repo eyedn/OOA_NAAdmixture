@@ -29,6 +29,9 @@ define supported chrom-level table types:
 '''
 TABLE_NAMES = [
     "ancestry",
+    "ancestry_ADMIXTURE_multik",
+    "ancestry_fastStructure_multik",
+    "fastStructure_chooseK",
     "kinship",
     "kinship_unrelated",
     "pi_theta_stats",

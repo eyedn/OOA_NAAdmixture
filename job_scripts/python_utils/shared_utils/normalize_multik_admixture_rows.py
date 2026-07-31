@@ -10,8 +10,6 @@
 
 # overview: validate unsupervised ancestry rows and preserve component order.
 
-
-
 ##### set up ##################################################################
 import math
 

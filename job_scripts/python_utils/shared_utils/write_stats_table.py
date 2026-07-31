@@ -8,10 +8,7 @@
 #           write_stats_table.py
 ###############################################################################
 
-# overview: write empirical statistics tables in canonical TSV and Parquet
-# formats.
-
-# pattern: Imperative Shell
+# overview: write shared statistics tables in canonical TSV and Parquet formats.
 
 
 ##### set up ##################################################################

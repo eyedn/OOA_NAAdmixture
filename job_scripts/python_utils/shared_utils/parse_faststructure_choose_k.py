@@ -39,6 +39,7 @@ def parse_faststructure_choose_k(
     seed,
     requested_ks,
     chrom=None,
+    rep=0,
 ):
     ks = sorted(set(requested_ks))
     if not ks or len(ks) != len(requested_ks):
@@ -60,7 +61,7 @@ def parse_faststructure_choose_k(
             raise ValueError(
                 f"chooseK {name} is outside requested K range"
             )
-    row = {"rep": 0}
+    row = {"rep": rep}
     if chrom is not None:
         row["chrom"] = chrom
     row.update(

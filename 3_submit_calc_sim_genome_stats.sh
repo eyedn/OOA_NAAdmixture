@@ -24,19 +24,32 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${script_dir}/other_scripts/const.sh"
 source "${script_dir}/other_scripts/log_msg.sh"
 
-if [[ -z ${OOA_NAADMIXTURE_CONDA} ]]; then
-    echo "ERROR: OOA_NAADMIXTURE_CONDA must be configured" >&2
+if [[ -z ${OOA_NAADMIXTURE_CONDA} \
+    || -z ${FASTSTRUCTURE_CONDA_ENV} \
+    || -z ${FASTSTRUCTURE_PRIOR} \
+    || -z ${FASTSTRUCTURE_CV} \
+    || "${SIM_UNSUPERVISED_KS[*]}" != "2 3 4 5" ]]; then
+    echo "ERROR: inference environments and settings must be configured" >&2
     exit 1
 fi
 if [[ ! -x "${ADMIXTURE_EXEC}" ]]; then
     echo "ERROR: ADMIXTURE executable is not executable: ${ADMIXTURE_EXEC}" >&2
     exit 1
 fi
+for faststructure_script in \
+    "${FASTSTRUCTURE_STRUCTURE_PY}" \
+    "${FASTSTRUCTURE_CHOOSE_K_PY}"; do
+    if [[ ! -f "${faststructure_script}" ]]; then
+        echo "ERROR: missing fastStructure script ${faststructure_script}" >&2
+        exit 1
+    fi
+done
 
 
 ##### genome statistics jobs ##################################################
 # create shared output directories before submitting replicate-level workers.
-mkdir -p "${ADMIXTURE_DIR}" "${KING_DIR}" "${STATS_DIR}"
+mkdir -p "${ADMIXTURE_DIR}" "${SIM_FASTSTRUCTURE_DIR}" \
+    "${KING_DIR}" "${STATS_DIR}"
 
 # submit one worker per replicate; each worker merges all chromosome inputs.
 log_msg "submitting OOA_NAAdmixture genome statistics array
@@ -68,6 +81,12 @@ stats_jid=$(sbatch \
     "job_scripts/calc_sim_genome_rep_stats.sh" \
         "${OOA_NAADMIXTURE_CONDA}" \
         "${ADMIXTURE_EXEC}" \
+        "${FASTSTRUCTURE_CONDA_ENV}" \
+        "${FASTSTRUCTURE_STRUCTURE_PY}" \
+        "${FASTSTRUCTURE_CHOOSE_K_PY}" \
+        "${FASTSTRUCTURE_PRIOR}" \
+        "${FASTSTRUCTURE_CV}" \
+        "${SIM_FASTSTRUCTURE_DIR}" \
         "${VCF_DIR}" \
         "${PLINK_BED_DIR}" \
         "${POP_INFO_DIR}" \
@@ -81,6 +100,8 @@ stats_jid=$(sbatch \
         "${ADMIXTURE_LD_WINDOW}" \
         "${ADMIXTURE_LD_STEP}" \
         "${ADMIXTURE_LD_R2}" \
+        -- \
+        "${SIM_UNSUPERVISED_KS[@]}" \
         -- \
         "${CHROMS[@]}" \
         -- \

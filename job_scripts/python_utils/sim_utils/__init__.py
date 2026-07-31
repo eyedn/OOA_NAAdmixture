@@ -8,7 +8,7 @@
 #           __init__.py
 ###############################################################################
 
-# overview: reusable simulation workflow helpers
+# overview: simulation workflow helpers
 
 
 ##### set up ##################################################################

@@ -24,7 +24,6 @@ module purge
 ml gcc/13.3.0 htslib/1.19.1 conda
 source /apps/conda/miniforge3/25.3.0/etc/profile.d/conda.sh
 conda activate "${conda_env}"
-export PATH="${HOME}/.conda/envs/${conda_env}/bin:${PATH}"
 
 # load shared functions; note, all scripts should exist in the execution repo
 project_dir="$(pwd)"

@@ -18,14 +18,19 @@ set -euo pipefail
 
 conda_env="$1"
 admixture_exec="$2"
-shift 2
+faststructure_conda_env="$3"
+faststructure_structure_py="$4"
+faststructure_choose_k_py="$5"
+faststructure_prior="$6"
+faststructure_cv="$7"
+faststructure_dir="$8"
+shift 8
 
 # load required HPC modules and conda env
 module purge
 ml gcc/13.3.0 htslib/1.19.1 plink2/2.00a4.3 conda
 source /apps/conda/miniforge3/25.3.0/etc/profile.d/conda.sh
 conda activate "${conda_env}"
-export PATH="${HOME}/.conda/envs/${conda_env}/bin:${PATH}"
 
 # load shared functions; note, all scripts should exist in the execution repo
 project_dir="$(pwd)"
@@ -38,6 +43,14 @@ if [[ ! -x "${admixture_exec}" ]]; then
     echo "ERROR: ADMIXTURE executable is not executable: ${admixture_exec}" >&2
     exit 1
 fi
+for faststructure_script in \
+    "${faststructure_structure_py}" \
+    "${faststructure_choose_k_py}"; do
+    if [[ ! -f "${faststructure_script}" ]]; then
+        echo "ERROR: missing fastStructure script ${faststructure_script}" >&2
+        exit 1
+    fi
+done
 
 
 ##### variables ###############################################################
@@ -62,6 +75,16 @@ ld_decay_distance_bin_bp="${17}"
 ld_decay_maf_threshold="${18}"
 shift 18
 shift 1 # skip the "--" from input arguments
+unsupervised_ks=()
+while [[ "$1" != "--" ]]; do
+    unsupervised_ks+=( "$1" )
+    shift
+done
+if [[ "${unsupervised_ks[*]}" != "2 3 4 5" ]]; then
+    echo "ERROR: unsupervised K values must be exactly: 2 3 4 5" >&2
+    exit 1
+fi
+shift 1 # skip the "--" from input arguments
 chroms=()
 while [[ "$1" != "--" ]]; do
     chroms+=( "$1" )
@@ -85,15 +108,20 @@ num_threads="${SLURM_CPUS_PER_TASK:-1}"
 prefix="${genetic_map}_${rep}_chr${chr}_all"
 tree_tsz_path="${tree_dir}/${prefix}.ts.tsz"
 plink_bed_prefix="${plink_bed_dir}/${prefix}"
-sample_metadata_path="${pop_info_dir}/${genetic_map}_${rep}_chr${chr}.sample_metadata.tsv"
+sample_metadata_path="${pop_info_dir}/${genetic_map}_${rep}"
+sample_metadata_path+="_chr${chr}.sample_metadata.tsv"
 admixture_prefix="${admixture_dir}/${prefix}"
+faststructure_prefix="${faststructure_dir}/${prefix}"
+faststructure_choose_k_path="${faststructure_prefix}.chooseK.txt"
 unrelated_keep_path="${admixture_dir}/${prefix}.king_unrelated.keep"
 ld_prune_prefix="${admixture_dir}/${prefix}.ld_prune"
+inference_seed="$((1000 * rep + chr))"
 
 
 ##### KING coefficients #######################################################
 # create all required output directories
-mkdir -p "${admixture_dir}" "${king_dir}" "${stats_dir}"
+mkdir -p "${admixture_dir}" "${faststructure_dir}" \
+    "${king_dir}" "${stats_dir}"
 
 # calculate relatedness and unrelated-sample handoffs for each population.
 log_msg "running within-population KING for rep=${rep} chr=${chr}"
@@ -195,8 +223,9 @@ python "${project_dir}/job_scripts/python_utils/write_sim_admixture_pop.py" \
     --fam-path "${admixture_prefix}.fam" \
     --pop-path "${admixture_prefix}.pop"
 
-# run supervised ADMIXTURE.
-log_msg "running supervised ADMIXTURE for rep=${rep} chr=${chr}"
+# run supervised ADMIXTURE, preserve its K=2 Q file, then run each
+# unsupervised K without allowing the K=2 artifact names to collide.
+log_msg "running ADMIXTURE for rep=${rep} chr=${chr}"
 (
     cd "${admixture_dir}"
     "${admixture_exec}" \
@@ -205,7 +234,84 @@ log_msg "running supervised ADMIXTURE for rep=${rep} chr=${chr}"
         -s "${rep}" \
         "${prefix}.bed" \
         2
+    cp "${prefix}.2.Q" "${prefix}.supervised.2.Q"
+    for k in "${unsupervised_ks[@]}"; do
+        "${admixture_exec}" \
+            -j"${num_threads}" \
+            -s "${inference_seed}" \
+            "${prefix}.bed" \
+            "${k}"
+        cp "${prefix}.${k}.Q" \
+            "${prefix}.unsupervised.${k}.Q"
+    done
 )
+if [[ ! -s "${admixture_prefix}.supervised.2.Q" ]]; then
+    echo "ERROR: missing supervised ADMIXTURE Q file" >&2
+    exit 1
+fi
+admixture_q_args=()
+for k in "${unsupervised_ks[@]}"; do
+    q_path="${admixture_prefix}.unsupervised.${k}.Q"
+    if [[ ! -s "${q_path}" ]]; then
+        echo "ERROR: missing unsupervised ADMIXTURE Q file ${q_path}" >&2
+        exit 1
+    fi
+    admixture_q_args+=("--admixture-q-path" "${k}=${q_path}")
+done
+
+# run only fastStructure's Python 2 programs in its dedicated environment.
+log_msg "deactivate ${conda_env}; activate ${faststructure_conda_env}"
+conda deactivate
+conda activate "${faststructure_conda_env}"
+(
+    for k in "${unsupervised_ks[@]}"; do
+        python "${faststructure_structure_py}" \
+            -K "${k}" \
+            --input="${admixture_prefix}" \
+            --output="${faststructure_prefix}" \
+            --prior="${faststructure_prior}" \
+            --cv="${faststructure_cv}" \
+            --seed="${inference_seed}"
+    done
+    python "${faststructure_choose_k_py}" \
+        --input="${faststructure_prefix}" \
+        | tee "${faststructure_choose_k_path}"
+)
+log_msg "deactivate ${faststructure_conda_env}; activate ${conda_env}"
+conda deactivate
+conda activate "${conda_env}"
+
+# validate fastStructure artifacts after restoring the Python 3 environment.
+faststructure_q_args=()
+for k in "${unsupervised_ks[@]}"; do
+    q_path="${faststructure_prefix}.${k}.meanQ"
+    for suffix in meanQ meanP log; do
+        output_path="${faststructure_prefix}.${k}.${suffix}"
+        if [[ ! -s "${output_path}" ]]; then
+            echo "ERROR: missing fastStructure output ${output_path}" >&2
+            exit 1
+        fi
+    done
+    faststructure_q_args+=("--faststructure-q-path" "${k}=${q_path}")
+done
+if [[ ! -s "${faststructure_choose_k_path}" ]]; then
+    echo "ERROR: missing fastStructure chooseK report" >&2
+    exit 1
+fi
+
+# write neutral multi-K tables in final FAM order under Python 3.
+python \
+    "${project_dir}/job_scripts/python_utils/build_sim_inference_ancestry.py" \
+    --rep "${rep}" \
+    --sample-metadata-path "${sample_metadata_path}" \
+    --admixture-fam-path "${admixture_prefix}.fam" \
+    "${admixture_q_args[@]}" \
+    "${faststructure_q_args[@]}" \
+    --faststructure-choose-k-path "${faststructure_choose_k_path}" \
+    --faststructure-prior "${faststructure_prior}" \
+    --faststructure-seed "${inference_seed}" \
+    --stats-dir "${stats_dir}" \
+    --chrom "${chr}"
 
 
 ##### statistics ##############################################################
