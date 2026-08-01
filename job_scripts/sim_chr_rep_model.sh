@@ -104,7 +104,7 @@ plink_bed_prefix="${plink_bed_dir}/${prefix}"
 sample_metadata_path="${pop_info_dir}/${genetic_map}_${rep}_chr${chr}.sample_metadata.tsv"
 
 # derive a unique seed for each chromosome/replicate combination
-seed=$((rep + chr))
+seed=$((1000 * rep + chr))
 
 ##### simulation ##############################################################
 # # skip this task when the tree sequence, VCF, and PLINK outputs already exist.
@@ -131,6 +131,7 @@ python "${project_dir}/job_scripts/python_utils/sim_model.py" \
     --anc-dir "${anc_dir}" \
     --global-anc-dir "${global_anc_dir}" \
     --sample-size "${sample_size}" \
+    --rep "${rep}" \
     --seed "${seed}" \
     --msprime-model "${msprime_model}" \
     --chromosome "${chr}" \

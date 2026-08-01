@@ -405,7 +405,8 @@ def run_simulation(args):
 
     # simulate the above demography with msprime and output the tree sequence
     log_msg(
-        f"simulating tree sequence rep={args.seed} chr={args.chromosome}"
+        f"simulating tree sequence rep={args.rep} chr={args.chromosome} "
+        f"seed={args.seed}"
     )
 
     # generate tree
@@ -423,7 +424,7 @@ def run_simulation(args):
     ts = msprime.sim_mutations(
         ts,
         rate=args.mutation_rate,
-        random_seed=args.seed + 1,
+        random_seed=args.seed,
     )
 
     # verify the result is a valid tree sequence
@@ -434,7 +435,7 @@ def run_simulation(args):
 
     # pickle demography and demography metadata objects
     log_msg(
-        f"writing demography and demography metadata pickles rep={args.seed} "
+        f"writing demography and demography metadata pickles rep={args.rep} "
         f"chr={args.chromosome}"
     )
     with open(f"{args.pickle_prefix}.demography.pkl", "wb") as out_file:
@@ -444,7 +445,7 @@ def run_simulation(args):
 
     # output vcf resulting from tree sequence
     log_msg(
-        f"writing all-sample VCF rep={args.seed} chr={args.chromosome} "
+        f"writing all-sample VCF rep={args.rep} chr={args.chromosome} "
         f"path={args.vcf_path}"
     )
     with open(args.vcf_path, "w", encoding="utf-8") as out_file:
@@ -457,7 +458,7 @@ def run_simulation(args):
 
     # output sample metadata for downstream "admixture --supervised"
     log_msg(
-        f"writing sample metadata rep={args.seed} chr={args.chromosome} "
+        f"writing sample metadata rep={args.rep} chr={args.chromosome} "
         f"path={args.sample_metadata_path}"
     )
     sample_metadata_rows = _build_metadata(
@@ -474,7 +475,7 @@ def run_simulation(args):
 
     # generate true ancestry from tree sequence using tspop
     log_msg(
-        f"writing local and global ancestry tables rep={args.seed} "
+        f"writing local and global ancestry tables rep={args.rep} "
         f"chr={args.chromosome}"
     )
     census_time = args.admixture_time + args.census_time_offset
@@ -495,7 +496,7 @@ def run_simulation(args):
         ].copy()
 
         local_path = (
-            f"{args.anc_dir}/{args.genetic_map}_{args.seed}_"
+            f"{args.anc_dir}/{args.genetic_map}_{args.rep}_"
             f"chr{args.chromosome}_{pop}.tsv"
         )
         write_local_ancestry(
@@ -506,7 +507,7 @@ def run_simulation(args):
             pop,
         )
         global_path = (
-            f"{args.global_anc_dir}/{args.genetic_map}_{args.seed}_"
+            f"{args.global_anc_dir}/{args.genetic_map}_{args.rep}_"
             f"chr{args.chromosome}_{pop}.tsv"
         )
         global_table = build_global_ancestry_table(
