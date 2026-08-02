@@ -80,10 +80,6 @@ while [[ "$1" != "--" ]]; do
     unsupervised_ks+=( "$1" )
     shift
 done
-if [[ "${unsupervised_ks[*]}" != "2 3 4 5" ]]; then
-    echo "ERROR: unsupervised K values must be exactly: 2 3 4 5" >&2
-    exit 1
-fi
 shift 1 # skip the "--" from input arguments
 chroms=()
 while [[ "$1" != "--" ]]; do

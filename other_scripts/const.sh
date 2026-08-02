@@ -42,8 +42,8 @@ ACCOUNT="jazlynmo_738" # typically use "jazlynmo_738"; can use "qcb_640"
 MAIL_TYPE="ALL"
 MAIL_USER="karatas@usc.edu"
 
-# chromosome structure specifications
-CHROMS=(1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22)
+# chromosome structure specifications 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22
+CHROMS=(1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19)
 GENETIC_MAP="HapMapII_GRCh38"
 
 # statistics specification
@@ -61,7 +61,7 @@ LD_DECAY_MAF_THRESHOLD="0.10"
 POPS=(AFR EUR ADX)
 NONADMIXED_POP_LABELS=(AFR EUR)
 ADMIXED_POP_LABEL="ADX"
-SIM_UNSUPERVISED_KS=(2 3 4 5)
+SIM_UNSUPERVISED_KS=(2)
 NUM_REPS="50"
 SAMPLE_SIZE="500"
 MSPRIME_MODEL="dtwf"

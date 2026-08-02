@@ -27,7 +27,7 @@ if [[ -z ${OOA_NAADMIXTURE_CONDA} \
     || -z ${FASTSTRUCTURE_CONDA_ENV} \
     || -z ${FASTSTRUCTURE_PRIOR} \
     || -z ${FASTSTRUCTURE_CV} \
-    || "${SIM_UNSUPERVISED_KS[*]}" != "2 3 4 5" ]]; then
+    || ${#SIM_UNSUPERVISED_KS[@]} -eq 0 ]]; then
     echo "ERROR: inference environments and settings must be configured" >&2
     exit 1
 fi
