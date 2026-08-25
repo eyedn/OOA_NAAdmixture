@@ -26,6 +26,10 @@ DOWNSAMPLE.SIZE <- 50
 BOOTSTRAP.REPLICATES <- 1000
 HISTOGRAM.BREAKS <- seq(0, 1, by = 0.05)
 ADMIXED.ROLES <- c("ADX", "ASW")
+PLOT.EMPIRICAL.METHOD <- "ADMIXTURE"
+PLOT.SIMULATION.SOURCE <- "tspop"
+PLOT.SAMPLE.SET <- "full"
+PLOT.BASE.SIZE <- 24
 ANCESTRY.COMPONENT.COLORS <- c(
   component_1_q = "#0072B2", component_2_q = "#D55E00"
 )
@@ -344,38 +348,72 @@ summarize.histograms <- function(
 }
 
 
-# define the four allowed simulation and empirical method combinations
-plot.variant.specifications <- function() {
-  # exclude cross-method inference combinations by construction
-  specifications <- tribble(
-    ~key, ~simulation.source, ~empirical.method,
-    "tspop.admixture", "tspop", "ADMIXTURE",
-    "admixture.admixture", "ADMIXTURE", "ADMIXTURE",
-    "tspop.fastStructure", "tspop", "fastStructure",
-    "fastStructure.fastStructure", "fastStructure", "fastStructure"
+# validate plot choices and resolve inferred simulation ancestry
+resolve.plot.choices <- function(
+    empirical.method, simulation.source.input, sample.set.input
+) {
+  # validate each editable top-level choice independently
+  if (!empirical.method %in% c("ADMIXTURE", "fastStructure")) {
+    stop(
+      "Unsupported empirical method: ", empirical.method,
+      ". Use ADMIXTURE or fastStructure."
+    )
+  }
+  if (!simulation.source.input %in% c("tspop", "inferred")) {
+    stop(
+      "Unsupported simulation source: ", simulation.source.input,
+      ". Use tspop or inferred."
+    )
+  }
+  if (!sample.set.input %in% c("full", "downsampled")) {
+    stop(
+      "Unsupported sample set: ", sample.set.input,
+      ". Use full or downsampled."
+    )
+  }
+  # resolve inferred to the inference method selected for empirical data
+  simulation.source <- if (simulation.source.input == "inferred") {
+    empirical.method
+  } else {
+    simulation.source.input
+  }
+  choices <- list(
+    empirical.method = empirical.method,
+    simulation.source = simulation.source,
+    sample.set = sample.set.input,
+    subtitle = paste(
+      empirical.method, simulation.source, sample.set.input, sep = " · "
+    )
   )
 
-  return(specifications)
+  return(choices)
 }
 
 
-# select the five data series used by one plot combination
+# select the requested simulation series and empirical references
 prepare.plot.data <- function(
-    summary.data, simulation.source.input, empirical.method, chromosomes
+    summary.data, empirical.method, simulation.source.input,
+    sample.set.input, chromosomes
 ) {
-  # pair one simulation source with one complete empirical method
+  # resolve the editable settings before selecting any rows
+  choices <- resolve.plot.choices(
+    empirical.method, simulation.source.input, sample.set.input
+  )
+  # pair one simulation subset with complete empirical reference data
   plot.data <- summary.data %>%
     filter(
       (data.type != "Empirical" &
-        .data$simulation.source == simulation.source.input &
+        .data$simulation.source == choices$simulation.source &
+        sample.set == choices$sample.set &
         chrom %in% chromosomes) |
-        (data.type == "Empirical" & method == empirical.method &
+        (data.type == "Empirical" & method == choices$empirical.method &
           sample.set == "full" & chrom %in% c(chromosomes, "all"))
     ) %>%
     mutate(
       chrom = factor(chrom, levels = c(chromosomes, "all")),
       series = paste(data.type, sample.set, sep = ".")
     )
+  attr(plot.data, "plot.choices") <- choices
 
   return(plot.data)
 }
@@ -383,13 +421,15 @@ prepare.plot.data <- function(
 
 # build a chromosome plot for either mean or standard deviation
 make.stat.by.chrom.plot <- function(
-    summary.data, simulation.source.input, empirical.method, chromosomes,
-    styles, statistic, y.label
+    summary.data, empirical.method, simulation.source.input,
+    sample.set.input, chromosomes, styles, statistic, y.label
 ) {
   # separate simulation distributions from empirical reference values
   data <- prepare.plot.data(
-    summary.data, simulation.source.input, empirical.method, chromosomes
+    summary.data, empirical.method, simulation.source.input,
+    sample.set.input, chromosomes
   )
+  choices <- attr(data, "plot.choices")
   simulation <- filter(data, data.type != "Empirical")
   empirical <- filter(data, data.type == "Empirical")
   genome <- filter(empirical, chrom == "all")
@@ -397,7 +437,12 @@ make.stat.by.chrom.plot <- function(
   lower <- paste0(statistic, ".boot.lower")
   upper <- paste0(statistic, ".boot.upper")
   estimate <- paste0(statistic, ".boot")
-  color <- styles$empirical.colors[[empirical.method]]
+  color <- styles$empirical.colors[[choices$empirical.method]]
+  title <- if (statistic == "mean") {
+    "Mean by chromosome"
+  } else {
+    "SD by chromosome"
+  }
   # draw simulation boxes with empirical chromosome and genome uncertainty
   plot <- ggplot(simulation, aes(chrom, .data[[statistic]], fill = series)) +
     geom_rect(data = genome,
@@ -418,8 +463,11 @@ make.stat.by.chrom.plot <- function(
     ) +
     scale_x_discrete(limits = chromosomes, drop = FALSE) +
     scale_fill_manual(values = styles$colors, labels = styles$labels) +
-    labs(x = "Chromosome", y = y.label, fill = NULL) +
-    theme_bw(base_size = 18) +
+    labs(
+      title = title, subtitle = choices$subtitle,
+      x = "Chromosome", y = y.label, fill = NULL
+    ) +
+    theme_bw(base_size = PLOT.BASE.SIZE) +
     theme(legend.position = "top", panel.grid.minor = element_blank())
 
   return(plot)
@@ -428,12 +476,14 @@ make.stat.by.chrom.plot <- function(
 
 # build the chromosome-level mean ancestry plot
 make.mean.by.chrom.plot <- function(
-    summary.data, simulation.source.input, empirical.method, chromosomes, styles
+    summary.data, empirical.method, simulation.source.input,
+    sample.set.input, chromosomes, styles
 ) {
   # delegate construction using the mean statistic and axis label
   plot <- make.stat.by.chrom.plot(
-    summary.data, simulation.source.input, empirical.method, chromosomes,
-    styles, "mean", "Mean African ancestry"
+    summary.data, empirical.method, simulation.source.input,
+    sample.set.input, chromosomes, styles, "mean",
+    "Mean African ancestry"
   )
 
   return(plot)
@@ -442,12 +492,14 @@ make.mean.by.chrom.plot <- function(
 
 # build the chromosome-level ancestry standard-deviation plot
 make.sd.by.chrom.plot <- function(
-    summary.data, simulation.source.input, empirical.method, chromosomes, styles
+    summary.data, empirical.method, simulation.source.input,
+    sample.set.input, chromosomes, styles
 ) {
   # delegate construction using the SD statistic and axis label
   plot <- make.stat.by.chrom.plot(
-    summary.data, simulation.source.input, empirical.method, chromosomes,
-    styles, "sd", "Standard deviation of African ancestry"
+    summary.data, empirical.method, simulation.source.input,
+    sample.set.input, chromosomes, styles, "sd",
+    "Standard deviation of African ancestry"
   )
 
   return(plot)
@@ -456,12 +508,15 @@ make.sd.by.chrom.plot <- function(
 
 # build vertically faceted mean and standard-deviation chromosome plots
 make.mean.sd.plot <- function(
-    summary.data, simulation.source.input, empirical.method, chromosomes, styles
+    summary.data, empirical.method, simulation.source.input,
+    sample.set.input, chromosomes, styles
 ) {
   # reshape simulation mean and SD summaries into one plotting table
   data <- prepare.plot.data(
-    summary.data, simulation.source.input, empirical.method, chromosomes
+    summary.data, empirical.method, simulation.source.input,
+    sample.set.input, chromosomes
   )
+  choices <- attr(data, "plot.choices")
   simulation <- data %>%
     filter(data.type != "Empirical") %>%
     pivot_longer(c(mean, sd), names_to = "stat", values_to = "estimate")
@@ -484,7 +539,7 @@ make.mean.sd.plot <- function(
       lower = sd.boot.lower, upper = sd.boot.upper
     )
   )
-  color <- styles$empirical.colors[[empirical.method]]
+  color <- styles$empirical.colors[[choices$empirical.method]]
   # draw both statistics with chromosome and genome empirical references
   plot <- ggplot(simulation, aes(chrom, estimate, fill = series)) +
     geom_rect(data = filter(empirical, chrom == "all"),
@@ -507,8 +562,11 @@ make.mean.sd.plot <- function(
     facet_grid(rows = vars(stat), scales = "free_y") +
     scale_x_discrete(limits = chromosomes, drop = FALSE) +
     scale_fill_manual(values = styles$colors, labels = styles$labels) +
-    labs(x = "Chromosome", y = NULL, fill = NULL) +
-    theme_bw(base_size = 18)
+    labs(
+      title = "Mean and SD by chromosome", subtitle = choices$subtitle,
+      x = "Chromosome", y = NULL, fill = NULL
+    ) +
+    theme_bw(base_size = PLOT.BASE.SIZE)
 
   return(plot)
 }
@@ -516,13 +574,17 @@ make.mean.sd.plot <- function(
 
 # relate chromosome length to either mean or SD ancestry summaries
 make.length.stat.plot <- function(
-    summary.data, chromosome.lengths, simulation.source.input, empirical.method,
-    chromosomes, styles, statistic, y.label
+    summary.data, chromosome.lengths, empirical.method,
+    simulation.source.input, sample.set.input, chromosomes, styles,
+    statistic, y.label
 ) {
   # aggregate replicates and attach the appropriate chromosome length
-  data <- prepare.plot.data(
-    summary.data, simulation.source.input, empirical.method, chromosomes
-  ) %>%
+  selected.data <- prepare.plot.data(
+    summary.data, empirical.method, simulation.source.input,
+    sample.set.input, chromosomes
+  )
+  choices <- attr(selected.data, "plot.choices")
+  data <- selected.data %>%
     filter(chrom != "all") %>%
     mutate(chrom = as.character(chrom)) %>%
     group_by(
@@ -536,6 +598,11 @@ make.length.stat.plot <- function(
   if (any(is.na(data$chr.len.mb))) {
     stop("Chromosome lengths are unavailable for requested data")
   }
+  title <- if (statistic == "mean") {
+    "Length versus mean"
+  } else {
+    "Length versus SD"
+  }
   # draw per-series linear trends and chromosome-level estimates
   plot <- ggplot(data, aes(chr.len.mb, estimate, color = series,
     linetype = sample.set, group = series)) +
@@ -545,22 +612,26 @@ make.length.stat.plot <- function(
     scale_fill_manual(values = styles$colors, labels = styles$labels) +
     scale_shape_manual(values = styles$shapes) +
     scale_linetype_manual(values = styles$linetypes) +
-    labs(x = "Chromosome length (Mb)", y = y.label) +
-    theme_bw(base_size = 18)
+    labs(
+      title = title, subtitle = choices$subtitle,
+      x = "Chromosome length (Mb)", y = y.label
+    ) +
+    theme_bw(base_size = PLOT.BASE.SIZE)
 
   return(plot)
 }
 
 
-# duild the chromosome-length versus mean-ancestry plot
+# build the chromosome-length versus mean-ancestry plot
 make.length.mean.plot <- function(
-    summary.data, chromosome.lengths, simulation.source.input, empirical.method,
-    chromosomes, styles
+    summary.data, chromosome.lengths, empirical.method,
+    simulation.source.input, sample.set.input, chromosomes, styles
 ) {
   # delegate shared length plotting using the mean statistic
   plot <- make.length.stat.plot(
-    summary.data, chromosome.lengths, simulation.source.input, empirical.method,
-    chromosomes, styles, "mean", "Mean African ancestry"
+    summary.data, chromosome.lengths, empirical.method,
+    simulation.source.input, sample.set.input, chromosomes, styles,
+    "mean", "Mean African ancestry"
   )
 
   return(plot)
@@ -569,34 +640,56 @@ make.length.mean.plot <- function(
 
 # build the chromosome-length versus ancestry-SD plot
 make.length.sd.plot <- function(
-    summary.data, chromosome.lengths, simulation.source.input, empirical.method,
-    chromosomes, styles
+    summary.data, chromosome.lengths, empirical.method,
+    simulation.source.input, sample.set.input, chromosomes, styles
 ) {
   # delegate shared length plotting using the standard deviation
   plot <- make.length.stat.plot(
-    summary.data, chromosome.lengths, simulation.source.input, empirical.method,
-    chromosomes, styles, "sd", "Standard deviation of African ancestry"
+    summary.data, chromosome.lengths, empirical.method,
+    simulation.source.input, sample.set.input, chromosomes, styles,
+    "sd", "Standard deviation of African ancestry"
   )
 
   return(plot)
 }
 
 
-# build chromosome histograms with replicate uncertainty for simulations
-make.histogram.plot <- function(
-    histogram.data, simulation.source.input, empirical.method, chromosomes,
-    breaks, styles
+# select histogram rows using the resolved primary plot choices
+prepare.histogram.plot.data <- function(
+    histogram.data, empirical.method, simulation.source.input,
+    sample.set.input, chromosomes
 ) {
-  # select one simulation source and its matched empirical method
+  # resolve choices before selecting simulations and empirical references
+  choices <- resolve.plot.choices(
+    empirical.method, simulation.source.input, sample.set.input
+  )
   data <- histogram.data %>%
     filter(
       (data.type != "Empirical" &
-        .data$simulation.source == simulation.source.input &
+        .data$simulation.source == choices$simulation.source &
+        sample.set == choices$sample.set &
         chrom %in% chromosomes) |
-        (data.type == "Empirical" & method == empirical.method &
+        (data.type == "Empirical" & method == choices$empirical.method &
           sample.set == "full" & chrom %in% c(chromosomes, "all"))
     ) %>%
     mutate(series = paste(data.type, sample.set, sep = "."))
+  attr(data, "plot.choices") <- choices
+
+  return(data)
+}
+
+
+# build chromosome histograms with replicate uncertainty for simulations
+make.histogram.plot <- function(
+    histogram.data, empirical.method, simulation.source.input,
+    sample.set.input, chromosomes, breaks, styles
+) {
+  # select one simulation subset plus complete empirical references
+  data <- prepare.histogram.plot.data(
+    histogram.data, empirical.method, simulation.source.input,
+    sample.set.input, chromosomes
+  )
+  choices <- attr(data, "plot.choices")
   error.data <- filter(data, data.type != "Empirical", !is.na(sd.frac))
   dodge <- position_dodge(width = diff(breaks)[1] * 0.95)
   # draw aligned bins, simulation errors, and the empirical all facet
@@ -608,9 +701,12 @@ make.histogram.plot <- function(
     facet_wrap(~ chrom, ncol = 3, drop = TRUE) +
     scale_x_continuous(limits = c(0, 1), breaks = seq(0, 1, 0.2)) +
     scale_fill_manual(values = styles$colors, labels = styles$labels) +
-    labs(x = "African ancestry",
-      y = "Mean fraction of individuals per bin", fill = NULL) +
-    theme_bw(base_size = 18)
+    labs(
+      title = "Ancestry distributions", subtitle = choices$subtitle,
+      x = "African ancestry",
+      y = "Mean fraction of individuals per bin", fill = NULL
+    ) +
+    theme_bw(base_size = PLOT.BASE.SIZE)
 
   return(plot)
 }
@@ -622,7 +718,10 @@ make.diagnostic.admixture.plot <- function(
     facet.columns, component.colors
 ) {
   # validate identifiers, component columns, and requested facets
-  required <- c("chrom", component.columns, sample.id.column, facet.columns)
+  required <- c(
+    "chrom", "data.type", "method", "sample.set", component.columns,
+    sample.id.column, facet.columns
+  )
   missing <- setdiff(required, names(individual.data))
   if (length(missing)) {
     stop("Diagnostic data are missing: ", paste(missing, collapse = ", "))
@@ -632,14 +731,35 @@ make.diagnostic.admixture.plot <- function(
     filter(chrom %in% chromosomes) %>%
     pivot_longer(all_of(component.columns),
       names_to = "component", values_to = "q")
+  # derive concise diagnostic labels from the supplied data subset
+  data.type.labels <- individual.data %>%
+    filter(chrom %in% chromosomes) %>%
+    pull(data.type) %>%
+    unique() %>%
+    str_replace_all("_", " ")
+  methods <- individual.data %>%
+    filter(chrom %in% chromosomes) %>%
+    pull(method) %>%
+    unique()
+  sample.sets <- individual.data %>%
+    filter(chrom %in% chromosomes) %>%
+    pull(sample.set) %>%
+    unique()
+  title <- paste(paste(data.type.labels, collapse = " / "), "diagnostic")
+  subtitle <- paste(
+    c(sort(methods), sort(sample.sets)), collapse = " · "
+  )
   # draw one free-width panel for every requested diagnostic group
   plot <- ggplot(data, aes(.data[[sample.id.column]], q, fill = component)) +
     geom_col() +
     facet_wrap(vars(!!!rlang::syms(c(facet.columns, "chrom"))),
       scales = "free_x") +
     scale_fill_manual(values = component.colors) +
-    labs(x = NULL, y = "Ancestry proportion", fill = NULL) +
-    theme_bw(base_size = 18) +
+    labs(
+      title = title, subtitle = subtitle,
+      x = NULL, y = "Ancestry proportion", fill = NULL
+    ) +
+    theme_bw(base_size = PLOT.BASE.SIZE) +
     theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
 
   return(plot)
@@ -665,60 +785,6 @@ read.choose.k.diagnostics <- function(
   })
 
   return(diagnostics)
-}
-
-
-# construct all six plot families from the four allowed combinations
-build.plot.families <- function(
-    summary.data, histogram.data, chromosome.lengths, chromosomes,
-    styles, histogram.breaks = HISTOGRAM.BREAKS
-) {
-  # pair each family builder with the shared combination specification
-  specs <- plot.variant.specifications()
-  builders <- list(
-    mean.by.chromosome = function(source, method) {
-      return(make.mean.by.chrom.plot(
-        summary.data, source, method, chromosomes, styles
-      ))
-    },
-    sd.by.chromosome = function(source, method) {
-      return(make.sd.by.chrom.plot(
-        summary.data, source, method, chromosomes, styles
-      ))
-    },
-    combined.mean.sd = function(source, method) {
-      return(make.mean.sd.plot(
-        summary.data, source, method, chromosomes, styles
-      ))
-    },
-    length.versus.mean = function(source, method) {
-      return(make.length.mean.plot(
-        summary.data, chromosome.lengths, source, method,
-        chromosomes, styles
-      ))
-    },
-    length.versus.sd = function(source, method) {
-      return(make.length.sd.plot(
-        summary.data, chromosome.lengths, source, method,
-        chromosomes, styles
-      ))
-    },
-    histograms = function(source, method) {
-      return(make.histogram.plot(
-        histogram.data, source, method, chromosomes,
-        histogram.breaks, styles
-      ))
-    }
-  )
-  # build and name four ggplot objects within every family
-  families <- map(builders, function(builder) {
-    plots <- set_names(
-      map2(specs$simulation.source, specs$empirical.method, builder),
-      specs$key)
-    return(plots)
-  })
-
-  return(families)
 }
 
 
@@ -862,26 +928,40 @@ empirical.diagnostic.plots <- ancestry.individual.data %>%
 walk(simulation.diagnostic.plots, print)
 walk(empirical.diagnostic.plots, print)
 
-# construct the six primary plot-family collections
-plot.families <- build.plot.families(
-  ancestry.summary.data, ancestry.histogram.data, chromosome.lengths,
-  CHROMOSOMES, PLOT.STYLES, HISTOGRAM.BREAKS
+# construct and print the six primary plots
+mean.by.chromosome.plot <- make.mean.by.chrom.plot(
+  ancestry.summary.data, PLOT.EMPIRICAL.METHOD,
+  PLOT.SIMULATION.SOURCE, PLOT.SAMPLE.SET, CHROMOSOMES, PLOT.STYLES
 )
+print(mean.by.chromosome.plot)
 
-mean.by.chromosome.plots <- plot.families$mean.by.chromosome
-walk(mean.by.chromosome.plots, print)
+sd.by.chromosome.plot <- make.sd.by.chrom.plot(
+  ancestry.summary.data, PLOT.EMPIRICAL.METHOD,
+  PLOT.SIMULATION.SOURCE, PLOT.SAMPLE.SET, CHROMOSOMES, PLOT.STYLES
+)
+print(sd.by.chromosome.plot)
 
-sd.by.chromosome.plots <- plot.families$sd.by.chromosome
-walk(sd.by.chromosome.plots, print)
+combined.mean.sd.plot <- make.mean.sd.plot(
+  ancestry.summary.data, PLOT.EMPIRICAL.METHOD,
+  PLOT.SIMULATION.SOURCE, PLOT.SAMPLE.SET, CHROMOSOMES, PLOT.STYLES
+)
+print(combined.mean.sd.plot)
 
-combined.mean.sd.plots <- plot.families$combined.mean.sd
-walk(combined.mean.sd.plots, print)
+length.versus.mean.plot <- make.length.mean.plot(
+  ancestry.summary.data, chromosome.lengths, PLOT.EMPIRICAL.METHOD,
+  PLOT.SIMULATION.SOURCE, PLOT.SAMPLE.SET, CHROMOSOMES, PLOT.STYLES
+)
+print(length.versus.mean.plot)
 
-length.versus.mean.plots <- plot.families$length.versus.mean
-walk(length.versus.mean.plots, print)
+length.versus.sd.plot <- make.length.sd.plot(
+  ancestry.summary.data, chromosome.lengths, PLOT.EMPIRICAL.METHOD,
+  PLOT.SIMULATION.SOURCE, PLOT.SAMPLE.SET, CHROMOSOMES, PLOT.STYLES
+)
+print(length.versus.sd.plot)
 
-length.versus.sd.plots <- plot.families$length.versus.sd
-walk(length.versus.sd.plots, print)
-
-histogram.plots <- plot.families$histograms
-walk(histogram.plots, print)
+histogram.plot <- make.histogram.plot(
+  ancestry.histogram.data, PLOT.EMPIRICAL.METHOD,
+  PLOT.SIMULATION.SOURCE, PLOT.SAMPLE.SET, CHROMOSOMES,
+  HISTOGRAM.BREAKS, PLOT.STYLES
+)
+print(histogram.plot)
