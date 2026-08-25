@@ -715,14 +715,14 @@ make.histogram.plot <- function(
     sample.set.input, chromosomes
   )
   choices <- attr(data, "plot.choices")
-  error.data <- filter(data, data.type != "Empirical", !is.na(sd.frac))
   dodge <- position_dodge(width = diff(breaks)[1] * 0.95)
   # draw aligned bins, simulation errors, and the empirical all facet
   plot <- ggplot(data, aes(xmid, mean.frac, fill = series, group = series)) +
     geom_col(position = dodge, width = diff(breaks)[1] * 0.95,
       color = "black", linewidth = 0.3) +
-    geom_errorbar(data = error.data, aes(ymin = ymin, ymax = ymax),
-      position = dodge, width = 0.01) +
+    geom_errorbar(
+      aes(ymin = ymin, ymax = ymax), position = dodge, width = 0.01
+      ) +
     facet_wrap(~ chrom, ncol = 3, drop = TRUE) +
     scale_x_continuous(limits = c(0, 1), breaks = seq(0, 1, 0.2)) +
     scale_fill_manual(values = styles$colors, labels = styles$labels) +
