@@ -2,7 +2,7 @@
 # Aydin Karatas
 # ___
 # University of Southern California
-# Department of Quantitative and Computational Biology 
+# Department of Quantitative and Computational Biology
 # Mooney Lab
 # ___
 # diversity.R
@@ -12,343 +12,307 @@
 # set up ----
 library(tidyverse)
 library(nanoparquet)
-library(glue)
-library(ggridges)
-library(broom)
-library(car)
-library(emmeans)
 
 
-sim.data.dir <- "~/scratch/OOA_NAAdmixture_small/stats"
-emp.data.dir <- "~/scratch/OOA_NAAdmixture_1kG/stats"
+SIM.SMALL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_small/stats"
+SIM.LARGE.DATA.DIR <- "~/scratch/OOA_NAAdmixture_large/stats"
+EMPIRICAL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_1kG/stats"
+CHROMOSOMES <- as.character(1:22)
+SELECTED.CHROMOSOMES <- c("1", "5", "10", "14", "18", "22")
+PLOT.BASE.SIZE <- 24
+PLOT.STYLES <- list(
+  population.colors = c(
+    AFR = "#56B4E9", ADX = "#4B1FA8", EUR = "#fb8072"
+  ),
+  series.shapes = c(
+    Simulation_small = 21,
+    Simulation_large = 22,
+    Empirical = 24
+  ),
+  series.labels = c(
+    Simulation_small = "Simulation small",
+    Simulation_large = "Simulation large",
+    Empirical = "Empirical"
+  )
+)
 
-pd.width <- 0.75
-pd <- position_dodge(width = pd.width)
+
+# internal functions ----
 
 
-# read in data ----
+# map source population labels to shared population roles
+add.population.roles <- function(data) {
+  data <- data %>%
+    mutate(role = case_when(
+      pop %in% c("AFR", "YRI") ~ "AFR",
+      pop %in% c("ADX", "ASW") ~ "ADX",
+      pop %in% c("EUR", "CEU") ~ "EUR",
+      TRUE ~ NA_character_
+    ))
+  if (any(is.na(data$role))) {
+    stop("Diversity data contain an unsupported population label")
+  }
+
+  return(data)
+}
 
 
-## read in simulated data ----
-sim.div.chr <- map_dfr(
-  1:22,
-  \(chr) {
-    file.path(sim.data.dir, glue("pi_theta_stats.chr{chr}.parquet")) |>
-      read_parquet() |>
-      mutate(
-        rep = as.numeric(rep),mutation_rate = as.numeric(mutation_rate),
-        wattersons_const = as.numeric(wattersons_const),
-        segregating_sites = as.numeric(segregating_sites),
-        ne_value = as.numeric(ne_value), value = as.numeric(value), 
-        data.type = "sim"
+# standardize one diversity table to the shared analysis schema
+normalize.diversity.table <- function(
+    data, data.type.input, mask.input = NA_character_
+) {
+  data <- data %>%
+    mutate(
+      rep = as.numeric(rep),
+      chrom = as.character(chrom),
+      pop = as.character(pop),
+      stat = as.character(stat),
+      value = as.numeric(value),
+      data.type = data.type.input,
+      mask = mask.input
+    ) %>%
+    add.population.roles()
+
+  return(data)
+}
+
+
+# read chromosome-labelled diversity files for one source
+read.diversity.chromosomes <- function(
+    data.directory, file.family, chromosomes, data.type.input,
+    mask.input = NA_character_
+) {
+  paths <- file.path(
+    path.expand(data.directory),
+    str_replace(file.family, fixed("{chrom}"), chromosomes)
+  )
+  data <- map2_dfr(paths, chromosomes, function(path, chrom) {
+    table <- read_parquet(path)
+    table$chrom <- chrom
+    return(normalize.diversity.table(
+      table, data.type.input, mask.input
+    ))
+  })
+
+  return(data)
+}
+
+
+# read one genome-wide empirical diversity file
+read.diversity.genome <- function(
+    data.directory, file.name, mask.input
+) {
+  data <- read_parquet(file.path(
+    path.expand(data.directory), file.name
+  ))
+  data$chrom <- "all"
+  data <- normalize.diversity.table(
+    data, "Empirical", mask.input
+  )
+
+  return(data)
+}
+
+
+# calculate replicate means and standard deviations for simulations
+summarize.simulation.diversity <- function(data) {
+  if (!"role" %in% names(data)) data <- add.population.roles(data)
+  summary <- data %>%
+    filter(stat %in% c("pi", "theta")) %>%
+    group_by(data.type, role, stat, chrom) %>%
+    summarise(
+      mean = mean(value, na.rm = TRUE),
+      sd = sd(value, na.rm = TRUE),
+      replicate.count = n_distinct(rep),
+      .groups = "drop"
+    )
+
+  return(summary)
+}
+
+
+# duplicate simulation summaries across empirical mask comparisons
+duplicate.simulation.masks <- function(data) {
+  duplicated <- crossing(
+    data,
+    mask = c("Intergenic", "Full callable")
+  )
+
+  return(duplicated)
+}
+
+
+# assemble selected-chromosome points and empirical genome references
+build.diversity.plot.data <- function(
+    simulation.summary, empirical.chromosome, empirical.genome,
+    chromosomes
+) {
+  if (!"role" %in% names(empirical.chromosome)) {
+    empirical.chromosome <- add.population.roles(empirical.chromosome)
+  }
+  if (!"role" %in% names(empirical.genome)) {
+    empirical.genome <- add.population.roles(empirical.genome)
+  }
+  if (!"data.type" %in% names(empirical.chromosome)) {
+    empirical.chromosome$data.type <- "Empirical"
+  }
+  simulation.points <- simulation.summary %>%
+    filter(chrom %in% chromosomes) %>%
+    duplicate.simulation.masks() %>%
+    transmute(
+      data.type, role, stat, chrom, mask,
+      estimate = mean, sd
+    )
+  empirical.points <- empirical.chromosome %>%
+    filter(chrom %in% chromosomes, stat %in% c("pi", "theta")) %>%
+    transmute(
+      data.type, role, stat, chrom, mask,
+      estimate = value, sd = NA_real_
+    )
+  points <- bind_rows(simulation.points, empirical.points) %>%
+    mutate(
+      chrom = factor(chrom, levels = chromosomes),
+      role = factor(role, levels = c("AFR", "ADX", "EUR")),
+      data.type = factor(
+        data.type,
+        levels = c(
+          "Simulation_small", "Simulation_large", "Empirical"
         )
-    }
-  )
-
-sim.div.genome <- read_parquet(
-  file.path(sim.data.dir, glue("pi_theta_stats.parquet"))
-  ) %>%
-  mutate(
-    rep = as.numeric(rep), mutation_rate = as.numeric(mutation_rate),
-    span = NA, wattersons_const = as.numeric(wattersons_const),
-    segregating_sites = as.numeric(segregating_sites),
-    ne_value = as.numeric(ne_value), chrom = "all", value = as.numeric(value), 
-    data.type = "sim"
-    )
-
-## read in empirical intergenic data ----
-emp.div.intergenic.chr <- map_dfr(
-  1:22,
-  \(chr) {
-    file.path(
-      emp.data.dir, glue("pi_theta_stats_intergenic.chr{chr}.parquet")
-      ) %>%
-      read_parquet() %>%
-      mutate(
-        chrom = as.character(chrom), span = as.numeric(span),
-        value = as.numeric(value), data.type = "intergenic"
-      )
-    }
-  )
-
-emp.div.intergenic.genome <- read_parquet(
-  file.path(emp.data.dir, glue("pi_theta_stats_intergenic.parquet"))
-  ) %>%
-  mutate(
-    chrom = "all", span = NA, value = as.numeric(value), 
-    data.type = "intergenic"
-    )
-
-## read in empirical full-callable data ----
-emp.div.fullCall.chr <- map_dfr(
-  1:22,
-  \(chr) {
-    file.path(
-      emp.data.dir, glue("pi_theta_stats_full_callable_chrom.chr{chr}.parquet")
-    ) %>%
-      read_parquet() %>%
-      mutate(
-        chrom = as.character(chrom), span = as.numeric(span),
-        value = as.numeric(value),  data.type = "fullCall"
-      )
-    }
-  )
-
-emp.div.fullCall.genome <- read_parquet(
-  file.path(emp.data.dir, glue("pi_theta_stats_full_callable_chrom.parquet"))
-  ) %>%
-  mutate(
-    chrom = "all", span = NA, value = as.numeric(value), data.type = "fullCall"
-    )
-
-
-## combine diversity data ----
-div <- rbind(
-  sim.div.chr, sim.div.genome, emp.div.intergenic.chr,
-  emp.div.intergenic.genome, emp.div.fullCall.chr, emp.div.fullCall.genome
-) %>%
-  mutate(
-    role = ifelse(
-      pop %in% c("AFR", "YRI"), "AFR",
-      ifelse(pop %in% c("EUR", "CEU"), "EUR", "ADX")
-    )
-  )
-
-
-# summarize data ----
-div.sim.summary <- div %>%
-  filter(stat %in% c("pi", "theta"), data.type == "sim") %>%
-  group_by(stat, chrom, pop) %>%
-  summarize(mean = mean(value), sd = sd(value), .groups = "drop") %>%
-  mutate(pop = factor(pop, levels = c("AFR", "ADX", "EUR"))) %>%
-  mutate(
-    stat = factor(
-      stat, levels = c("pi", "theta"),
-      labels = c(expression(pi),expression(theta[w]))
-      )
-    )
-
-div.emp.summary <- div %>%
-  filter(stat %in% c("pi", "theta"), data.type != "sim") %>%
-  mutate(
-    dataset = factor(
-      if_else(data.type == "intergenic", "Intergenic", "Full callable"),
-      levels = c("Intergenic", "Full callable")
       ),
-    pop = factor(
-      pop, levels = c("YRI", "ASW", "CEU")
-      ),
-    stat = factor(
-      stat, levels = c("pi", "theta"), 
-      labels = c(expression(pi), expression(theta[w]))
-      )
+      mask = factor(mask, levels = c("Intergenic", "Full callable")),
+      stat = factor(stat, levels = c("pi", "theta"))
+    )
+  genome.lines <- empirical.genome %>%
+    filter(chrom == "all", stat %in% c("pi", "theta")) %>%
+    transmute(role, stat, mask, estimate = value) %>%
+    mutate(
+      role = factor(role, levels = c("AFR", "ADX", "EUR")),
+      mask = factor(mask, levels = c("Intergenic", "Full callable")),
+      stat = factor(stat, levels = c("pi", "theta"))
     )
 
-div.analysis <- bind_rows(
-  div.sim.summary %>%
-    mutate(span = NA) %>%
-    transmute(
-      stat, chrom, span, dataset = "Simulation", population = pop,
-      estimate = mean
-      ),
-  div.emp.summary %>%
-    transmute(
-      stat, chrom, span, dataset = as.character(dataset), population = pop,
-      estimate = value
-      )
-  ) %>%
-  left_join(
-    chrom.lengths %>% transmute(chrom, chr.len.mb = chr_len / 1e6), by = "chrom"
-    ) %>%
-  mutate(
-    chr.len.mb = if_else(dataset == "Simulation", chr.len.mb, as.numeric(span))
-    ) %>%
-  filter(chrom != "all") %>%
-  select(-span)
+  return(list(points = points, genome.lines = genome.lines))
+}
 
 
-## stats ----
-
-
-### ancova ----
-div.models <- div.analysis %>%
-  group_by(stat, dataset) %>%
-  nest()
-
-div.models <- div.models %>%
-  mutate(fit = map(data, ~ lm(estimate ~ population + chr.len.mb,data = .x)))
-
-
-### anova ----
-div.models <- div.models %>% mutate(anova = map(fit, ~ Anova(.x, type = 2)))
-
-div.anova.table <- div.models %>%
-  transmute(stat, dataset, anova = map(anova, tidy)) %>%
-  unnest(anova) %>%
-  filter(term != "Residuals")
-div.anova.table
-
-
-### compute estiamted marginal means ----
-div.models <- div.models %>%
-  mutate(emmeans = map(fit, ~ emmeans(.x, ~ population)))
-
-div.emmeans.table <- div.models %>%
-  transmute(stat, dataset, emmeans = map(emmeans, tidy)) %>%
-  unnest(emmeans)
-div.emmeans.table
-
-div.models <- div.models %>%
-  mutate(
-    tukey = map(
-      emmeans, ~ summary(
-        pairs(.x, adjust = "tukey"), infer = c(TRUE, TRUE)
-        ) %>% 
-        as_tibble()
-      )
-    )
-
-div.tukey.table <- div.models %>%
-  select(stat, dataset, tukey) %>%
-  unnest(tukey)
-div.tukey.table
-
-
-### compute difference and fold change table ----
-div.summary.table <- div.tukey.table %>%
-  separate(contrast, into = c("pop1", "pop2"), sep = " - ")
-
-div.summary.table <- div.summary.table %>%
-  left_join(
-    div.emmeans.table %>%
-      select(stat, dataset, pop1 = population, mean1 = estimate),
-    by = c("stat", "dataset", "pop1")
-    ) %>%
-  left_join(
-    div.emmeans.table %>%
-      select(stat, dataset, pop2 = population, mean2 = estimate),
-    by = c("stat", "dataset", "pop2")
-    ) %>%
-  mutate(
-    fold.change = mean1 / mean2,
-    percent.change = 100 * (mean1 - mean2) / mean2
-  ) %>%
-  transmute(
-    stat, dataset, comparison = paste(pop1, "vs", pop2), 
-    adjusted.mean.1 = mean1, adjusted.mean.2 = mean2, difference = estimate,
-    fold.change, percent.change, lower.CL, upper.CL, p.value
-  )
-div.summary.table
-
-
-## dot plot ----
-chrom.use <- c("all", as.character(1:22))
-div.plot <- ggplot(
-  div.sim.summary %>% filter(chrom %in% chrom.use),
-  aes(x = factor(chrom, levels = chrom.levels), y = mean)
-  ) +
-  geom_errorbar(
-    aes(ymin = mean - 2 * sd, ymax = mean + 2 * sd, group = pop), 
-    color = "black", position = pd, width = 0.15, linewidth = 0.9
-    ) +
-  geom_point(
-    aes(fill = pop, shape = "Simulation", group = pop), position = pd,
-    color = "black", stroke = 1, size = 3.5
-    ) +
-  geom_point(
-    data = div.emp.summary %>% filter(chrom %in% chrom.use),
+# construct the selected-chromosome diversity plot
+make.diversity.plot <- function(points, genome.lines, styles) {
+  dodge <- position_dodge(width = 0.75)
+  plot <- ggplot(
+    points,
     aes(
-      x = factor(chrom, levels = chrom.levels), y = value, fill = pop, 
-      shape = dataset, group = pop
-      ),
-    inherit.aes = FALSE, position = pd, color = "black", stroke = 1, size = 3.5
-    ) +
-  facet_wrap(~stat, scales = "free_y", labeller = label_parsed, ncol = 1) +
-  scale_fill_manual(
-    name = NULL,
-    breaks = c("AFR", "YRI", "ADX", "ASW", "EUR", "CEU"),
-    values = c(
-      "AFR" = "#56B4E9", "ADX" = "#4B1FA8", "EUR" = "#fb8072",
-      "YRI" = "#eec4dc", "ASW" = "#e44b8d", "CEU" = "#bb437e"
+      x = chrom, y = estimate, color = role, fill = role,
+      shape = data.type, group = interaction(role, data.type)
     )
   ) +
-  scale_shape_manual(
-    name = NULL,
-    breaks = c("Simulation", "Intergenic", "Full callable"),
-    values = c("Simulation" = 21, "Intergenic" = 24, "Full callable" = 23)
+    geom_hline(
+      data = genome.lines,
+      aes(yintercept = estimate, color = role),
+      linetype = "dotted", linewidth = 0.9
     ) +
-  labs(
-    x = "Chromosome", y = NULL, title = "Genetic diversity statistics",
-    subtitle = "Error bars represent ±2 SD"
+    geom_errorbar(
+      data = points,
+      aes(ymin = estimate - 2 * sd, ymax = estimate + 2 * sd),
+      position = dodge, width = 0.15, linewidth = 0.8,
+      na.rm = TRUE
     ) +
-  guides(
-    fill = guide_legend(
-      order = 1, override.aes = list(shape = 21, color = "black", size = 3.5)
-      ),
-    shape = guide_legend(
-      order = 2, 
-      override.aes = list(fill = "white", color = "black", size = 3.5)
+    geom_point(
+      position = dodge, color = "black", stroke = 1, size = 3.5,
+      aes(fill = role)
+    ) +
+    facet_grid(
+      stat ~ mask, scales = "free_y",
+      labeller = labeller(
+        stat = c(pi = "π", theta = "θ[w]")
       )
     ) +
-  theme_bw(base_size = 24) +
-  theme(
-    legend.position = "top", legend.direction = "horizontal",
-    legend.title = element_blank(), panel.grid.minor = element_blank(),
-    strip.background = element_blank(), 
-    strip.text = element_text(face = "bold"), panel.spacing = unit(1, "lines")
-  )
-div.plot
-
-
-## chrom hist plot ----
-chrom.div.box.df <- bind_rows(
-  div.sim.summary %>%
-    filter(chrom != "all") %>%
-    transmute(stat, chrom, dataset = "Simulation", pop, estimate = mean),
-  div.emp.summary %>%
-    filter(chrom != "all") %>%
-    transmute(stat, chrom, dataset, pop, estimate = value)
-  ) %>%
-  mutate(
-    dataset = factor(
-      dataset, levels = c("Simulation", "Intergenic", "Full callable")
+    scale_color_manual(values = styles$population.colors) +
+    scale_fill_manual(values = styles$population.colors) +
+    scale_shape_manual(
+      values = styles$series.shapes,
+      labels = styles$series.labels
+    ) +
+    labs(
+      x = "Chromosome", y = NULL,
+      title = "Genetic Diversity Across Selected Chromosomes",
+      color = NULL, fill = NULL, shape = NULL
+    ) +
+    guides(
+      color = guide_legend(
+        order = 1, override.aes = list(shape = 21, size = 3.5)
       ),
-    pop = factor(
-      pop, levels = c("AFR", "YRI", "ADX", "ASW", "EUR", "CEU")
+      fill = "none",
+      shape = guide_legend(
+        order = 2,
+        override.aes = list(fill = "white", color = "black")
       )
+    ) +
+    theme_bw(base_size = PLOT.BASE.SIZE) +
+    theme(
+      legend.position = "top",
+      legend.direction = "horizontal",
+      legend.box = "horizontal",
+      legend.title = element_blank(),
+      panel.grid.minor = element_blank(),
+      strip.background = element_blank(),
+      strip.text = element_text(face = "bold")
     )
 
-chrom.div.box.plot <- ggplot(
-  chrom.div.box.df, aes(x = dataset, y = estimate, fill = pop)
-  ) +
-  geom_boxplot(
-    aes(group = interaction(dataset, pop)), position = pd, width = 0.6,
-    outlier.shape = NA, color = "black", linewidth = 0.8
-    ) +
-  geom_jitter(
-    aes(group = interaction(dataset, pop)),
-    position = position_jitterdodge(
-      dodge.width = pd.width, jitter.width = 0.08
-      ),
-    shape = 21, color = "black", stroke = 0.7, size = 2.5
-    ) +
-  facet_wrap(~stat, scales = "free_y", labeller = label_parsed, ncol = 2) +
-  scale_fill_manual(
-    name = NULL, breaks = c("AFR", "ADX", "EUR", "YRI", "ASW", "CEU"),
-    values = c(
-      "AFR" = "#56B4E9", "ADX" = "#4B1FA8", "EUR" = "#fb8072",
-      "YRI" = "#eec4dc", "ASW" = "#e44b8d", "CEU" = "#bb437e"
-      )
-    ) +
-  labs(
-    x = NULL, y = NULL, title = "Chromosome-level diversity statistics",
-    subtitle = "Sim. points represent one chrom. mean value; empirical points represent one chrom. value"
-    ) +
-  guides(fill = guide_legend(nrow = 1, byrow = TRUE)) +
-  theme_bw(base_size = 24) +
-  theme(
-    legend.position = "top", legend.direction = "horizontal",
-    legend.title = element_blank(), panel.grid.minor = element_blank(),
-    strip.background = element_blank(), strip.text = element_text(face = "bold")
-    )
-chrom.div.box.plot
+  return(plot)
+}
+
+
+# analysis ----
+
+
+# read selected-chromosome simulation diversity estimates
+sim.small.diversity <- read.diversity.chromosomes(
+  SIM.SMALL.DATA.DIR, "pi_theta_stats.chr{chrom}.parquet",
+  SELECTED.CHROMOSOMES, "Simulation_small"
+)
+sim.large.diversity <- read.diversity.chromosomes(
+  SIM.LARGE.DATA.DIR, "pi_theta_stats.chr{chrom}.parquet",
+  SELECTED.CHROMOSOMES, "Simulation_large"
+)
+
+# read selected-chromosome empirical diversity estimates
+emp.intergenic.chromosome <- read.diversity.chromosomes(
+  EMPIRICAL.DATA.DIR,
+  "pi_theta_stats_intergenic.chr{chrom}.parquet",
+  SELECTED.CHROMOSOMES, "Empirical", "Intergenic"
+)
+emp.full.callable.chromosome <- read.diversity.chromosomes(
+  EMPIRICAL.DATA.DIR,
+  "pi_theta_stats_full_callable_chrom.chr{chrom}.parquet",
+  SELECTED.CHROMOSOMES, "Empirical", "Full callable"
+)
+
+# read genome-wide empirical diversity references
+emp.intergenic.genome <- read.diversity.genome(
+  EMPIRICAL.DATA.DIR, "pi_theta_stats_intergenic.parquet",
+  "Intergenic"
+)
+emp.full.callable.genome <- read.diversity.genome(
+  EMPIRICAL.DATA.DIR,
+  "pi_theta_stats_full_callable_chrom.parquet", "Full callable"
+)
+
+# summarize sources and construct the primary diversity plot
+simulation.diversity.summary <- bind_rows(
+  sim.small.diversity, sim.large.diversity
+) %>%
+  summarize.simulation.diversity()
+diversity.plot.data <- build.diversity.plot.data(
+  simulation.diversity.summary,
+  bind_rows(
+    emp.intergenic.chromosome, emp.full.callable.chromosome
+  ),
+  bind_rows(emp.intergenic.genome, emp.full.callable.genome),
+  SELECTED.CHROMOSOMES
+)
+diversity.plot <- make.diversity.plot(
+  diversity.plot.data$points,
+  diversity.plot.data$genome.lines,
+  PLOT.STYLES
+)
+print(diversity.plot)

@@ -16,8 +16,10 @@ library(nanoparquet)
 
 SIM.SMALL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_small/stats"
 SIM.LARGE.DATA.DIR <- "~/scratch/OOA_NAAdmixture_large/stats"
-EMPIRICAL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_1kG_cp/stats"
-CHROMOSOME.LENGTHS.PATH <- "~/proj/1000GenomeNYGC_hg38_karatas/ONEKG_chr_lens.tsv"
+EMPIRICAL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_1kG/stats"
+CHROMOSOME.LENGTHS.PATH <- paste0(
+  "~/proj/1000GenomeNYGC_hg38_karatas/", "ONEKG_chr_lens.tsv"
+)
 CHROMOSOMES <- as.character(1:22)
 SELECTED.CHROMOSOMES <- c("1", "5", "10", "14", "18", "22")
 SIMULATION.K <- 2
