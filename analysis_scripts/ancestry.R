@@ -18,7 +18,8 @@ SIM.SMALL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_small/stats"
 SIM.LARGE.DATA.DIR <- "~/scratch/OOA_NAAdmixture_large/stats"
 EMPIRICAL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_1kG_cp/stats"
 CHROMOSOME.LENGTHS.PATH <- "~/proj/1000GenomeNYGC_hg38_karatas/ONEKG_chr_lens.tsv"
-CHROMOSOMES <- c("1", "5", "10", "14", "18", "22")
+CHROMOSOMES <- as.character(1:22)
+SELECTED.CHROMOSOMES <- c("1", "5", "10", "14", "18", "22")
 SIMULATION.K <- 2
 EMPIRICAL.K <- 2
 RANDOM.SEED <- 123
@@ -381,8 +382,10 @@ resolve.plot.choices <- function(
     empirical.method = empirical.method,
     simulation.source = simulation.source,
     sample.set = sample.set.input,
-    subtitle = paste(
-      empirical.method, simulation.source, sample.set.input, sep = " · "
+    subtitle = paste0(
+      "Empirical: ", empirical.method,
+      " · Simulation: ", simulation.source,
+      " · Sample set: ", sample.set.input
     )
   )
 
@@ -439,9 +442,9 @@ make.stat.by.chrom.plot <- function(
   estimate <- paste0(statistic, ".boot")
   color <- styles$empirical.colors[[choices$empirical.method]]
   title <- if (statistic == "mean") {
-    "Mean by chromosome"
+    "Mean African Ancestry Across Chromosomes"
   } else {
-    "SD by chromosome"
+    "Variation in African Ancestry Across Chromosomes"
   }
   # draw simulation boxes with empirical chromosome and genome uncertainty
   plot <- ggplot(simulation, aes(chrom, .data[[statistic]], fill = series)) +
@@ -468,7 +471,12 @@ make.stat.by.chrom.plot <- function(
       x = "Chromosome", y = y.label, fill = NULL
     ) +
     theme_bw(base_size = PLOT.BASE.SIZE) +
-    theme(legend.position = "top", panel.grid.minor = element_blank())
+    theme(
+      legend.position = "top",
+      legend.direction = "horizontal",
+      legend.box = "horizontal",
+      panel.grid.minor = element_blank()
+    )
 
   return(plot)
 }
@@ -563,10 +571,16 @@ make.mean.sd.plot <- function(
     scale_x_discrete(limits = chromosomes, drop = FALSE) +
     scale_fill_manual(values = styles$colors, labels = styles$labels) +
     labs(
-      title = "Mean and SD by chromosome", subtitle = choices$subtitle,
+      title = "Mean and Variation in African Ancestry Across Chromosomes",
+      subtitle = choices$subtitle,
       x = "Chromosome", y = NULL, fill = NULL
     ) +
-    theme_bw(base_size = PLOT.BASE.SIZE)
+    theme_bw(base_size = PLOT.BASE.SIZE) +
+    theme(
+      legend.position = "top",
+      legend.direction = "horizontal",
+      legend.box = "horizontal"
+    )
 
   return(plot)
 }
@@ -599,24 +613,35 @@ make.length.stat.plot <- function(
     stop("Chromosome lengths are unavailable for requested data")
   }
   title <- if (statistic == "mean") {
-    "Length versus mean"
+    "Chromosome Length and Mean African Ancestry Across Autosomes"
   } else {
-    "Length versus SD"
+    "Chromosome Length and African Ancestry Variation Across Autosomes"
   }
   # draw per-series linear trends and chromosome-level estimates
   plot <- ggplot(data, aes(chr.len.mb, estimate, color = series,
     linetype = sample.set, group = series)) +
     geom_smooth(method = "lm", formula = y ~ x, se = FALSE) +
     geom_point(aes(shape = sample.set, fill = series), size = 3) +
-    scale_color_manual(values = styles$colors, labels = styles$labels) +
-    scale_fill_manual(values = styles$colors, labels = styles$labels) +
+    scale_color_manual(
+      values = styles$colors, labels = styles$labels, name = NULL
+    ) +
+    scale_fill_manual(
+      values = styles$colors, labels = styles$labels, name = NULL
+    ) +
     scale_shape_manual(values = styles$shapes) +
     scale_linetype_manual(values = styles$linetypes) +
     labs(
       title = title, subtitle = choices$subtitle,
-      x = "Chromosome length (Mb)", y = y.label
+      x = "Chromosome length (Mb)", y = y.label,
+      color = NULL, fill = NULL, shape = NULL, linetype = NULL
     ) +
-    theme_bw(base_size = PLOT.BASE.SIZE)
+    guides(shape = "none", linetype = "none") +
+    theme_bw(base_size = PLOT.BASE.SIZE) +
+    theme(
+      legend.position = "top",
+      legend.direction = "horizontal",
+      legend.box = "horizontal"
+    )
 
   return(plot)
 }
@@ -702,11 +727,17 @@ make.histogram.plot <- function(
     scale_x_continuous(limits = c(0, 1), breaks = seq(0, 1, 0.2)) +
     scale_fill_manual(values = styles$colors, labels = styles$labels) +
     labs(
-      title = "Ancestry distributions", subtitle = choices$subtitle,
+      title = "Distribution of African Ancestry Across Chromosomes",
+      subtitle = choices$subtitle,
       x = "African ancestry",
       y = "Mean fraction of individuals per bin", fill = NULL
     ) +
-    theme_bw(base_size = PLOT.BASE.SIZE)
+    theme_bw(base_size = PLOT.BASE.SIZE) +
+    theme(
+      legend.position = "top",
+      legend.direction = "horizontal",
+      legend.box = "horizontal"
+    )
 
   return(plot)
 }
@@ -736,7 +767,8 @@ make.diagnostic.admixture.plot <- function(
     filter(chrom %in% chromosomes) %>%
     pull(data.type) %>%
     unique() %>%
-    str_replace_all("_", " ")
+    str_replace_all("_", " ") %>%
+    str_to_title()
   methods <- individual.data %>%
     filter(chrom %in% chromosomes) %>%
     pull(method) %>%
@@ -745,9 +777,13 @@ make.diagnostic.admixture.plot <- function(
     filter(chrom %in% chromosomes) %>%
     pull(sample.set) %>%
     unique()
-  title <- paste(paste(data.type.labels, collapse = " / "), "diagnostic")
-  subtitle <- paste(
-    c(sort(methods), sort(sample.sets)), collapse = " · "
+  title <- paste(
+    paste(data.type.labels, collapse = " / "),
+    "Ancestry Component Profiles"
+  )
+  subtitle <- paste0(
+    "Method: ", paste(sort(methods), collapse = " / "),
+    " · Sample set: ", paste(sort(sample.sets), collapse = " / ")
   )
   # draw one free-width panel for every requested diagnostic group
   plot <- ggplot(data, aes(.data[[sample.id.column]], q, fill = component)) +
@@ -760,7 +796,13 @@ make.diagnostic.admixture.plot <- function(
       x = NULL, y = "Ancestry proportion", fill = NULL
     ) +
     theme_bw(base_size = PLOT.BASE.SIZE) +
-    theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
+    theme(
+      legend.position = "top",
+      legend.direction = "horizontal",
+      legend.box = "horizontal",
+      axis.text.x = element_blank(),
+      axis.ticks.x = element_blank()
+    )
 
   return(plot)
 }
@@ -871,7 +913,7 @@ ancestry.summary.data <- summarize.ancestry(
   BOOTSTRAP.REPLICATES, RANDOM.SEED, ADMIXED.ROLES
 )
 ancestry.histogram.data <- summarize.histograms(
-  ancestry.individual.data, HISTOGRAM.BREAKS, CHROMOSOMES,
+  ancestry.individual.data, HISTOGRAM.BREAKS, SELECTED.CHROMOSOMES,
   ADMIXED.ROLES
 )
 
@@ -883,7 +925,7 @@ chromosome.lengths <- readr::read_tsv(
   rename(chrom = chr)
 emp.fastStructure.choose.k.chromosome <- read.choose.k.diagnostics(
   EMPIRICAL.DATA.DIR, "fastStructure_chooseK.chr{chrom}.parquet",
-  CHROMOSOMES
+  SELECTED.CHROMOSOMES
 )
 emp.fastStructure.choose.k.genome <- read.choose.k.diagnostics(
   EMPIRICAL.DATA.DIR, "fastStructure_chooseK.parquet", "all"
@@ -902,7 +944,7 @@ choose.k.frequency.tables <- list(
     emp.fastStructure.choose.k.genome$model_components_k
   )
 )
-walk(choose.k.frequency.tables, print)
+# walk(choose.k.frequency.tables, print)
 
 # create and print diagnostic barplots
 simulation.diagnostic.plots <- ancestry.individual.data %>%
@@ -910,7 +952,7 @@ simulation.diagnostic.plots <- ancestry.individual.data %>%
   split(list(.$data.type, .$method), drop = TRUE) %>%
   map(
     make.diagnostic.admixture.plot,
-    chromosomes = CHROMOSOMES,
+    chromosomes = SELECTED.CHROMOSOMES,
     component.columns = c("component_1_q", "component_2_q"),
     sample.id.column = "sample_id", facet.columns = c("rep"),
     component.colors = ANCESTRY.COMPONENT.COLORS
@@ -920,30 +962,33 @@ empirical.diagnostic.plots <- ancestry.individual.data %>%
   split(.$method, drop = TRUE) %>%
   map(
     make.diagnostic.admixture.plot,
-    chromosomes = c(CHROMOSOMES, "all"),
+    chromosomes = c(SELECTED.CHROMOSOMES, "all"),
     component.columns = c("component_1_q", "component_2_q"),
     sample.id.column = "sample_id", facet.columns = character(),
     component.colors = ANCESTRY.COMPONENT.COLORS
   )
-walk(simulation.diagnostic.plots, print)
-walk(empirical.diagnostic.plots, print)
+# walk(simulation.diagnostic.plots, print)
+# walk(empirical.diagnostic.plots, print)
 
 # construct and print the six primary plots
 mean.by.chromosome.plot <- make.mean.by.chrom.plot(
   ancestry.summary.data, PLOT.EMPIRICAL.METHOD,
-  PLOT.SIMULATION.SOURCE, PLOT.SAMPLE.SET, CHROMOSOMES, PLOT.STYLES
+  PLOT.SIMULATION.SOURCE, PLOT.SAMPLE.SET, SELECTED.CHROMOSOMES,
+  PLOT.STYLES
 )
 print(mean.by.chromosome.plot)
 
 sd.by.chromosome.plot <- make.sd.by.chrom.plot(
   ancestry.summary.data, PLOT.EMPIRICAL.METHOD,
-  PLOT.SIMULATION.SOURCE, PLOT.SAMPLE.SET, CHROMOSOMES, PLOT.STYLES
+  PLOT.SIMULATION.SOURCE, PLOT.SAMPLE.SET, SELECTED.CHROMOSOMES,
+  PLOT.STYLES
 )
 print(sd.by.chromosome.plot)
 
 combined.mean.sd.plot <- make.mean.sd.plot(
   ancestry.summary.data, PLOT.EMPIRICAL.METHOD,
-  PLOT.SIMULATION.SOURCE, PLOT.SAMPLE.SET, CHROMOSOMES, PLOT.STYLES
+  PLOT.SIMULATION.SOURCE, PLOT.SAMPLE.SET, SELECTED.CHROMOSOMES,
+  PLOT.STYLES
 )
 print(combined.mean.sd.plot)
 
@@ -961,7 +1006,7 @@ print(length.versus.sd.plot)
 
 histogram.plot <- make.histogram.plot(
   ancestry.histogram.data, PLOT.EMPIRICAL.METHOD,
-  PLOT.SIMULATION.SOURCE, PLOT.SAMPLE.SET, CHROMOSOMES,
+  PLOT.SIMULATION.SOURCE, PLOT.SAMPLE.SET, SELECTED.CHROMOSOMES,
   HISTOGRAM.BREAKS, PLOT.STYLES
 )
 print(histogram.plot)
