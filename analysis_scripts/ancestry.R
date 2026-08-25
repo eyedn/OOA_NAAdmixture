@@ -8,6 +8,9 @@
 # ancestry.R
 # ______________________________________________________________________________
 
+# pattern: Mixed (unavoidable)
+# reason: required live analysis follows pure helpers with sequential data I/O
+
 
 # set up ----
 library(tidyverse)
@@ -681,6 +684,73 @@ make.length.sd.plot <- function(
 }
 
 
+# build vertically faceted chromosome-length mean and SD plots
+make.length.mean.sd.plot <- function(
+    summary.data, chromosome.lengths, empirical.method,
+    simulation.source.input, sample.set.input, chromosomes, styles
+) {
+  # select plot rows and reshape mean and SD before replicate aggregation
+  selected.data <- prepare.plot.data(
+    summary.data, empirical.method, simulation.source.input,
+    sample.set.input, chromosomes
+  )
+  choices <- attr(selected.data, "plot.choices")
+  data <- selected.data %>%
+    filter(chrom != "all") %>%
+    mutate(chrom = as.character(chrom)) %>%
+    pivot_longer(
+      c(mean, sd), names_to = "stat", values_to = "estimate"
+    ) %>%
+    mutate(stat = factor(stat, levels = c("mean", "sd"))) %>%
+    group_by(
+      chrom, data.type, simulation.source, method, sample.set, series,
+      stat
+    ) %>%
+    summarise(estimate = median(estimate), .groups = "drop") %>%
+    left_join(chromosome.lengths, by = "chrom") %>%
+    mutate(chr.len.mb = if_else(
+      data.type == "Empirical", chr_len_after_qc, chr_len
+    ) / 1e6)
+  if (any(is.na(data$chr.len.mb))) {
+    stop("Chromosome lengths are unavailable for requested data")
+  }
+  # preserve per-series trends and points in both statistic panels
+  plot <- ggplot(data, aes(
+    chr.len.mb, estimate, color = series,
+    linetype = sample.set, group = series
+  )) +
+    geom_smooth(method = "lm", formula = y ~ x, se = FALSE) +
+    geom_point(aes(shape = sample.set, fill = series), size = 3) +
+    facet_grid(rows = vars(stat), scales = "free_y") +
+    scale_color_manual(
+      values = styles$colors, labels = styles$labels, name = NULL
+    ) +
+    scale_fill_manual(
+      values = styles$colors, labels = styles$labels, name = NULL
+    ) +
+    scale_shape_manual(values = styles$shapes) +
+    scale_linetype_manual(values = styles$linetypes) +
+    labs(
+      title = paste(
+        "Chromosome Length, Mean, and Variation in African Ancestry",
+        "Across Autosomes"
+      ),
+      subtitle = choices$subtitle,
+      x = "Chromosome length (Mb)", y = NULL,
+      color = NULL, fill = NULL, shape = NULL, linetype = NULL
+    ) +
+    guides(shape = "none", linetype = "none") +
+    theme_bw(base_size = PLOT.BASE.SIZE) +
+    theme(
+      legend.position = "top",
+      legend.direction = "horizontal",
+      legend.box = "horizontal"
+    )
+
+  return(plot)
+}
+
+
 # select histogram rows using the resolved primary plot choices
 prepare.histogram.plot.data <- function(
     histogram.data, empirical.method, simulation.source.input,
@@ -972,7 +1042,7 @@ empirical.diagnostic.plots <- ancestry.individual.data %>%
 # walk(simulation.diagnostic.plots, print)
 # walk(empirical.diagnostic.plots, print)
 
-# construct and print the six primary plots
+# construct and print the seven primary plots
 mean.by.chromosome.plot <- make.mean.by.chrom.plot(
   ancestry.summary.data, PLOT.EMPIRICAL.METHOD,
   PLOT.SIMULATION.SOURCE, PLOT.SAMPLE.SET, SELECTED.CHROMOSOMES,
@@ -1005,6 +1075,12 @@ length.versus.sd.plot <- make.length.sd.plot(
   PLOT.SIMULATION.SOURCE, PLOT.SAMPLE.SET, CHROMOSOMES, PLOT.STYLES
 )
 print(length.versus.sd.plot)
+
+combined.length.mean.sd.plot <- make.length.mean.sd.plot(
+  ancestry.summary.data, chromosome.lengths, PLOT.EMPIRICAL.METHOD,
+  PLOT.SIMULATION.SOURCE, PLOT.SAMPLE.SET, CHROMOSOMES, PLOT.STYLES
+)
+print(combined.length.mean.sd.plot)
 
 histogram.plot <- make.histogram.plot(
   ancestry.histogram.data, PLOT.EMPIRICAL.METHOD,

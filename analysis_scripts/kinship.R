@@ -8,6 +8,9 @@
 # kinship.R
 # ______________________________________________________________________________
 
+# pattern: Mixed (unavoidable)
+# reason: required live analysis follows pure helpers with sequential data I/O
+
 
 # set up ----
 library(tidyverse)
@@ -27,11 +30,6 @@ PLOT.BASE.SIZE <- 24
 PLOT.STYLES <- list(
   population.colors = c(
     AFR = "#56B4E9", ADX = "#4B1FA8", EUR = "#fb8072"
-  ),
-  series.colors = c(
-    Simulation_small = "#00AEDB",
-    Simulation_large = "#007E9F",
-    Empirical = "#B83264"
   ),
   series.labels = c(
     Simulation_small = "Simulation small",
@@ -253,12 +251,12 @@ make.kinship.plot <- function(data, sample.set, breaks, styles) {
     plot.data,
     aes(
       x = xmid, y = mean.fraction, fill = role,
-      color = data.type, group = data.type
+      group = role
     )
   ) +
     geom_col(
       position = dodge, width = diff(breaks)[1] * 0.85,
-      linewidth = 0.45
+      color = "black", linewidth = 0.45
     ) +
     geom_errorbar(
       data = plot.data,
@@ -267,23 +265,21 @@ make.kinship.plot <- function(data, sample.set, breaks, styles) {
         ymax = mean.fraction + 2 * sd.fraction
       ),
       position = dodge, width = 0, linewidth = 0.45,
-      na.rm = TRUE
+      color = "black", na.rm = TRUE
     ) +
-    facet_grid(role ~ chrom, drop = FALSE) +
+    facet_grid(
+      data.type ~ chrom, drop = FALSE,
+      labeller = labeller(
+        data.type = as_labeller(styles$series.labels)
+      )
+    ) +
     scale_fill_manual(values = styles$population.colors) +
-    scale_color_manual(
-      values = styles$series.colors,
-      labels = styles$series.labels
-    ) +
     labs(
       x = "Pairwise Kinship", y = "Fraction of pairs",
       title = "Pairwise Kinship Distributions Across Chromosomes",
-      fill = NULL, color = NULL
+      fill = NULL
     ) +
-    guides(
-      fill = guide_legend(order = 1),
-      color = guide_legend(order = 2)
-    ) +
+    guides(fill = guide_legend(order = 1)) +
     theme_bw(base_size = PLOT.BASE.SIZE) +
     theme(
       legend.position = "top",
