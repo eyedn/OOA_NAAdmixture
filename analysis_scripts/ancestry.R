@@ -2,7 +2,7 @@
 # Aydin Karatas
 # ___
 # University of Southern California
-# Department of Quantitative and Computational Biology 
+# Department of Quantitative and Computational Biology
 # Mooney Lab
 # ___
 # ancestry.R
@@ -11,1913 +11,863 @@
 
 # set up ----
 library(tidyverse)
-library(nanoparquet)
-library(glue)
-library(ggridges)
-library(ggrepel)
-library(broom)
-library(lme4)
-library(lmerTest)
-library(emmeans)
-library(boot)
 
-set.seed(123)
-
-sim.small.data.dir <- "~/scratch/OOA_NAAdmixture_small/stats"
-sim.large.data.dir <- "~/scratch/OOA_NAAdmixture_large/stats"
-emp.data.dir <- "~/scratch/OOA_NAAdmixture_1kG_cp/stats"
-
-chrom.levels <- c(as.character(22:1), "all")
-chrom.lengths <- read_table(
-  "~/proj/1000GenomeNYGC_hg38_karatas/ONEKG_chr_lens.tsv", col_names = TRUE, 
-  show_col_types = FALSE
-  ) %>%
-  mutate(chr = str_replace(as.character(chr), "chr", "")) %>%
-  rename(chrom = chr)
-
-
-# read in ancestry data ----
-
-
-## small simulation ----
-
-
-### small simulation: tspop ---- 
-sim.small.anc.chr <- map_dfr(
-  1:22,
-  \(chr) {
-    file.path(sim.small.data.dir, glue("ancestry.chr{chr}.parquet")) %>%
-      read_parquet() %>%
-      mutate(
-        rep = as.numeric(rep), component_1_q = as.numeric(afr_tspop),
-        component_2_q = as.numeric(eur_tspop), component_3_q = NA,
-        component_4_q = NA, component_5_q = NA, span = as.numeric(span), k = 0,
-        data.type = "Simulation_small", method = "tspop"
-        ) %>%
-      select(-afr_tspop, -eur_tspop, -afr_q, -eur_q)
-    }
+SIM.SMALL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_small/stats"
+SIM.LARGE.DATA.DIR <- "~/scratch/OOA_NAAdmixture_large/stats"
+EMPIRICAL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_1kG_cp/stats"
+CHROMOSOME.LENGTHS.PATH <- "~/proj/1000GenomeNYGC_hg38_karatas/ONEKG_chr_lens.tsv"
+CHROMOSOMES <- c("1", "5", "10", "14", "18", "22")
+SIMULATION.K <- 2
+EMPIRICAL.K <- 2
+RANDOM.SEED <- 123
+DOWNSAMPLE.SIZE <- 50
+BOOTSTRAP.REPLICATES <- 1000
+HISTOGRAM.BREAKS <- seq(0, 1, by = 0.05)
+ADMIXED.ROLES <- c("ADX", "ASW")
+ANCESTRY.COMPONENT.COLORS <- c(
+  component_1_q = "#0072B2", component_2_q = "#D55E00"
+)
+PLOT.STYLES <- list(
+  colors = c(
+    Simulation_small.full = "#00AEDB",
+    Simulation_small.downsampled = "#75D5F0",
+    Simulation_large.full = "#007E9F",
+    Simulation_large.downsampled = "#6BAFC1",
+    Empirical.full = "#B83264"
+  ),
+  labels = c(
+    Simulation_small.full = "Simulation small",
+    Simulation_small.downsampled = "Downsampled small",
+    Simulation_large.full = "Simulation large",
+    Simulation_large.downsampled = "Downsampled large",
+    Empirical.full = "Empirical"
+  ),
+  shapes = c(full = 21, downsampled = 24),
+  linetypes = c(full = "solid", downsampled = "dashed"),
+  simulation.labels = c(
+    tspop = "tspop", ADMIXTURE = "ADMIXTURE",
+    fastStructure = "fastStructure"
+  ),
+  empirical.colors = c(
+    ADMIXTURE = "#B83264", fastStructure = "#B9584A"
   )
-
-# sim.small.anc.genome <- read_parquet(
-#   file.path(sim.small.data.dir, glue("ancestry.parquet"))
-#   ) %>%
-#   mutate(
-#     rep = as.numeric(rep), chrom = "all", component_1_q = as.numeric(afr_tspop),
-#     component_2_q = as.numeric(eur_tspop), span = as.numeric(span),
-#     component_3_q = NA, component_4_q = NA, component_5_q = NA, k = 0, 
-#     data.type = "Simulation_small", method = "Truth"
-#     ) %>%
-#   select(-afr_tspop, -eur_tspop, -afr_q, -eur_q)
-
-
-### small simulation: ADMIXTURE ---- 
-sim.small.ADMIXTURE.anc.chr <- map_dfr(
-  1:22,
-  \(chr) {
-    file.path(
-      sim.small.data.dir, glue("ancestry_ADMIXTURE_multik.chr{chr}.parquet")
-    ) %>%
-      read_parquet() %>%
-      mutate(
-        chrom = as.character(chrom), sample_id = as.character(sample_id),
-        data.type = "Simulation_small", method = "ADMIXTURE"
-      )
-    }
-  )
-
-# sim.small.ADMIXTURE.anc.genome <- read_parquet(
-#   file.path(sim.small.data.dir, glue("ancestry_ADMIXTURE_multik.parquet"))
-#   ) %>%
-#   mutate(
-#     chrom = "all", sample_id = as.character(sample_id), 
-#     data.type = "Simulation_small", method = "ADMIXTURE"
-#     )
-
-### small simulation: fastStructure ---- 
-sim.small.fastStructure.anc.chr <- map_dfr(
-  1:22,
-  \(chr) {
-    file.path(
-      sim.small.data.dir, glue("ancestry_fastStructure_multik.chr{chr}.parquet")
-    ) %>%
-      read_parquet() %>%
-      mutate(
-        chrom = as.character(chrom), sample_id = as.character(sample_id),
-        data.type = "Simulation_small", method = "fastStructure"
-      )
-    }
-  )
-
-# sim.small.fastStructure.anc.genome <- read_parquet(
-#   file.path(
-#     sim.small.data.dir, glue("ancestry_fastStructure_multik.parquet")
-#     )
-#   ) %>%
-#   mutate(
-#     chrom = "all", sample_id = as.character(sample_id), 
-#     data.type = "Simulation_small", method = "fastStructure"
-#     )
-
-
-## large simulation ----
-
-
-### large simulation: tspop ---- 
-sim.large.anc.chr <- map_dfr(
-  1:22,
-  \(chr) {
-    file.path(sim.large.data.dir, glue("ancestry.chr{chr}.parquet")) %>%
-      read_parquet() %>%
-      mutate(
-        rep = as.numeric(rep), component_1_q = as.numeric(afr_tspop),
-        component_2_q = as.numeric(eur_tspop), component_3_q = NA,
-        component_4_q = NA, component_5_q = NA, span = as.numeric(span), k = 0,
-        data.type = "Simulation_large", method = "tspop"
-      ) %>%
-      select(-afr_tspop, -eur_tspop, -afr_q, -eur_q)
-  }
 )
 
-# sim.large.anc.genome <- read_parquet(
-#   file.path(sim.large.data.dir, glue("ancestry.parquet"))
-#   ) %>%
-#   mutate(
-#     rep = as.numeric(rep), chrom = "all", component_1_q = as.numeric(afr_tspop),
-#     component_2_q = as.numeric(eur_tspop), span = as.numeric(span),
-#     component_3_q = NA, component_4_q = NA, component_5_q = NA, k = 0, 
-#     data.type = "Simulation_large", method = "Truth"
-#     ) %>%
-#   select(-afr_tspop, -eur_tspop, -afr_q, -eur_q)
 
+# internal functions ----
 
-### large simulation: ADMIXTURE ---- 
-sim.large.ADMIXTURE.anc.chr <- map_dfr(
-  1:22,
-  \(chr) {
-    file.path(
-      sim.large.data.dir, glue("ancestry_ADMIXTURE_multik.chr{chr}.parquet")
-    ) %>%
-      read_parquet() %>%
-      mutate(
-        chrom = as.character(chrom), sample_id = as.character(sample_id),
-        data.type = "Simulation_large", method = "ADMIXTURE"
-      )
-  }
-)
 
-# sim.ADMIXTURE.anc.genome <- read_parquet(
-#   file.path(sim.small.data.dir, glue("ancestry_ADMIXTURE_multik.parquet"))
-#   ) %>%
-#   mutate(
-#     chrom = "all", sample_id = as.character(sample_id), 
-#     data.type = "Simulation_small", method = "ADMIXTURE"
-#     )
-
-## small simulation: fastStructure ---- 
-sim.large.fastStructure.anc.chr <- map_dfr(
-  1:22,
-  \(chr) {
-    file.path(
-      sim.large.data.dir, glue("ancestry_fastStructure_multik.chr{chr}.parquet")
-    ) %>%
-      read_parquet() %>%
-      mutate(
-        chrom = as.character(chrom), sample_id = as.character(sample_id),
-        data.type = "Simulation_large", method = "fastStructure"
-      )
-  }
-)
-
-# sim.large.fastStructure.anc.genome <- read_parquet(
-#   file.path(
-#     sim.large.data.dir, glue("ancestry_fastStructure_multik.parquet")
-#     )
-#   ) %>%
-#   mutate(
-#     chrom = "all", sample_id = as.character(sample_id), 
-#     data.type = "Simulation_large", method = "fastStructure"
-#     )
-
-
-## empirical ----
-
-
-### empirical: ADMIXTURE ----
-emp.ADMIXTURE.anc.chr <- map_dfr(
-  1:22,
-  \(chr) {
-    file.path(
-      emp.data.dir, glue("ancestry_ADMIXTURE_multik.chr{chr}.parquet")
-      ) %>%
-      read_parquet() %>%
-      mutate(
-        chrom = as.character(chrom), sample_id = as.character(sample_id),
-        data.type = "Empirical", method = "ADMIXTURE"
-      )
-    }
-  )
-
-emp.ADMIXTURE.anc.genome <- read_parquet(
-  file.path(emp.data.dir, glue("ancestry_ADMIXTURE_multik.parquet"))
-  ) %>%
-  mutate(
-    chrom = "all", sample_id = as.character(sample_id), data.type = "Empirical", 
-    method = "ADMIXTURE"
-    )
-
-
-### empirical: fastStructure ----
-emp.fastStructure.anc.chr <- map_dfr(
-  1:22,
-  \(chr) {
-    file.path(
-      emp.data.dir, glue("ancestry_fastStructure_multik.chr{chr}.parquet")
-      ) %>%
-      read_parquet() %>%
-      mutate(
-        chrom = as.character(chrom), sample_id = as.character(sample_id),
-        data.type = "Empirical", method = "fastStructure"
-      )
-    }
-  )
-
-emp.fastStructure.anc.genome <- read_parquet(
-  file.path(
-    emp.data.dir, glue("ancestry_fastStructure_multik.parquet")
-    )
-  ) %>%
-  mutate(
-    chrom = "all", sample_id = as.character(sample_id), data.type = "Empirical", 
-    method = "fastStructure"
-    )
-
-
-## empirical: FLARE ----
-# NOTE: results from traceAdmix project, saved as FLARE_anc_lengths.rds
-# emp.FLARE.anc.chr <- readRDS("~/proj/traceAdmix/FLARE_anc_lengths.rds") %>%
-#   rename(chrom = chr, vcf_sample_id = sam, component_1_q = anc1.frac) %>%
-#   filter(vcf_sample_id %in% emp.ADMIXTURE.anc.chr$vcf_sample_id) %>%
-#   mutate(
-#     chrom = as.character(chrom), rep = 0, sample_id = NA, k = 0,
-#     component_2_q = 1 - component_1_q, component_3_q = NA, component_4_q = NA,
-#     component_5_q = NA, span = NA, data.type = "Empirical", method = "FLARE"
-#     ) %>%
-#   select(colnames(emp.ADMIXTURE.anc.chr))
-
-
-## combine ancestry data ----
-anc <- rbind(
-  sim.small.anc.chr, sim.small.ADMIXTURE.anc.chr, 
-  sim.small.fastStructure.anc.chr, sim.large.anc.chr, 
-  sim.large.ADMIXTURE.anc.chr, sim.large.fastStructure.anc.chr,
-  emp.ADMIXTURE.anc.chr, emp.fastStructure.anc.chr, emp.ADMIXTURE.anc.genome, 
-  emp.fastStructure.anc.genome
-  ) %>%
-  mutate(
-    role = ifelse(
-      pop %in% c("AFR", "YRI"), "AFR",
-      ifelse(pop %in% c("EUR", "CEU"), "EUR", "ADX")
-      )
-    )
-
-
-# determine ancestry components ----
-
-
-## inspect K == 2 for simulated ancestry ----
-sim.admixPlot.df <- anc %>%
-  filter(pop == "ADX") %>%
-  mutate(chrom = factor(chrom, levels = chrom.levels)) %>%
-  pivot_longer(
-    starts_with("component_"), names_to = "component", values_to = "q"
-    ) %>%
-  filter(component %in% c("component_1_q", "component_2_q")) 
-
-sim.admixPlot.summary <- sim.admixPlot.df %>%
-  group_by(chrom, rep, data.type, method, component) %>%
-  summarise(
-    mean_q = mean(q, na.rm = TRUE), sd_q = sd(q, na.rm = TRUE), .groups = "drop"
-    )
-sim.admixPlot.summary
-
-
-### small simulation: tspop ----
-sim.small.rep1.tspop.admixPlot <- ggplot(
-  sim.admixPlot.df %>% 
-    filter(method == "tspop", data.type == "Simulation_small", rep == 1),
-  aes(x = vcf_sample_id, y = q, fill = component)
-  ) +
-  geom_col() +
-  facet_wrap(~chrom, ncol = 4) +
-  labs(
-    x = NULL, y = "Ancestry proportion",
-    title = "fastStructure Admixture plots"
-  ) +
-  theme_bw(base_size = 24) +
-  theme(
-    axis.text.x = element_blank(), axis.ticks.x = element_blank(),
-    strip.background = element_blank(), panel.spacing.x = unit(0.1, "lines")
-  )
-sim.small.rep1.tspop.admixPlot
-
-
-### small simulation: ADMIXTURE ----
-sim.small.rep1.ADMIXTURE.admixPlot <- ggplot(
-  sim.admixPlot.df %>% 
-    filter(method == "ADMIXTURE", rep == 1, data.type == "Simulation_small"),
-  aes(x = vcf_sample_id, y = q, fill = component)
-  ) +
-  geom_col() +
-  facet_wrap(~chrom, ncol = 4, scales = "free_x") +
-  labs(
-    x = NULL, y = "Ancestry proportion",
-    title = "ADMIXTURE Admixture plots"
-  ) +
-  theme_bw(base_size = 24) +
-  theme(
-    axis.text.x = element_blank(), axis.ticks.x = element_blank(),
-    strip.background = element_blank(), panel.spacing.x = unit(0.1, "lines")
-  )
-sim.small.rep1.ADMIXTURE.admixPlot
-
-
-### small simulation: fastStructure ----
-sim.small.rep1.fastStructure.admixPlot <- ggplot(
-  sim.admixPlot.df %>% 
-    filter(method == "fastStructure", rep == 1, data.type == "Simulation_small"),
-  aes(x = vcf_sample_id, y = q, fill = component)
-) +
-  geom_col() +
-  facet_wrap(~chrom, ncol = 4, scales = "free_x") +
-  labs(
-    x = NULL, y = "Ancestry proportion",
-    title = "fastStructure Admixture plots"
-  ) +
-  theme_bw(base_size = 24) +
-  theme(
-    axis.text.x = element_blank(), axis.ticks.x = element_blank(),
-    strip.background = element_blank(), panel.spacing.x = unit(0.1, "lines")
-  )
-sim.small.rep1.fastStructure.admixPlot
-
-
-### small simulation: tspop ----
-sim.large.rep1.tspop.admixPlot <- ggplot(
-  sim.admixPlot.df %>% 
-    filter(method == "tspop", rep == 1, data.type == "Simulation_large"),
-  aes(x = vcf_sample_id, y = q, fill = component)
-) +
-  geom_col() +
-  facet_wrap(~chrom, ncol = 4) +
-  labs(
-    x = NULL, y = "Ancestry proportion",
-    title = "fastStructure Admixture plots"
-  ) +
-  theme_bw(base_size = 24) +
-  theme(
-    axis.text.x = element_blank(), axis.ticks.x = element_blank(),
-    strip.background = element_blank(), panel.spacing.x = unit(0.1, "lines")
-  )
-sim.large.rep1.tspop.admixPlot
-
-
-### large simulation: ADMIXTURE ----
-sim.large.rep1.ADMIXTURE.admixPlot <- ggplot(
-  sim.admixPlot.df %>% 
-    filter(method == "ADMIXTURE", rep == 1, data.type == "Simulation_large"),
-  aes(x = vcf_sample_id, y = q, fill = component)
-) +
-  geom_col() +
-  facet_wrap(~chrom, ncol = 4, scales = "free_x") +
-  labs(
-    x = NULL, y = "Ancestry proportion",
-    title = "ADMIXTURE Admixture plots"
-  ) +
-  theme_bw(base_size = 24) +
-  theme(
-    axis.text.x = element_blank(), axis.ticks.x = element_blank(),
-    strip.background = element_blank(), panel.spacing.x = unit(0.1, "lines")
-  )
-sim.large.rep1.ADMIXTURE.admixPlot
-
-
-### large simulation: fastStructure ----
-sim.large.rep1.fastStructure.admixPlot <- ggplot(
-  sim.admixPlot.df %>% 
-    filter(method == "fastStructure", rep == 1, data.type == "Simulation_large"),
-  aes(x = vcf_sample_id, y = q, fill = component)
-) +
-  geom_col() +
-  facet_wrap(~chrom, ncol = 4, scales = "free_x") +
-  labs(
-    x = NULL, y = "Ancestry proportion",
-    title = "fastStructure Admixture plots"
-  ) +
-  theme_bw(base_size = 24) +
-  theme(
-    axis.text.x = element_blank(), axis.ticks.x = element_blank(),
-    strip.background = element_blank(), panel.spacing.x = unit(0.1, "lines")
-  )
-sim.large.rep1.fastStructure.admixPlot
-
-
-## inspect optimal k for empirical fastStructure and ADMIXTURE ----
-
-
-### read in fastStructure chooseK results for empirical data ----
-emp.fastStructure.choseK.chr <- map_dfr(
-  1:22,
-  \(chr) {
-    file.path(
-      emp.data.dir, glue("fastStructure_chooseK.chr{chr}.parquet")
-    ) %>%
-      read_parquet()
-  }
-)
-table(emp.fastStructure.choseK.chr$max_marginal_likelihood_k)
-table(emp.fastStructure.choseK.chr$model_components_k)
-
-emp.fastStructure.choseK.genom <- read_parquet(
-  file.path(emp.data.dir, glue("fastStructure_chooseK.parquet"))
-)
-table(emp.fastStructure.choseK.genom$max_marginal_likelihood_k)
-table(emp.fastStructure.choseK.genom$model_components_k)
-
-### assign optimal k ----
-k.use <- 2
-emp.admixPlot.df <- anc %>%
-  filter(pop == "ASW", k %in% c(0, k.use)) %>%
-  mutate(chrom = factor(chrom, levels = chrom.levels)) %>%
-  pivot_longer(
-    starts_with("component_"), names_to = "component", values_to = "q"
-  ) %>%
-  filter(component %in% paste0("component_", seq_len(k.use), "_q"))
-
-emp.admixPlot.summary <- emp.admixPlot.df %>%
-  group_by(chrom, method, component) %>%
-  summarise(
-    mean_q = mean(q, na.rm = TRUE), sd_q = sd(q, na.rm = TRUE), .groups = "drop"
-    )
-emp.admixPlot.summary
-
-
-### empirical: ADMIXTURE ----
-emp.ADMIXTURE.admixPlot <- ggplot(
-  emp.admixPlot.df %>% filter(method == "ADMIXTURE"),
-  aes(x = vcf_sample_id, y = q, fill = component)
-) +
-  geom_col() +
-  facet_wrap(~chrom, ncol = 4, scales = "free_x") +
-  labs(
-    x = NULL, y = "Ancestry proportion",
-    title = "ADMIXTURE Admixture plots"
-  ) +
-  theme_bw(base_size = 24) +
-  theme(
-    axis.text.x = element_blank(), axis.ticks.x = element_blank(),
-    strip.background = element_blank(), panel.spacing.x = unit(0.1, "lines")
-  )
-emp.ADMIXTURE.admixPlot
-
-
-### empirical: fastStructure
-emp.fastStructure.admixPlot <- ggplot(
-  emp.admixPlot.df %>% filter(method == "fastStructure"),
-  aes(x = vcf_sample_id, y = q, fill = component)
-) +
-  geom_col() +
-  facet_wrap(~chrom, ncol = 4, scales = "free_x") +
-  labs(
-    x = NULL, y = "Ancestry proportion",
-    title = "fastStructure Admixture plots"
-  ) +
-  theme_bw(base_size = 24) +
-  theme(
-    axis.text.x = element_blank(), axis.ticks.x = element_blank(),
-    strip.background = element_blank(), panel.spacing.x = unit(0.1, "lines")
-  )
-emp.fastStructure.admixPlot
-
-
-### empirical: FLARE
-# emp.FLARE.admixPlot <- ggplot(
-#   emp.admixPlot.df %>% filter(method == "FLARE"),
-#   aes(x = vcf_sample_id, y = q, fill = component)
-# ) +
-#   geom_col() +
-#   facet_wrap(~chrom, ncol = 4, scales = "free_x") +
-#   labs(
-#     x = NULL, y = "Ancestry proportion",
-#     title = "fastStructure Admixture plots"
-#   ) +
-#   theme_bw(base_size = 24) +
-#   theme(
-#     axis.text.x = element_blank(), axis.ticks.x = element_blank(),
-#     strip.background = element_blank(), panel.spacing.x = unit(0.1, "lines")
-#   )
-# emp.FLARE.admixPlot
-
-
-## determine which component is AFR based on max average ancestry ----
-component.map <- anc %>%
-  filter(role == "ADX", k %in% c(0, k.use)) %>%
-  group_by(rep, pop, chrom, data.type, method) %>%
-  summarise(
-    mean.1 = mean(component_1_q, na.rm = TRUE),
-    sd.1 = sd(component_1_q, na.rm = TRUE),
-    mean.2 = mean(component_2_q, na.rm = TRUE),
-    sd.2 = sd(component_2_q, na.rm = TRUE),
-    .groups = "drop"
-  ) %>%
-  mutate(
-    afr.component = if_else(
-      mean.1 >= mean.2,
-      "component_1_q", "component_2_q"
-    )
-  )
-
-anc <- anc %>%
-  filter(k %in% c(0, k.use)) %>%
-  left_join(
-    component.map %>% select(rep, chrom, data.type, method, afr.component),
-    by = c("rep", "chrom", "data.type", "method")
-  ) %>%
-  mutate(
-    afr.q = case_when(
-      afr.component == "component_1_q" ~ component_1_q,
-      afr.component == "component_2_q" ~ component_2_q,
-      TRUE ~ NA_real_
-    ),
-    eur.q = case_when(
-      afr.component == "component_1_q" ~ component_2_q,
-      afr.component == "component_2_q" ~ component_1_q,
-      TRUE ~ NA_real_
-    )
-  ) %>%
-  select(
-    rep, chrom, pop, sample_id, vcf_sample_id, span, data.type, method, role, 
-    afr.q, eur.q
-    )
-
-
-# summarize data ----
-boot.mean <- function(data, indices) {
-  x <- data[indices]
-  return(mean = mean(x))
-  }
-
-boot.sd <- function(data, indices) {
-  x <- data[indices]
-  return(sd = sd(x))
-  }
-
-anc.summary <- anc %>%
-  filter(role == "ADX") %>%
-  group_by(rep, chrom, pop, data.type, method) %>%
-  group_modify(
-    ~ {
-      x <- .x$afr.q
-      x <- x[!is.na(x)]
-      
-      # default for groups that will not be bootstrapped
-      mean.boot       <- NA_real_
-      mean.boot.lower <- NA_real_
-      mean.boot.upper <- NA_real_
-      sd.boot         <- NA_real_
-      sd.boot.lower   <- NA_real_
-      sd.boot.upper   <- NA_real_
-      
-      # bootstrap only empirical groups
-      if (.y$data.type[[1]] == "Empirical") {
-        boot.mean.fit <- boot(data = x, statistic = boot.mean, R = 1000)
-        boot.mean.ci <- boot.ci(boot.mean.fit, type = "bca")
-        boot.sd.fit <- boot(data = x, statistic = boot.sd, R = 1000)
-        boot.sd.ci <- boot.ci(boot.sd.fit, type = "bca")
-        
-        mean.boot       <- boot.mean.fit$t0
-        mean.boot.lower <- boot.mean.ci$bca[4]
-        mean.boot.upper <- boot.mean.ci$bca[5]
-        sd.boot         <- boot.sd.fit$t0
-        sd.boot.lower   <- boot.sd.ci$bca[4]
-        sd.boot.upper   <- boot.sd.ci$bca[5]
-      }
-      
-      tibble(
-        mean = mean(x),
-        mean.boot = mean.boot,
-        mean.boot.lower = mean.boot.lower,
-        mean.boot.upper = mean.boot.upper,
-        sd = sd(x),
-        sd.boot = sd.boot,
-        sd.boot.lower = sd.boot.lower,
-        sd.boot.upper = sd.boot.upper,
-        median = median(x),
-        q25 = quantile(x, probs = 0.25, names = FALSE),
-        q75 = quantile(x, probs = 0.75, names = FALSE),
-        n = length(x)
-        )
-      }
-    ) %>%
-  ungroup()
-anc.summary
-
-n.downsample <- 50
-n.iterations <- 1000
-anc.sim.downsample.summary <- anc %>%
-  filter(role == "ADX", data.type != "Empirical") %>%
-  group_by(rep, chrom, pop, data.type, method) %>%
-  group_modify(
-    ~ {
-      x <- .x$afr.q
-      x <- x[!is.na(x)]
-      x.sample <- sample(x, size = n.downsample, replace = FALSE)
-
-      tibble(
-        # average estimate across downsampling iterations
-        mean.rand.downsample = mean(x.sample),
-        sd.rand.downsample = sd(x.sample),
-        median.rand.downsample = median(x.sample),
-        q25.rand.downsample = quantile(x.sample, probs = 0.25, names = FALSE),
-        q75.rand.downsample = quantile(x.sample, probs = 0.75, names = FALSE),
-        
-        n.rand.downsample = n.downsample,
-        n.iterations = n.iterations
-      )
-    }
-  ) %>%
-  ungroup()
-anc.sim.downsample.summary
-
-anc.summary <- anc.summary %>%
-  left_join(
-    anc.sim.downsample.summary,
-    by = c("rep", "chrom", "pop", "data.type", "method")
-    )
-anc.summary
-
-anc.summary.chrom.levels <- c("1", "5", "10", "14", "18", "22")
-anc.summary.plot.df <- anc.summary %>%
-  filter(
-    (
-      chrom %in% anc.summary.chrom.levels &
-        data.type == "Simulation_small"
-      ) |
-      (
-        chrom %in% anc.summary.chrom.levels &
-          data.type == "Simulation_large"
-        ) |
-      (
-        chrom %in% c("all", anc.summary.chrom.levels) &
-         data.type == "Empirical" & method != "FLARE"
-        )
-    ) %>%
-  mutate(
-    chrom = factor(
-      chrom, levels = c("all", anc.summary.chrom.levels)
-      ),
-    method = factor(
-      method,
-      levels = c("tspop", "ADMIXTURE", "fastStructure")
-    )
-  )
-
-## boxplots of mean ancestry ----
-make.mean.ancestry.plot <- function(
-    plot.method, empirical.color, chromosome.levels
-    ) {
-  
-  # simulation boxplots: truth plus selected inference method
-  simulation.df <- anc.summary.plot.df %>%
-    filter(
-      data.type != "Empirical", method %in% c("tspop", plot.method),
-      chrom %in% chromosome.levels
-      )
-  
-  # chromosome-specific empirical estimates
-  empirical.chrom.df <- anc.summary.plot.df %>%
-    filter(
-      data.type == "Empirical", method == plot.method,
-      chrom %in% chromosome.levels
-      )
-  
-  # whole-genome empirical estimate
-  empirical.genome.df <- anc.summary.plot.df %>%
-    filter(
-      data.type == "Empirical", method == plot.method, chrom == "all"
-      )
-  
-  fill.values <- c(
-    "tspop.Simulation_small" = "#00AEDB", 
-    "tspop.Simulation_large" = "#007E9F",
-    "ADMIXTURE.Simulation_small" = "#FA9EBC",
-    "ADMIXTURE.Simulation_large" = "#E66791",
-    "fastStructure.Simulation_small" = "#FFDBD1",
-    "fastStructure.Simulation_large" = "#E69B88"
-    )
-  
-  fill.breaks <- if (plot.method == "ADMIXTURE") {
-    c(
-      "tspop.Simulation_small", "tspop.Simulation_large",
-      "ADMIXTURE.Simulation_small", "ADMIXTURE.Simulation_large"
-      )
-    } else {
-    c(
-      "tspop.Simulation_small", "tspop.Simulation_large",
-      "fastStructure.Simulation_small", "fastStructure.Simulation_large"
-      )
-    }
-  
-  fill.labels <- if (plot.method == "ADMIXTURE") {
-    c(
-      "Truth (small)", "Truth (large)", "ADMIXTURE (small)", "ADMIXTURE (large)"
-      )
-    } else {
-    c(
-      "Truth (small)", "Truth (large)", "fastStructure (small)",
-      "fastStructure (large)"
-      )
-    }
-  
-  ggplot(
-    simulation.df,
-    aes(x = chrom, y = mean, fill = interaction(method, data.type))
-    ) +
-    # whole-genome empirical 95% CI
-    geom_rect(
-      data = empirical.genome.df,
-      aes(
-        xmin = -Inf, xmax = Inf, ymin = mean.boot.lower, ymax = mean.boot.upper
-        ),
-      inherit.aes = FALSE, fill = empirical.color, color = empirical.color,
-      alpha = 0.10, linetype = "dotted"
-    ) +
-    # whole-genome empirical mean
-    geom_hline(
-      data = empirical.genome.df, aes(yintercept = mean.boot),
-      inherit.aes = FALSE, color = empirical.color, linetype = "dashed", 
-      linewidth = 0.8
-      ) +
-    # simulation values
-    geom_boxplot(
-      aes(group = interaction(chrom, data.type, method)), outlier.shape = NA,
-      color = "black"
-      ) +
-    # chromosome-specific empirical 95% CI
-    # geom_errorbar(
-    #   data = empirical.chrom.df,
-    #   aes(x = chrom, ymin = mean.boot.lower, ymax = mean.boot.upper),
-    #   inherit.aes = FALSE, color = empirical.color, width = 0.15, 
-    #   linewidth = 1.1
-    #   ) +
-    # chromosome-specific empirical mean
-    # geom_point(
-    #   data = empirical.chrom.df,
-    #   aes(x = chrom, y = mean.boot), inherit.aes = FALSE, shape = 23, size = 4,
-    #   stroke = 1.1, color = "black", fill = empirical.color
-    # ) +
-    # formatting
-    scale_fill_manual(
-      name = NULL, breaks = fill.breaks, labels = fill.labels, 
-      values = fill.values
-      ) +
-    scale_x_discrete(
-      limits = chromosome.levels,
-      drop = FALSE
-    ) +
-    labs(
-      x = "Chromosome",
-      y = "Mean African ancestry",
-      title = paste(
-        "Sample Mean of African Ancestry:",
-        plot.method
-      ),
-      subtitle = paste(
-        "Boxplots: simulation means;",
-        "diamonds and error bars: empirical chromosome means and 95% CIs;",
-        "dashed line and band: empirical whole-genome mean and 95% CI", 
-        sep = "\n"
-      )
-    ) +
-    guides(
-      fill = guide_legend(
-        order = 1,
-        override.aes = list(
-          shape = 23, color = "black", linewidth = 1, size = 3
-          )
-        )
-      ) +
-    theme_bw(base_size = 24) +
-    theme(legend.position = "top", panel.grid.minor = element_blank())
-  }
-
-meanAfrAnc.admixture.plot <- make.mean.ancestry.plot(
-  plot.method = "ADMIXTURE", empirical.color = "#B83264", 
-  chromosome.levels = anc.summary.chrom.levels
-  )
-meanAfrAnc.admixture.plot
-
-meanAfrAnc.fastStructure.plot <- make.mean.ancestry.plot(
-  plot.method = "fastStructure", empirical.color = "#B9584A", 
-  chromosome.levels = anc.summary.chrom.levels
-  )
-meanAfrAnc.fastStructure.plot
-
-
-## boxplots of sd ancestry ----
-make.sd.ancestry.plot <- function(
-    plot.method, empirical.color, chromosome.levels
-    ) {
-  
-  # truth plus the selected inference method
-  simulation.df <- anc.summary.plot.df %>%
-    filter(
-      data.type != "Empirical", method %in% c("tspop", plot.method),
-      chrom %in% chromosome.levels
-      )
-  
-  # chromosome-specific empirical estimates
-  empirical.chrom.df <- anc.summary.plot.df %>%
-    filter(
-      data.type == "Empirical", method == plot.method,
-      chrom %in% chromosome.levels
-      )
-  
-  # Whole-genome empirical estimate
-  empirical.genome.df <- anc.summary.plot.df %>%
-    filter(
-      data.type == "Empirical", method == plot.method, chrom == "all"
-      )
-  
-  fill.values <- c(
-    "tspop.Simulation_small" = "#00AEDB",
-    "tspop.Simulation_large" = "#007E9F",
-    "ADMIXTURE.Simulation_small" = "#FA9EBC",
-    "ADMIXTURE.Simulation_large" = "#E66791",
-    "fastStructure.Simulation_small" = "#FFDBD1",
-    "fastStructure.Simulation_large" = "#E69B88"
-  )
-  
-  if (plot.method == "ADMIXTURE") {
-    fill.breaks <- c(
-      "tspop.Simulation_small", "tspop.Simulation_large",
-      "ADMIXTURE.Simulation_small", "ADMIXTURE.Simulation_large"
-    )
-    
-    fill.labels <- c(
-      "Truth (small)", "Truth (large)", "ADMIXTURE (small)", "ADMIXTURE (large)"
-      )
-    } else {
-    fill.breaks <- c(
-      "tspop.Simulation_small", "tspop.Simulation_large", 
-      "fastStructure.Simulation_small", "fastStructure.Simulation_large"
-      )
-    
-    fill.labels <- c(
-      "Truth (small)", "Truth (large)", "fastStructure (small)", 
-      "fastStructure (large)"
-      )
-    }
-  
-  ggplot(
-    simulation.df,
-    aes(x = chrom, y = sd, fill = interaction(method, data.type))
-    ) +
-    # whole-genome empirical 95% CI
-    geom_rect(
-      data = empirical.genome.df,
-      aes(xmin = -Inf, xmax = Inf, ymin = sd.boot.lower, ymax = sd.boot.upper),
-      inherit.aes = FALSE, fill = empirical.color, color = empirical.color,
-      alpha = 0.10, linetype = "dotted"
-      ) +
-    # whole-genome empirical SD
-    geom_hline(
-      data = empirical.genome.df, aes(yintercept = sd.boot), 
-      inherit.aes = FALSE, color = empirical.color, linetype = "dashed",
-      linewidth = 0.8
-      ) +
-    # simulation SD values
-    geom_boxplot(
-      aes(group = interaction(chrom, data.type, method)), outlier.shape = NA, 
-      color = "black"
-      ) +
-    # chromosome-specific empirical 95% CIs
-    geom_errorbar(
-      data = empirical.chrom.df,
-      aes(x = chrom, ymin = sd.boot.lower, ymax = sd.boot.upper),
-      inherit.aes = FALSE, color = empirical.color, width = 0.15, 
-      linewidth = 1.1
-    ) +
-    # chromosome-specific empirical SDs
-    geom_point(
-      data = empirical.chrom.df, aes(x = chrom, y = sd.boot), 
-      inherit.aes = FALSE, shape = 23, size = 4, stroke = 1.1,
-      color = "black", fill = empirical.color
-    ) +
-    # formatting
-    scale_fill_manual(
-      name = NULL, breaks = fill.breaks, labels = fill.labels, 
-      values = fill.values
-      ) +
-    scale_x_discrete(limits = chromosome.levels, drop = FALSE) +
-    labs(
-      x = "Chromosome",
-      y = "Standard deviation of African ancestry",
-      title = paste(
-        "Sample Standard Deviation of African Ancestry:",
-        plot.method
-      ),
-      subtitle = paste(
-        "Boxplots: simulation standard deviations;",
-        "diamonds and error bars: empirical chromosome SDs and 95% CIs;",
-        "dashed line and band: empirical whole-genome SD and 95% CI",
-        sep = "\n"
-      )
-    ) +
-    guides(
-      fill = guide_legend(
-        order = 1,
-        override.aes = list(
-          shape = 23, color = "black", linewidth = 1, size = 3
-          )
-        )
-      ) +
-    theme_bw(base_size = 24) +
-    theme(legend.position = "top", panel.grid.minor = element_blank())
-  }
-
-
-sdAfrAnc.admixture.plot <- make.sd.ancestry.plot(
-  plot.method = "ADMIXTURE", empirical.color = "#B83264", 
-  chromosome.levels = anc.summary.chrom.levels
-  )
-sdAfrAnc.admixture.plot
-
-sdAfrAnc.fastStructure.plot <- make.sd.ancestry.plot(
-  plot.method = "fastStructure", empirical.color = "#B9584A",
-  chromosome.levels = anc.summary.chrom.levels
-  )
-sdAfrAnc.fastStructure.plot
-
-
-## combined boxplot for mean and sd ----
-anc.summary.facet.df <- anc.summary.plot.df %>%
-  filter(data.type != "Empirical") %>%
-  pivot_longer(
-    cols = c(mean, sd), names_to = "stat", values_to = "estimate"
-    ) %>%
-  mutate(
-    stat = factor(
-      stat, levels = c("mean", "sd"),
-      labels = c("Mean ancestry", "Standard dev. of ancestry")
-      )
-    )
-anc.empirical.lines.df <- anc.summary.plot.df %>%
-  filter(
-    data.type == "Empirical", chrom == "all", 
-    method %in% c("ADMIXTURE", "fastStructure")
-    ) %>%
-  pivot_longer(
-    cols = c(mean, sd), names_to = "stat", values_to = "estimate"
-    ) %>%
-  mutate(
-    stat = factor(
-      stat, levels = c("mean", "sd"),
-      labels = c("Mean ancestry", "Standard dev. of ancestry"))
-    )
-
-# combined plot
-make.afr.ancestry.facet.plot <- function(
-    plot.method, empirical.color, chromosome.levels
-    ) {
-  
-  stat.levels <- c("mean", "sd")
-  stat.labels <- c(mean = "Mean ancestry", sd = "Standard dev. of ancestry")
-  
-  # simulation values: truth plus selected inference method
-  simulation.facet.df <- anc.summary.plot.df %>%
-    filter(
-      data.type != "Empirical", method %in% c("tspop", plot.method),
-      chrom %in% chromosome.levels
-      ) %>%
-    pivot_longer(
-      cols = c(mean, sd), names_to = "stat", values_to = "estimate"
-      ) %>%
-    mutate(stat = factor(stat, levels = stat.levels))
-  
-  # chromosome-specific empirical estimates and 95% CIs
-  empirical.chrom.facet.df <- bind_rows(
-    anc.summary.plot.df %>%
-      filter(
-        data.type == "Empirical", method == plot.method,
-        chrom %in% chromosome.levels
-        ) %>%
-      transmute(
-        chrom, stat = "mean", estimate = mean.boot, lower = mean.boot.lower,
-        upper = mean.boot.upper
-        ),
-    anc.summary.plot.df %>%
-      filter(
-        data.type == "Empirical", method == plot.method,
-        chrom %in% chromosome.levels
-        ) %>%
-      transmute(
-        chrom, stat = "sd", estimate = sd.boot, lower = sd.boot.lower,
-        upper = sd.boot.upper
-        )
-    ) %>%
-    mutate(stat = factor(stat, levels = stat.levels))
-  
-  # whole-genome empirical estimates and 95% CIs
-  empirical.genome.facet.df <- bind_rows(
-    anc.summary.plot.df %>%
-      filter(
-        data.type == "Empirical", method == plot.method, chrom == "all"
-        ) %>%
-      transmute(
-        stat = "mean", estimate = mean.boot, lower = mean.boot.lower,
-        upper = mean.boot.upper
-        ),
-    anc.summary.plot.df %>%
-      filter(
-        data.type == "Empirical", method == plot.method, chrom == "all"
-        ) %>%
-      transmute(
-        stat = "sd", estimate = sd.boot, lower = sd.boot.lower,
-        upper = sd.boot.upper
-        )
-    ) %>%
-    mutate(stat = factor(stat, levels = stat.levels))
-  
-  fill.values <- c(
-    "tspop.Simulation_small" = "#00AEDB",
-    "tspop.Simulation_large" = "#007E9F",
-    "ADMIXTURE.Simulation_small" = "#FA9EBC",
-    "ADMIXTURE.Simulation_large" = "#E66791",
-    "fastStructure.Simulation_small" = "#FFDBD1",
-    "fastStructure.Simulation_large" = "#E69B88"
-  )
-  
-  if (plot.method == "ADMIXTURE") {
-    fill.breaks <- c(
-      "tspop.Simulation_small", "tspop.Simulation_large",
-      "ADMIXTURE.Simulation_small", "ADMIXTURE.Simulation_large"
-      )
-    fill.labels <- c(
-      "Truth (small)", "Truth (large)", "ADMIXTURE (small)", "ADMIXTURE (large)"
-      )
-    } else {
-    fill.breaks <- c(
-      "tspop.Simulation_small", "tspop.Simulation_large",
-      "fastStructure.Simulation_small", "fastStructure.Simulation_large"
-      )
-    fill.labels <- c(
-      "Truth (small)", "Truth (large)", "fastStructure (small)", 
-      "fastStructure (large)"
-      )
-    }
-  
-  ggplot(
-    simulation.facet.df,
-    aes(x = chrom, y = estimate, fill = interaction(method, data.type))
-    ) +
-    # whole-genome empirical 95% CI bands
-    geom_rect(
-      data = empirical.genome.facet.df,
-      aes(xmin = -Inf, xmax = Inf, ymin = lower, ymax = upper),
-      inherit.aes = FALSE, fill = empirical.color, color = empirical.color,
-      alpha = 0.10, linetype = "dotted"
-      ) +
-    # whole-genome empirical estimates
-    geom_hline(
-      data = empirical.genome.facet.df, aes(yintercept = estimate),
-      inherit.aes = FALSE, color = empirical.color, linetype = "dashed",
-      linewidth = 0.8
-      ) +
-    # simulation estimates
-    geom_boxplot(
-      aes(group = interaction(chrom, data.type, method)), outlier.shape = NA,
-      color = "black"
-      ) +
-    # chromosome-specific empirical 96% CIs
-    geom_errorbar(
-      data = empirical.chrom.facet.df,
-      aes(x = chrom, ymin = lower, ymax = upper), inherit.aes = FALSE,
-      color = empirical.color, width = 0.15, linewidth = 1.1
-      ) +
-    # chromosome-specific empirical estimates
-    geom_point(
-      data = empirical.chrom.facet.df, aes(x = chrom, y = estimate),
-      inherit.aes = FALSE, shape = 23, size = 4, stroke = 1.1, color = "black",
-      fill = empirical.color
-      ) +
-    # formating
-    facet_grid(
-      rows = vars(stat), scales = "free_y",
-      labeller = labeller(stat = stat.labels)
-      ) +
-    scale_x_discrete(limits = chromosome.levels, drop = FALSE) +
-    scale_fill_manual(
-      name = NULL, breaks = fill.breaks, labels = fill.labels, 
-      values = fill.values
-      ) +
-    labs(
-      x = "Chromosome", y = NULL,
-      title = paste(
-        "African Ancestry on Admixed Chromosomes:",
-        plot.method
-      ),
-      subtitle = paste(
-        "Boxplots: simulation replicate estimates;",
-        "diamonds and error bars: empirical chromosome estimates and 95% CIs;",
-        "dashed lines and bands: empirical whole-genome estimates and 95% CIs",
-        sep = "\n"
-        )
-      ) +
-    guides(
-      fill = guide_legend(
-        order = 1,
-        override.aes = list(shape = 23, color = "black", linewidth = 1,
-          size = 3
-          )
-        )
-      ) +
-    theme_bw(base_size = 24) +
-    theme(
-      legend.position = "top", panel.grid.minor = element_blank(),
-      strip.background = element_rect(fill = "grey95"),
-      strip.text.y = element_text(size = 18)
-    )
-  }
-
-
-afrAnc.admixture.facet.plot <- make.afr.ancestry.facet.plot(
-  plot.method = "ADMIXTURE", empirical.color = "#B83264", 
-  chromosome.levels = anc.summary.chrom.levels
-  )
-afrAnc.admixture.facet.plot
-
-afrAnc.fastStructure.facet.plot <- make.afr.ancestry.facet.plot(
-  plot.method = "fastStructure", empirical.color = "#B9584A",
-  chromosome.levels = anc.summary.chrom.levels
-  )
-afrAnc.fastStructure.facet.plot
-
-
-# mean ancestry vs chromosome length ----
-anc.length.mean.df <- anc.summary %>%
-  filter(chrom != "all") %>%
-  left_join(chrom.lengths, by = "chrom") %>%
-  mutate(
-    chr.len.mb = if_else(
-      data.type != "Empirical", chr_len, chr_len_after_qc
-      ) / 1e6,
-    ) %>%
-  group_by(data.type) %>%
-  mutate(chr.len.mb.c = chr.len.mb - mean(chr.len.mb)) %>%
-  ungroup()
-
-
-## plot ----
-make.anc.length.mean.plot <- function(plot.method) {
-  
-  # Method-specific colors
-  if (plot.method == "ADMIXTURE") {
-    
-    series.breaks <- c(
-      "tspop.Simulation_small",
-      "tspop.Simulation_large",
-      "ADMIXTURE.Simulation_small",
-      "ADMIXTURE.Simulation_large",
-      "ADMIXTURE.Empirical"
-    )
-    
-    series.labels <- c(
-      "Truth (small)",
-      "Truth (large)",
-      "ADMIXTURE (small)",
-      "ADMIXTURE (large)",
-      "ADMIXTURE (empirical)"
-    )
-    
-    series.colors <- c(
-      "tspop.Simulation_small" = "#00AEDB",
-      "tspop.Simulation_large" = "#007E9F",
-      "ADMIXTURE.Simulation_small" = "#FA9EBC",
-      "ADMIXTURE.Simulation_large" = "#E66791",
-      "ADMIXTURE.Empirical" = "#B83264"
-    )
-    
-    method.shape <- 25
-    
-  } else if (plot.method == "fastStructure") {
-    
-    series.breaks <- c(
-      "tspop.Simulation_small",
-      "tspop.Simulation_large",
-      "fastStructure.Simulation_small",
-      "fastStructure.Simulation_large",
-      "fastStructure.Empirical"
-    )
-    
-    series.labels <- c(
-      "Truth (small)",
-      "Truth (large)",
-      "fastStructure (small)",
-      "fastStructure (large)",
-      "fastStructure (empirical)"
-    )
-    
-    series.colors <- c(
-      "tspop.Simulation_small" = "#00AEDB",
-      "tspop.Simulation_large" = "#007E9F",
-      "fastStructure.Simulation_small" = "#FFDBD1",
-      "fastStructure.Simulation_large" = "#E69B88",
-      "fastStructure.Empirical" = "#B9584A"
-    )
-    
-    method.shape <- 24
-    
-  } else {
-    stop("plot.method must be 'ADMIXTURE' or 'fastStructure'")
-  }
-  
-  # Truth plus the selected inference method
-  plot.df <- anc.length.mean.df %>%
-    filter(
-      (
-        data.type %in% c("Simulation_small", "Simulation_large") &
-          method %in% c("tspop", plot.method)
-      ) |
-        (
-          data.type == "Empirical" &
-            method == plot.method
-        )
-    ) %>%
-    group_by(
-      chrom,
-      pop,
-      data.type,
-      method,
-      chr.len.mb
-    ) %>%
-    summarize(
-      estimate = median(mean, na.rm = TRUE),
-      .groups = "drop"
-    ) %>%
-    mutate(
-      chrom = as.character(chrom),
-      method = factor(
-        method,
-        levels = c("tspop", "ADMIXTURE", "fastStructure")
-      ),
-      data.type = factor(
-        data.type,
-        levels = c(
-          "Simulation_small",
-          "Simulation_large",
-          "Empirical"
-        )
-      ),
-      series = interaction(
-        method,
-        data.type,
-        sep = ".",
-        drop = TRUE
-      ),
-      point.shape = if_else(
-        method == "tspop",
-        21,
-        method.shape
-      ),
-      label = (
-        data.type == "Empirical" &
-          as.integer(chrom) %% 3 == 1
-      )
-    )
-  
-  ggplot(
-    plot.df,
-    aes(
-      x = chr.len.mb,
-      y = estimate,
-      fill = series,
-      color = series,
-      linetype = data.type,
-      group = series
-    )
-  ) +
-    geom_smooth(
-      method = "lm",
-      formula = y ~ x,
-      se = FALSE,
-      linewidth = 2
-    ) +
-    geom_point(
-      aes(shape = method),
-      color = "black",
-      stroke = 1,
-      size = 4
-    ) +
-    geom_text_repel(
-      data = plot.df %>% filter(label),
-      aes(label = chrom),
-      inherit.aes = FALSE,
-      x = plot.df %>% filter(label) %>% pull(chr.len.mb),
-      y = plot.df %>% filter(label) %>% pull(estimate),
-      color = "black",
-      size = 5,
-      seed = 123,
-      min.segment.length = 0,
-      force = 15,
-      force_pull = 5,
-      box.padding = 0.5,
-      point.padding = 0.25,
-      max.iter = 10000,
-      show.legend = FALSE
-    ) +
-    scale_fill_manual(
-      name = NULL,
-      breaks = series.breaks,
-      labels = series.labels,
-      values = series.colors
-    ) +
-    scale_color_manual(
-      name = NULL,
-      breaks = series.breaks,
-      labels = series.labels,
-      values = series.colors
-    ) +
-    scale_shape_manual(
-      name = NULL,
-      values = c(
-        "tspop" = 21,
-        "ADMIXTURE" = 25,
-        "fastStructure" = 24
-      )
-    ) +
-    scale_linetype_manual(
-      name = NULL,
-      values = c(
-        "Simulation_small" = "solid",
-        "Simulation_large" = "longdash",
-        "Empirical" = "dashed"
-      )
-    ) +
-    labs(
-      x = "Chromosome length (Mb)",
-      y = "Mean African ancestry",
-      title = paste(
-        "Chromosome Ancestry versus Chromosome Length:",
-        plot.method
-      )
-    ) +
-    guides(
-      color = "none",
-      shape = "none",
-      linetype = "none",
-      fill = guide_legend(
-        order = 1,
-        override.aes = list(
-          color = "black",
-          linetype = 0,
-          shape = c(
-            21,
-            21,
-            method.shape,
-            method.shape,
-            method.shape
-          )
-        )
-      )
-    ) +
-    theme_bw(base_size = 24) +
-    theme(
-      legend.position = "top",
-      panel.grid.minor = element_blank()
-    )
-}
-
-anc.length.mean.admixture.plot <- make.anc.length.mean.plot(
-  plot.method = "ADMIXTURE"
-)
-anc.length.mean.admixture.plot
-
-anc.length.mean.fastStructure.plot <- make.anc.length.mean.plot(
-  plot.method = "fastStructure"
-)
-anc.length.mean.fastStructure.plot
-
-
-# sd ancestry vs chromosome length ----
-make.anc.length.sd.plot <- function(plot.method) {
-  
-  if (plot.method == "ADMIXTURE") {
-    
-    series.breaks <- c(
-      "tspop.Simulation_small",
-      "tspop.Simulation_large",
-      "ADMIXTURE.Simulation_small",
-      "ADMIXTURE.Simulation_large",
-      "ADMIXTURE.Empirical"
-    )
-    
-    series.labels <- c(
-      "Truth (small)",
-      "Truth (large)",
-      "ADMIXTURE (small)",
-      "ADMIXTURE (large)",
-      "ADMIXTURE (empirical)"
-    )
-    
-    series.colors <- c(
-      "tspop.Simulation_small" = "#00AEDB",
-      "tspop.Simulation_large" = "#007E9F",
-      "ADMIXTURE.Simulation_small" = "#FA9EBC",
-      "ADMIXTURE.Simulation_large" = "#E66791",
-      "ADMIXTURE.Empirical" = "#B83264"
-    )
-    
-    method.shape <- 25
-    
-  } else if (plot.method == "fastStructure") {
-    
-    series.breaks <- c(
-      "tspop.Simulation_small",
-      "tspop.Simulation_large",
-      "fastStructure.Simulation_small",
-      "fastStructure.Simulation_large",
-      "fastStructure.Empirical"
-    )
-    
-    series.labels <- c(
-      "Truth (small)",
-      "Truth (large)",
-      "fastStructure (small)",
-      "fastStructure (large)",
-      "fastStructure (empirical)"
-    )
-    
-    series.colors <- c(
-      "tspop.Simulation_small" = "#00AEDB",
-      "tspop.Simulation_large" = "#007E9F",
-      "fastStructure.Simulation_small" = "#FFDBD1",
-      "fastStructure.Simulation_large" = "#E69B88",
-      "fastStructure.Empirical" = "#B9584A"
-    )
-    
-    method.shape <- 24
-    
-  } else {
-    stop("plot.method must be 'ADMIXTURE' or 'fastStructure'")
-  }
-  
-  anc.length.sd.plot.df <- anc.summary %>%
-    filter(
-      chrom != "all",
-      (
-        data.type %in% c("Simulation_small", "Simulation_large") &
-          method %in% c("tspop", plot.method)
-      ) |
-        (
-          data.type == "Empirical" &
-            method == plot.method
-        )
-    ) %>%
-    group_by(
-      chrom,
-      pop,
-      data.type,
-      method
-    ) %>%
-    summarize(
-      estimate = mean(sd, na.rm = TRUE),
-      .groups = "drop"
-    ) %>%
-    left_join(
-      chrom.lengths,
-      by = "chrom"
-    ) %>%
-    mutate(
-      chr.len.mb = if_else(
-        data.type == "Empirical",
-        chr_len_after_qc,
-        chr_len
-      ) / 1e6,
-      chrom = as.character(chrom),
-      method = factor(
-        method,
-        levels = c("tspop", "ADMIXTURE", "fastStructure")
-      ),
-      data.type = factor(
-        data.type,
-        levels = c(
-          "Simulation_small",
-          "Simulation_large",
-          "Empirical"
-        )
-      ),
-      series = interaction(
-        method,
-        data.type,
-        sep = ".",
-        drop = TRUE
-      ),
-      label = (
-        data.type == "Empirical" &
-          as.integer(chrom) %% 3 == 1
-      )
-    )
-  
-  ggplot(
-    anc.length.sd.plot.df,
-    aes(
-      x = chr.len.mb,
-      y = estimate,
-      fill = series,
-      color = series,
-      linetype = data.type,
-      group = series
-    )
-  ) +
-    geom_smooth(
-      method = "lm",
-      formula = y ~ x,
-      se = FALSE,
-      linewidth = 2
-    ) +
-    geom_point(
-      aes(shape = method),
-      color = "black",
-      stroke = 1,
-      size = 4
-    ) +
-    geom_text_repel(
-      data = anc.length.sd.plot.df %>%
-        filter(label),
-      aes(
-        x = chr.len.mb,
-        y = estimate,
-        label = chrom
-      ),
-      inherit.aes = FALSE,
-      color = "black",
-      size = 5,
-      seed = 123,
-      min.segment.length = 0,
-      force = 15,
-      force_pull = 5,
-      box.padding = 0.5,
-      point.padding = 0.25,
-      max.iter = 10000,
-      show.legend = FALSE
-    ) +
-    scale_fill_manual(
-      name = NULL,
-      breaks = series.breaks,
-      labels = series.labels,
-      values = series.colors
-    ) +
-    scale_color_manual(
-      name = NULL,
-      breaks = series.breaks,
-      labels = series.labels,
-      values = series.colors
-    ) +
-    scale_shape_manual(
-      name = NULL,
-      values = c(
-        "tspop" = 21,
-        "ADMIXTURE" = 25,
-        "fastStructure" = 24
-      )
-    ) +
-    scale_linetype_manual(
-      name = NULL,
-      values = c(
-        "Simulation_small" = "solid",
-        "Simulation_large" = "longdash",
-        "Empirical" = "dashed"
-      )
-    ) +
-    labs(
-      x = "Chromosome length (Mb)",
-      y = "Mean standard deviation of African ancestry",
-      title = paste(
-        "Chromosome Ancestry Standard Deviation versus Chromosome Length:",
-        plot.method
-      )
-    ) +
-    guides(
-      color = "none",
-      shape = "none",
-      linetype = "none",
-      fill = guide_legend(
-        order = 1,
-        override.aes = list(
-          color = "black",
-          linetype = 0,
-          shape = c(
-            21,
-            21,
-            method.shape,
-            method.shape,
-            method.shape
-          )
-        )
-      )
-    ) +
-    theme_bw(base_size = 24) +
-    theme(
-      legend.position = "top",
-      panel.grid.minor = element_blank()
-    )
-}
-
-## plot ----
-anc.length.sd.admixture.plot <- make.anc.length.sd.plot(
-  plot.method = "ADMIXTURE"
-)
-
-anc.length.sd.fastStructure.plot <- make.anc.length.sd.plot(
-  plot.method = "fastStructure"
-)
-
-anc.length.sd.admixture.plot
-anc.length.sd.fastStructure.plot
-
-
-# mean density curves ----
-
-
-## calculate number of individuals per ancestry proportion bin ----
-breaks <- seq(0, 1, by = 0.05)
-anc.hist.chrom.levels <- c(anc.summary.chrom.levels, "all")
-
-## Prepare ancestry values ----
-anc.hist <- anc %>%
-  filter(
-    role == "ADX",
-    chrom %in% anc.hist.chrom.levels,
-    !is.na(afr.q),
-    between(afr.q, 0, 1),
-    method %in% c("tspop", "ADMIXTURE", "fastStructure")
-  ) %>%
-  transmute(
-    chrom,
-    rep,
-    pop,
-    data.type,
-    method,
-    ancestry = afr.q
-  ) %>%
-  mutate(
-    chrom = factor(
-      chrom,
-      levels = anc.hist.chrom.levels
-    ),
-    data.type = factor(
-      data.type,
-      levels = c(
-        "Simulation_small",
-        "Simulation_large",
-        "Empirical"
-      )
-    ),
-    method = factor(
-      method,
-      levels = c(
-        "tspop",
-        "ADMIXTURE",
-        "fastStructure"
-      )
-    ),
-    series = interaction(
-      method,
-      data.type,
-      sep = ".",
-      drop = TRUE
-    )
-  )
-
-## Histogram summary ----
-anc.hist.summary <- anc.hist %>%
-  group_by(
-    chrom,
-    rep,
-    method,
-    data.type,
-    series
-  ) %>%
-  group_modify(
-    ~ {
-      h <- hist(
-        .x$ancestry,
-        breaks = breaks,
-        plot = FALSE
-      )
-      
-      tibble(
-        xmin = head(h$breaks, -1),
-        xmax = tail(h$breaks, -1),
-        xmid = h$mids,
-        count = h$counts,
-        frac = h$counts / sum(h$counts)
-      )
-    }
-  ) %>%
-  ungroup() %>%
-  group_by(
-    chrom,
-    method,
-    data.type,
-    series,
-    xmin,
-    xmax,
-    xmid
-  ) %>%
-  summarize(
-    mean.frac = mean(frac, na.rm = TRUE),
-    sd.frac = if (n() > 1) {
-      sd(frac, na.rm = TRUE)
-    } else {
-      NA_real_
-    },
-    n.rep = n_distinct(rep),
-    .groups = "drop"
-  ) %>%
-  mutate(
-    ymin = if_else(
-      data.type == "Empirical",
-      NA_real_,
-      pmax(0, mean.frac - 2 * sd.frac)
-    ),
-    ymax = if_else(
-      data.type == "Empirical",
-      NA_real_,
-      mean.frac + 2 * sd.frac
-    )
-  )
-
-## histogram style plot ----
-make.anc.hist.plot <- function(
-    plot.method,
-    chromosome.levels = anc.hist.chrom.levels
+# standardize one ancestry table to the shared analysis schema
+normalize.ancestry.table <- function(
+    data, data.type.input, method, simulation.source.input, k,
+    population.mapping = NULL, sample.id.column = "sample_id"
 ) {
-  
-  if (plot.method == "ADMIXTURE") {
-    
-    series.breaks <- c(
-      "tspop.Simulation_small",
-      "tspop.Simulation_large",
-      "ADMIXTURE.Simulation_small",
-      "ADMIXTURE.Simulation_large",
-      "ADMIXTURE.Empirical"
-    )
-    
-    series.labels <- c(
-      "Truth (small)",
-      "Truth (large)",
-      "ADMIXTURE (small)",
-      "ADMIXTURE (large)",
-      "ADMIXTURE (empirical)"
-    )
-    
-    series.colors <- c(
-      "tspop.Simulation_small" = "#00AEDB",
-      "tspop.Simulation_large" = "#007E9F",
-      "ADMIXTURE.Simulation_small" = "#FA9EBC",
-      "ADMIXTURE.Simulation_large" = "#E66791",
-      "ADMIXTURE.Empirical" = "#B83264"
-    )
-    
-  } else if (plot.method == "fastStructure") {
-    
-    series.breaks <- c(
-      "tspop.Simulation_small",
-      "tspop.Simulation_large",
-      "fastStructure.Simulation_small",
-      "fastStructure.Simulation_large",
-      "fastStructure.Empirical"
-    )
-    
-    series.labels <- c(
-      "Truth (small)",
-      "Truth (large)",
-      "fastStructure (small)",
-      "fastStructure (large)",
-      "fastStructure (empirical)"
-    )
-    
-    series.colors <- c(
-      "tspop.Simulation_small" = "#00AEDB",
-      "tspop.Simulation_large" = "#007E9F",
-      "fastStructure.Simulation_small" = "#FFDBD1",
-      "fastStructure.Simulation_large" = "#E69B88",
-      "fastStructure.Empirical" = "#B9584A"
-    )
-    
-  } else {
-    stop("plot.method must be 'ADMIXTURE' or 'fastStructure'")
+  # add shared identifiers, metadata, and optional population annotations
+  data$chrom <- as.character(data$chrom)
+  data$sample_id <- as.character(data[[sample.id.column]])
+  data$rep <- if ("rep" %in% names(data)) as.numeric(data$rep) else 0
+  data$data.type <- data.type.input
+  data$method <- method
+  data$simulation.source <- simulation.source.input
+  if (!is.null(population.mapping)) {
+    data <- left_join(data, population.mapping, by = "sample_id")
   }
-  
-  plot.df <- anc.hist.summary %>%
-    filter(
-      (
-        method == "tspop" &
-          data.type %in% c(
-            "Simulation_small",
-            "Simulation_large"
-          )
-      ) |
-        method == plot.method,
-      !(chrom == "all" & method == "tspop")
-    )
-  
-  simulation.error.df <- plot.df %>%
-    filter(
-      data.type %in% c(
-        "Simulation_small",
-        "Simulation_large"
-      ),
-      !is.na(sd.frac)
-    )
-  
-  dodge.position <- position_dodge(
-    width = diff(breaks)[1] * 0.95
+  if (!"pop" %in% names(data)) data$pop <- NA_character_
+  if (!"role" %in% names(data)) data$role <- data$pop
+  if (!"vcf_sample_id" %in% names(data)) {
+    data$vcf_sample_id <- data$sample_id
+  }
+  if (!"span" %in% names(data)) data$span <- NA_real_
+
+  # normalize tspop truth or retain only the requested inference K
+  if (method == "tspop") {
+    data$component_1_q <- as.numeric(data$afr_tspop)
+    data$component_2_q <- as.numeric(data$eur_tspop)
+    data <- select(data, -afr_tspop, -eur_tspop)
+    data$k <- 0
+  } else {
+    components <- paste0("component_", seq_len(k), "_q")
+    if (!"k" %in% names(data)) data$k <- k
+    data <- filter(data, k == !!k)
+  }
+  # pad unused components and enforce numeric ancestry columns
+  for (component in paste0("component_", 3:5, "_q")) {
+    if (!component %in% names(data)) data[[component]] <- NA_real_
+  }
+  data <- data %>% mutate(
+    component_1_q = as.numeric(component_1_q),
+    component_2_q = as.numeric(component_2_q), span = as.numeric(span)
   )
-  
-  ggplot(
-    plot.df,
-    aes(
-      x = xmid,
-      y = mean.frac,
-      fill = series,
-      group = series
-    )
-  ) +
-    geom_col(
-      position = dodge.position,
-      width = diff(breaks)[1] * 0.95,
-      color = "black",
-      linewidth = 0.5
-    ) +
-    geom_errorbar(
-      data = simulation.error.df,
-      aes(
-        ymin = ymin,
-        ymax = ymax
-      ),
-      position = dodge.position,
-      width = 0.01,
-      linewidth = 0.5,
-      color = "black"
-    ) +
-    facet_wrap(
-      ~ chrom,
-      ncol = 3,
-      drop = TRUE
-    ) +
-    scale_x_continuous(
-      limits = c(0, 1),
-      breaks = seq(0, 1, by = 0.2)
-    ) +
-    scale_fill_manual(
-      name = NULL,
-      breaks = series.breaks,
-      labels = series.labels,
-      values = series.colors
-    ) +
-    labs(
-      x = "African ancestry",
-      y = "Mean fraction of individuals per bin",
-      title = paste(
-        "African Ancestry Distributions:",
-        plot.method
-      ),
-      subtitle = paste(
-        "Simulation error bars represent ±2 SD",
-        "across replicate simulations"
-      )
-    ) +
-    theme_bw(base_size = 24) +
-    theme(
-      legend.position = "top",
-      legend.box = "horizontal",
-      legend.title = element_blank(),
-      panel.grid.minor = element_blank(),
-      strip.background = element_blank(),
-      strip.text = element_text(face = "bold"),
-      panel.spacing = unit(1, "lines")
-    )
+
+  return(data)
 }
 
-anc.hist.admixture.plot <- make.anc.hist.plot(
-  plot.method = "ADMIXTURE"
+
+# read chromosome or genome files for one ancestry source and normalize them
+read.ancestry.family <- function(
+    data.directory, file.family, chromosomes, data.type.input, method, k,
+    simulation.source.input, population.mapping = NULL,
+    sample.id.column = "sample_id", include.genome = FALSE,
+    genome.file.family = NULL
+) {
+  # expand the filename pattern into concrete chromosome paths
+  paths <- file.path(
+    path.expand(data.directory),
+    vapply(chromosomes, function(x) {
+      return(gsub("\\{chrom\\}", x, file.family))
+    }, character(1))
+  )
+  # append the whole-genome file when requested for empirical data
+  if (include.genome) {
+    chromosomes <- c(chromosomes, "all")
+    paths <- c(paths, file.path(
+      path.expand(data.directory), genome.file.family
+    ))
+  }
+  # read, label, normalize, and combine every requested table
+  data <- map2_dfr(paths, chromosomes, function(path, chrom) {
+    table <- read_parquet(path)
+    table$chrom <- chrom
+    return(normalize.ancestry.table(
+      table, data.type.input, method, simulation.source.input, k,
+      population.mapping, sample.id.column
+    ))
+  })
+
+  return(data)
+}
+
+
+# orient K=2 components so afr.q consistently represents African ancestry
+orient.ancestry.components <- function(
+    data, admixed.roles, grouping.columns
+) {
+  # retain tspop truth and the configured K for inference methods
+  filtered <- filter(
+    data, method == "tspop" | k == SIMULATION.K | k == EMPIRICAL.K
+  )
+  # determine the African component within each analysis group
+  component.map <- filtered %>%
+    filter(role %in% admixed.roles) %>%
+    group_by(across(all_of(grouping.columns))) %>%
+    summarise(
+      component.1 = mean(component_1_q, na.rm = TRUE),
+      component.2 = mean(component_2_q, na.rm = TRUE), .groups = "drop"
+    ) %>%
+    mutate(afr.component = if_else(
+      component.1 >= component.2, "component_1_q", "component_2_q"
+    ))
+  # apply the orientation and discard the temporary component map
+  data <- filtered %>%
+    left_join(component.map, by = grouping.columns) %>%
+    mutate(
+      afr.q = if_else(
+        afr.component == "component_1_q", component_1_q, component_2_q
+      ),
+      eur.q = if_else(
+        afr.component == "component_1_q", component_2_q, component_1_q
+      )
+    ) %>%
+    select(-component.1, -component.2, -afr.component)
+
+  return(data)
+}
+
+
+# select reproducible IDs per simulation size, replicate, and chromosome
+select.downsample.ids <- function(
+    data, downsample.size, sample.id.column, grouping.columns, seed
+) {
+  # use tspop identifiers as the candidates shared across all methods
+  candidates <- data %>%
+    filter(data.type != "Empirical", method == "tspop") %>%
+    distinct(across(all_of(c(grouping.columns, sample.id.column))))
+  # Verify every simulation group can supply the fixed sample size.
+  sizes <- candidates %>%
+    count(across(all_of(grouping.columns)), name = "available")
+  if (any(sizes$available < downsample.size)) {
+    stop(paste0(
+      "A simulation group contains fewer than ", downsample.size,
+      " candidates"
+    ))
+  }
+  # draw reproducibly while allowing selections to vary by replicate
+  set.seed(seed)
+  selected.ids <- candidates %>%
+    group_by(across(all_of(grouping.columns))) %>%
+    mutate(.draw.group = cur_group_id(), .random.order = runif(n())) %>%
+    arrange(.random.order, .by_group = TRUE) %>%
+    group_modify(function(group, key) {
+      start <- ((first(group$.draw.group) - 1) %% nrow(group)) + 1
+      indices <- ((start - 1 + seq_len(downsample.size) - 1) %%
+        nrow(group)) + 1
+      return(slice(group, indices))
+    }) %>%
+    ungroup() %>%
+    select(-.draw.group, -.random.order) %>%
+    select(all_of(c(grouping.columns, sample.id.column))) %>%
+    arrange(across(all_of(grouping.columns)), .data[[sample.id.column]])
+
+  return(selected.ids)
+}
+
+
+# add full and downsampled rows using the shared selected identifiers
+apply.downsample.ids <- function(
+    data, selected.ids, sample.id.column, grouping.columns
+) {
+  # reject duplicate selections that would multiply joined observations
+  duplicates <- selected.ids %>%
+    count(across(all_of(c(grouping.columns, sample.id.column)))) %>%
+    filter(n != 1)
+  if (nrow(duplicates)) stop("Selected sample IDs are not unique")
+  # retain all rows as full and duplicate selected simulation rows only
+  full <- mutate(data, sample.set = "full")
+  downsampled <- data %>%
+    filter(data.type != "Empirical") %>%
+    inner_join(selected.ids, by = c(grouping.columns, sample.id.column)) %>%
+    mutate(sample.set = "downsampled")
+  data <- bind_rows(full, downsampled)
+
+  return(data)
+}
+
+
+# calculate a percentile bootstrap interval for a supplied statistic.
+bootstrap.interval <- function(values, statistic, replicates, seed) {
+  # return undefined bounds when the sample or bootstrap is too small.
+  if (length(values) < 2 || replicates < 2) return(c(NA_real_, NA_real_))
+  # resample deterministically and extract the central 95% interval.
+  set.seed(seed)
+  estimates <- replicate(replicates, {
+    statistic(sample(values, length(values), replace = TRUE))
+  })
+  interval <- as.numeric(
+    quantile(estimates, c(0.025, 0.975), names = FALSE)
+  )
+
+  return(interval)
+}
+
+
+# summarize ancestry and add empirical bootstrap uncertainty intervals
+summarize.ancestry <- function(
+    data, grouping.columns, bootstrap.replicates, bootstrap.seed,
+    admixed.roles = "ADX"
+) {
+  # compute descriptive statistics within each requested analysis group
+  result <- data %>%
+    filter(role %in% admixed.roles, !is.na(afr.q)) %>%
+    group_by(across(all_of(grouping.columns))) %>%
+    group_modify(function(group, key) {
+      x <- group$afr.q
+      empirical <- key$data.type[[1]] == "Empirical"
+      mean.ci <- if (empirical) bootstrap.interval(
+        x, mean, bootstrap.replicates, bootstrap.seed
+      ) else c(NA_real_, NA_real_)
+      sd.ci <- if (empirical) bootstrap.interval(
+        x, sd, bootstrap.replicates, bootstrap.seed + 1
+      ) else c(NA_real_, NA_real_)
+      return(tibble(
+        mean = mean(x), sd = sd(x), median = median(x),
+        q25 = quantile(x, 0.25, names = FALSE),
+        q75 = quantile(x, 0.75, names = FALSE), n = length(x),
+        mean.boot = if (empirical) mean(x) else NA_real_,
+        mean.boot.lower = mean.ci[1], mean.boot.upper = mean.ci[2],
+        sd.boot = if (empirical) sd(x) else NA_real_,
+        sd.boot.lower = sd.ci[1], sd.boot.upper = sd.ci[2]
+      ))
+    }) %>%
+    ungroup()
+  # reshape downsampled statistics for side-by-side inspection
+  downsampled <- result %>%
+    filter(sample.set == "downsampled") %>%
+    select(-sample.set, -contains("boot")) %>%
+    rename(
+      mean.rand.downsample = mean, sd.rand.downsample = sd,
+      median.rand.downsample = median, q25.rand.downsample = q25,
+      q75.rand.downsample = q75, n.rand.downsample = n
+    )
+  # join downsampled values onto their corresponding summary groups
+  result <- left_join(result, downsampled,
+    by = setdiff(grouping.columns, "sample.set")
+  )
+
+  return(result)
+}
+
+
+# convert ancestry values into replicate-aggregated histogram bins
+summarize.histograms <- function(
+    data, breaks, chromosomes, admixed.roles = "ADX"
+) {
+  # keep valid admixed values and empirical-only whole-genome rows
+  histogram.data <- data %>%
+    filter(
+      role %in% admixed.roles, !is.na(afr.q), between(afr.q, 0, 1),
+      chrom %in% c(chromosomes, "all"),
+      !(chrom == "all" & data.type != "Empirical")
+    ) %>%
+    # calculate normalized bin counts independently for each replicate
+    mutate(chrom = factor(chrom, levels = c(chromosomes, "all"))) %>%
+    group_by(chrom, rep, data.type, simulation.source, method, sample.set) %>%
+    group_modify(function(group, key) {
+      h <- hist(group$afr.q, breaks = breaks, plot = FALSE)
+      return(tibble(
+        xmin = head(h$breaks, -1), xmax = tail(h$breaks, -1),
+        xmid = h$mids, fraction = h$counts / sum(h$counts)
+      ))
+    }) %>%
+    ungroup() %>%
+    # aggregate replicate fractions and calculate simulation error bounds
+    group_by(
+      chrom, data.type, simulation.source, method, sample.set,
+      xmin, xmax, xmid
+    ) %>%
+    summarise(
+      mean.frac = mean(fraction),
+      sd.frac = if (n() > 1) sd(fraction) else NA_real_,
+      n.rep = n_distinct(rep), .groups = "drop"
+    ) %>%
+    mutate(
+      ymin = if_else(data.type == "Empirical", NA_real_,
+        pmax(0, mean.frac - 2 * sd.frac)
+      ),
+      ymax = if_else(data.type == "Empirical", NA_real_,
+        mean.frac + 2 * sd.frac
+      )
+    )
+
+  return(histogram.data)
+}
+
+
+# define the four allowed simulation and empirical method combinations
+plot.variant.specifications <- function() {
+  # exclude cross-method inference combinations by construction
+  specifications <- tribble(
+    ~key, ~simulation.source, ~empirical.method,
+    "tspop.admixture", "tspop", "ADMIXTURE",
+    "admixture.admixture", "ADMIXTURE", "ADMIXTURE",
+    "tspop.fastStructure", "tspop", "fastStructure",
+    "fastStructure.fastStructure", "fastStructure", "fastStructure"
+  )
+
+  return(specifications)
+}
+
+
+# select the five data series used by one plot combination
+prepare.plot.data <- function(
+    summary.data, simulation.source.input, empirical.method, chromosomes
+) {
+  # pair one simulation source with one complete empirical method
+  plot.data <- summary.data %>%
+    filter(
+      (data.type != "Empirical" &
+        .data$simulation.source == simulation.source.input &
+        chrom %in% chromosomes) |
+        (data.type == "Empirical" & method == empirical.method &
+          sample.set == "full" & chrom %in% c(chromosomes, "all"))
+    ) %>%
+    mutate(
+      chrom = factor(chrom, levels = c(chromosomes, "all")),
+      series = paste(data.type, sample.set, sep = ".")
+    )
+
+  return(plot.data)
+}
+
+
+# build a chromosome plot for either mean or standard deviation
+make.stat.by.chrom.plot <- function(
+    summary.data, simulation.source.input, empirical.method, chromosomes,
+    styles, statistic, y.label
+) {
+  # separate simulation distributions from empirical reference values
+  data <- prepare.plot.data(
+    summary.data, simulation.source.input, empirical.method, chromosomes
+  )
+  simulation <- filter(data, data.type != "Empirical")
+  empirical <- filter(data, data.type == "Empirical")
+  genome <- filter(empirical, chrom == "all")
+  empirical.chrom <- filter(empirical, chrom != "all")
+  lower <- paste0(statistic, ".boot.lower")
+  upper <- paste0(statistic, ".boot.upper")
+  estimate <- paste0(statistic, ".boot")
+  color <- styles$empirical.colors[[empirical.method]]
+  # draw simulation boxes with empirical chromosome and genome uncertainty
+  plot <- ggplot(simulation, aes(chrom, .data[[statistic]], fill = series)) +
+    geom_rect(data = genome,
+      aes(xmin = -Inf, xmax = Inf, ymin = .data[[lower]],
+        ymax = .data[[upper]]),
+      inherit.aes = FALSE, fill = color, alpha = 0.1
+    ) +
+    geom_hline(data = genome, aes(yintercept = .data[[estimate]]),
+      color = color, linetype = "dashed"
+    ) +
+    geom_boxplot(aes(group = interaction(chrom, series)), outlier.shape = NA) +
+    geom_errorbar(data = empirical.chrom,
+      aes(x = chrom, ymin = .data[[lower]], ymax = .data[[upper]]),
+      inherit.aes = FALSE, color = color, width = 0.15
+    ) +
+    geom_point(data = empirical.chrom, aes(chrom, .data[[estimate]]),
+      inherit.aes = FALSE, shape = 23, size = 3, fill = color
+    ) +
+    scale_x_discrete(limits = chromosomes, drop = FALSE) +
+    scale_fill_manual(values = styles$colors, labels = styles$labels) +
+    labs(x = "Chromosome", y = y.label, fill = NULL) +
+    theme_bw(base_size = 18) +
+    theme(legend.position = "top", panel.grid.minor = element_blank())
+
+  return(plot)
+}
+
+
+# build the chromosome-level mean ancestry plot
+make.mean.by.chrom.plot <- function(
+    summary.data, simulation.source.input, empirical.method, chromosomes, styles
+) {
+  # delegate construction using the mean statistic and axis label
+  plot <- make.stat.by.chrom.plot(
+    summary.data, simulation.source.input, empirical.method, chromosomes,
+    styles, "mean", "Mean African ancestry"
+  )
+
+  return(plot)
+}
+
+
+# build the chromosome-level ancestry standard-deviation plot
+make.sd.by.chrom.plot <- function(
+    summary.data, simulation.source.input, empirical.method, chromosomes, styles
+) {
+  # delegate construction using the SD statistic and axis label
+  plot <- make.stat.by.chrom.plot(
+    summary.data, simulation.source.input, empirical.method, chromosomes,
+    styles, "sd", "Standard deviation of African ancestry"
+  )
+
+  return(plot)
+}
+
+
+# build vertically faceted mean and standard-deviation chromosome plots
+make.mean.sd.plot <- function(
+    summary.data, simulation.source.input, empirical.method, chromosomes, styles
+) {
+  # reshape simulation mean and SD summaries into one plotting table
+  data <- prepare.plot.data(
+    summary.data, simulation.source.input, empirical.method, chromosomes
+  )
+  simulation <- data %>%
+    filter(data.type != "Empirical") %>%
+    pivot_longer(c(mean, sd), names_to = "stat", values_to = "estimate")
+  # reshape empirical estimates and bounds to the same statistic key
+  empirical <- data %>%
+    filter(data.type == "Empirical") %>%
+    select(
+      chrom, data.type, simulation.source, method, sample.set, series,
+      starts_with("mean.boot"), starts_with("sd.boot")
+    )
+  empirical <- bind_rows(
+    transmute(
+      empirical, chrom, data.type, simulation.source, method, sample.set,
+      series, stat = "mean", estimate = mean.boot,
+      lower = mean.boot.lower, upper = mean.boot.upper
+    ),
+    transmute(
+      empirical, chrom, data.type, simulation.source, method, sample.set,
+      series, stat = "sd", estimate = sd.boot,
+      lower = sd.boot.lower, upper = sd.boot.upper
+    )
+  )
+  color <- styles$empirical.colors[[empirical.method]]
+  # draw both statistics with chromosome and genome empirical references
+  plot <- ggplot(simulation, aes(chrom, estimate, fill = series)) +
+    geom_rect(data = filter(empirical, chrom == "all"),
+      aes(xmin = -Inf, xmax = Inf, ymin = lower, ymax = upper),
+      inherit.aes = FALSE, fill = color, alpha = 0.1
+    ) +
+    geom_hline(data = filter(empirical, chrom == "all"),
+      aes(yintercept = estimate),
+      color = color, linetype = "dashed"
+    ) +
+    geom_boxplot(aes(group = interaction(chrom, series)), outlier.shape = NA) +
+    geom_errorbar(data = filter(empirical, chrom != "all"),
+      aes(chrom, ymin = lower, ymax = upper), inherit.aes = FALSE,
+      color = color, width = 0.15
+    ) +
+    geom_point(data = filter(empirical, chrom != "all"),
+      aes(chrom, estimate), inherit.aes = FALSE, shape = 23,
+      fill = color, size = 3
+    ) +
+    facet_grid(rows = vars(stat), scales = "free_y") +
+    scale_x_discrete(limits = chromosomes, drop = FALSE) +
+    scale_fill_manual(values = styles$colors, labels = styles$labels) +
+    labs(x = "Chromosome", y = NULL, fill = NULL) +
+    theme_bw(base_size = 18)
+
+  return(plot)
+}
+
+
+# relate chromosome length to either mean or SD ancestry summaries
+make.length.stat.plot <- function(
+    summary.data, chromosome.lengths, simulation.source.input, empirical.method,
+    chromosomes, styles, statistic, y.label
+) {
+  # aggregate replicates and attach the appropriate chromosome length
+  data <- prepare.plot.data(
+    summary.data, simulation.source.input, empirical.method, chromosomes
+  ) %>%
+    filter(chrom != "all") %>%
+    mutate(chrom = as.character(chrom)) %>%
+    group_by(
+      chrom, data.type, simulation.source, method, sample.set, series
+    ) %>%
+    summarise(estimate = median(.data[[statistic]]), .groups = "drop") %>%
+    left_join(chromosome.lengths, by = "chrom") %>%
+    mutate(chr.len.mb = if_else(
+      data.type == "Empirical", chr_len_after_qc, chr_len
+    ) / 1e6)
+  if (any(is.na(data$chr.len.mb))) {
+    stop("Chromosome lengths are unavailable for requested data")
+  }
+  # draw per-series linear trends and chromosome-level estimates
+  plot <- ggplot(data, aes(chr.len.mb, estimate, color = series,
+    linetype = sample.set, group = series)) +
+    geom_smooth(method = "lm", formula = y ~ x, se = FALSE) +
+    geom_point(aes(shape = sample.set, fill = series), size = 3) +
+    scale_color_manual(values = styles$colors, labels = styles$labels) +
+    scale_fill_manual(values = styles$colors, labels = styles$labels) +
+    scale_shape_manual(values = styles$shapes) +
+    scale_linetype_manual(values = styles$linetypes) +
+    labs(x = "Chromosome length (Mb)", y = y.label) +
+    theme_bw(base_size = 18)
+
+  return(plot)
+}
+
+
+# duild the chromosome-length versus mean-ancestry plot
+make.length.mean.plot <- function(
+    summary.data, chromosome.lengths, simulation.source.input, empirical.method,
+    chromosomes, styles
+) {
+  # delegate shared length plotting using the mean statistic
+  plot <- make.length.stat.plot(
+    summary.data, chromosome.lengths, simulation.source.input, empirical.method,
+    chromosomes, styles, "mean", "Mean African ancestry"
+  )
+
+  return(plot)
+}
+
+
+# build the chromosome-length versus ancestry-SD plot
+make.length.sd.plot <- function(
+    summary.data, chromosome.lengths, simulation.source.input, empirical.method,
+    chromosomes, styles
+) {
+  # delegate shared length plotting using the standard deviation
+  plot <- make.length.stat.plot(
+    summary.data, chromosome.lengths, simulation.source.input, empirical.method,
+    chromosomes, styles, "sd", "Standard deviation of African ancestry"
+  )
+
+  return(plot)
+}
+
+
+# build chromosome histograms with replicate uncertainty for simulations
+make.histogram.plot <- function(
+    histogram.data, simulation.source.input, empirical.method, chromosomes,
+    breaks, styles
+) {
+  # select one simulation source and its matched empirical method
+  data <- histogram.data %>%
+    filter(
+      (data.type != "Empirical" &
+        .data$simulation.source == simulation.source.input &
+        chrom %in% chromosomes) |
+        (data.type == "Empirical" & method == empirical.method &
+          sample.set == "full" & chrom %in% c(chromosomes, "all"))
+    ) %>%
+    mutate(series = paste(data.type, sample.set, sep = "."))
+  error.data <- filter(data, data.type != "Empirical", !is.na(sd.frac))
+  dodge <- position_dodge(width = diff(breaks)[1] * 0.95)
+  # draw aligned bins, simulation errors, and the empirical all facet
+  plot <- ggplot(data, aes(xmid, mean.frac, fill = series, group = series)) +
+    geom_col(position = dodge, width = diff(breaks)[1] * 0.95,
+      color = "black", linewidth = 0.3) +
+    geom_errorbar(data = error.data, aes(ymin = ymin, ymax = ymax),
+      position = dodge, width = 0.01) +
+    facet_wrap(~ chrom, ncol = 3, drop = TRUE) +
+    scale_x_continuous(limits = c(0, 1), breaks = seq(0, 1, 0.2)) +
+    scale_fill_manual(values = styles$colors, labels = styles$labels) +
+    labs(x = "African ancestry",
+      y = "Mean fraction of individuals per bin", fill = NULL) +
+    theme_bw(base_size = 18)
+
+  return(plot)
+}
+
+
+# build faceted admixture plot for diagnostic inspection
+make.diagnostic.admixture.plot <- function(
+    individual.data, chromosomes, component.columns, sample.id.column,
+    facet.columns, component.colors
+) {
+  # validate identifiers, component columns, and requested facets
+  required <- c("chrom", component.columns, sample.id.column, facet.columns)
+  missing <- setdiff(required, names(individual.data))
+  if (length(missing)) {
+    stop("Diagnostic data are missing: ", paste(missing, collapse = ", "))
+  }
+  # reshape ancestry components into stacked-bar observations
+  data <- individual.data %>%
+    filter(chrom %in% chromosomes) %>%
+    pivot_longer(all_of(component.columns),
+      names_to = "component", values_to = "q")
+  # draw one free-width panel for every requested diagnostic group
+  plot <- ggplot(data, aes(.data[[sample.id.column]], q, fill = component)) +
+    geom_col() +
+    facet_wrap(vars(!!!rlang::syms(c(facet.columns, "chrom"))),
+      scales = "free_x") +
+    scale_fill_manual(values = component.colors) +
+    labs(x = NULL, y = "Ancestry proportion", fill = NULL) +
+    theme_bw(base_size = 18) +
+    theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
+
+  return(plot)
+}
+
+
+# read and combine chromosome-labelled fastStructure choose-K diagnostics
+read.choose.k.diagnostics <- function(
+    data.directory, file.family, chromosomes
+) {
+  # expand paths and fail before reading an incomplete collection
+  paths <- file.path(path.expand(data.directory), vapply(
+    chromosomes,
+    function(x) return(gsub("\\{chrom\\}", x, file.family)),
+    character(1)
+  ))
+  if (any(!file.exists(paths))) stop("Choose-K files are unavailable")
+  # read each table and supply its chromosome when absent
+  diagnostics <- map2_dfr(paths, chromosomes, function(path, chrom) {
+    data <- read_parquet(path)
+    if (!"chrom" %in% names(data)) data$chrom <- chrom
+    return(data)
+  })
+
+  return(diagnostics)
+}
+
+
+# construct all six plot families from the four allowed combinations
+build.plot.families <- function(
+    summary.data, histogram.data, chromosome.lengths, chromosomes,
+    styles, histogram.breaks = HISTOGRAM.BREAKS
+) {
+  # pair each family builder with the shared combination specification
+  specs <- plot.variant.specifications()
+  builders <- list(
+    mean.by.chromosome = function(source, method) {
+      return(make.mean.by.chrom.plot(
+        summary.data, source, method, chromosomes, styles
+      ))
+    },
+    sd.by.chromosome = function(source, method) {
+      return(make.sd.by.chrom.plot(
+        summary.data, source, method, chromosomes, styles
+      ))
+    },
+    combined.mean.sd = function(source, method) {
+      return(make.mean.sd.plot(
+        summary.data, source, method, chromosomes, styles
+      ))
+    },
+    length.versus.mean = function(source, method) {
+      return(make.length.mean.plot(
+        summary.data, chromosome.lengths, source, method,
+        chromosomes, styles
+      ))
+    },
+    length.versus.sd = function(source, method) {
+      return(make.length.sd.plot(
+        summary.data, chromosome.lengths, source, method,
+        chromosomes, styles
+      ))
+    },
+    histograms = function(source, method) {
+      return(make.histogram.plot(
+        histogram.data, source, method, chromosomes,
+        histogram.breaks, styles
+      ))
+    }
+  )
+  # build and name four ggplot objects within every family
+  families <- map(builders, function(builder) {
+    plots <- set_names(
+      map2(specs$simulation.source, specs$empirical.method, builder),
+      specs$key)
+    return(plots)
+  })
+
+  return(families)
+}
+
+
+# analysis ----
+
+
+# read simulation ancestry sources
+sim.small.tspop.data <- read.ancestry.family(
+  SIM.SMALL.DATA.DIR, "ancestry.chr{chrom}.parquet", CHROMOSOMES,
+  "Simulation_small", "tspop", 0, "tspop"
+)
+sim.small.admixture.data <- read.ancestry.family(
+  SIM.SMALL.DATA.DIR,
+  "ancestry_ADMIXTURE_multik.chr{chrom}.parquet", CHROMOSOMES,
+  "Simulation_small", "ADMIXTURE", SIMULATION.K, "ADMIXTURE"
+)
+sim.small.fastStructure.data <- read.ancestry.family(
+  SIM.SMALL.DATA.DIR,
+  "ancestry_fastStructure_multik.chr{chrom}.parquet", CHROMOSOMES,
+  "Simulation_small", "fastStructure", SIMULATION.K, "fastStructure"
+)
+sim.large.tspop.data <- read.ancestry.family(
+  SIM.LARGE.DATA.DIR, "ancestry.chr{chrom}.parquet", CHROMOSOMES,
+  "Simulation_large", "tspop", 0, "tspop"
+)
+sim.large.admixture.data <- read.ancestry.family(
+  SIM.LARGE.DATA.DIR,
+  "ancestry_ADMIXTURE_multik.chr{chrom}.parquet", CHROMOSOMES,
+  "Simulation_large", "ADMIXTURE", SIMULATION.K, "ADMIXTURE"
+)
+sim.large.fastStructure.data <- read.ancestry.family(
+  SIM.LARGE.DATA.DIR,
+  "ancestry_fastStructure_multik.chr{chrom}.parquet", CHROMOSOMES,
+  "Simulation_large", "fastStructure", SIMULATION.K, "fastStructure"
 )
 
-anc.hist.fastStructure.plot <- make.anc.hist.plot(
-  plot.method = "fastStructure"
+# read chromosome-level and whole-genome empirical inference
+emp.admixture.chromosome.data <- read.ancestry.family(
+  EMPIRICAL.DATA.DIR,
+  "ancestry_ADMIXTURE_multik.chr{chrom}.parquet", CHROMOSOMES,
+  "Empirical", "ADMIXTURE", EMPIRICAL.K, "Empirical"
+)
+emp.fastStructure.chromosome.data <- read.ancestry.family(
+  EMPIRICAL.DATA.DIR,
+  "ancestry_fastStructure_multik.chr{chrom}.parquet", CHROMOSOMES,
+  "Empirical", "fastStructure", EMPIRICAL.K, "Empirical"
+)
+emp.admixture.genome.data <- read.ancestry.family(
+  EMPIRICAL.DATA.DIR, "ancestry_ADMIXTURE_multik.parquet", "all",
+  "Empirical", "ADMIXTURE", EMPIRICAL.K, "Empirical"
+)
+emp.fastStructure.genome.data <- read.ancestry.family(
+  EMPIRICAL.DATA.DIR, "ancestry_fastStructure_multik.parquet", "all",
+  "Empirical", "fastStructure", EMPIRICAL.K, "Empirical"
 )
 
-anc.hist.admixture.plot
-anc.hist.fastStructure.plot
+# combine, orient, and apply fixed-size downsampling
+ancestry.individual.data <- bind_rows(
+  sim.small.tspop.data, sim.small.admixture.data,
+  sim.small.fastStructure.data, sim.large.tspop.data,
+  sim.large.admixture.data, sim.large.fastStructure.data,
+  emp.admixture.chromosome.data, emp.fastStructure.chromosome.data,
+  emp.admixture.genome.data, emp.fastStructure.genome.data
+) %>%
+  orient.ancestry.components(
+    ADMIXED.ROLES, c("rep", "chrom", "data.type", "method")
+  )
+downsample.ids <- select.downsample.ids(
+  ancestry.individual.data, DOWNSAMPLE.SIZE, "sample_id",
+  c("data.type", "rep", "chrom"), RANDOM.SEED
+)
+ancestry.individual.data <- apply.downsample.ids(
+  ancestry.individual.data, downsample.ids, "sample_id",
+  c("data.type", "rep", "chrom")
+)
+
+# calculate ancestry and histogram summaries
+ancestry.summary.data <- summarize.ancestry(
+  ancestry.individual.data,
+  c(
+    "rep", "chrom", "pop", "data.type", "simulation.source",
+    "method", "sample.set"
+  ),
+  BOOTSTRAP.REPLICATES, RANDOM.SEED, ADMIXED.ROLES
+)
+ancestry.histogram.data <- summarize.histograms(
+  ancestry.individual.data, HISTOGRAM.BREAKS, CHROMOSOMES,
+  ADMIXED.ROLES
+)
+
+# read chromosome lengths and choose-K diagnostics
+chromosome.lengths <- readr::read_tsv(
+  path.expand(CHROMOSOME.LENGTHS.PATH), show_col_types = FALSE
+) %>%
+  mutate(chr = str_remove(as.character(chr), "^chr")) %>%
+  rename(chrom = chr)
+emp.fastStructure.choose.k.chromosome <- read.choose.k.diagnostics(
+  EMPIRICAL.DATA.DIR, "fastStructure_chooseK.chr{chrom}.parquet",
+  CHROMOSOMES
+)
+emp.fastStructure.choose.k.genome <- read.choose.k.diagnostics(
+  EMPIRICAL.DATA.DIR, "fastStructure_chooseK.parquet", "all"
+)
+choose.k.frequency.tables <- list(
+  chromosome.max.marginal = table(
+    emp.fastStructure.choose.k.chromosome$max_marginal_likelihood_k
+  ),
+  chromosome.model.components = table(
+    emp.fastStructure.choose.k.chromosome$model_components_k
+  ),
+  genome.max.marginal = table(
+    emp.fastStructure.choose.k.genome$max_marginal_likelihood_k
+  ),
+  genome.model.components = table(
+    emp.fastStructure.choose.k.genome$model_components_k
+  )
+)
+walk(choose.k.frequency.tables, print)
+
+# create and print diagnostic barplots
+simulation.diagnostic.plots <- ancestry.individual.data %>%
+  filter(data.type != "Empirical", sample.set == "full") %>%
+  split(list(.$data.type, .$method), drop = TRUE) %>%
+  map(
+    make.diagnostic.admixture.plot,
+    chromosomes = CHROMOSOMES,
+    component.columns = c("component_1_q", "component_2_q"),
+    sample.id.column = "sample_id", facet.columns = c("rep"),
+    component.colors = ANCESTRY.COMPONENT.COLORS
+  )
+empirical.diagnostic.plots <- ancestry.individual.data %>%
+  filter(data.type == "Empirical", sample.set == "full") %>%
+  split(.$method, drop = TRUE) %>%
+  map(
+    make.diagnostic.admixture.plot,
+    chromosomes = c(CHROMOSOMES, "all"),
+    component.columns = c("component_1_q", "component_2_q"),
+    sample.id.column = "sample_id", facet.columns = character(),
+    component.colors = ANCESTRY.COMPONENT.COLORS
+  )
+walk(simulation.diagnostic.plots, print)
+walk(empirical.diagnostic.plots, print)
+
+# construct the six primary plot-family collections
+plot.families <- build.plot.families(
+  ancestry.summary.data, ancestry.histogram.data, chromosome.lengths,
+  CHROMOSOMES, PLOT.STYLES, HISTOGRAM.BREAKS
+)
+mean.by.chromosome.plots <- plot.families$mean.by.chromosome
+sd.by.chromosome.plots <- plot.families$sd.by.chromosome
+combined.mean.sd.plots <- plot.families$combined.mean.sd
+length.versus.mean.plots <- plot.families$length.versus.mean
+length.versus.sd.plots <- plot.families$length.versus.sd
+histogram.plots <- plot.families$histograms
