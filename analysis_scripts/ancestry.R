@@ -11,6 +11,8 @@
 
 # set up ----
 library(tidyverse)
+library(nanoparquet)
+
 
 SIM.SMALL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_small/stats"
 SIM.LARGE.DATA.DIR <- "~/scratch/OOA_NAAdmixture_large/stats"
@@ -865,9 +867,21 @@ plot.families <- build.plot.families(
   ancestry.summary.data, ancestry.histogram.data, chromosome.lengths,
   CHROMOSOMES, PLOT.STYLES, HISTOGRAM.BREAKS
 )
+
 mean.by.chromosome.plots <- plot.families$mean.by.chromosome
+walk(mean.by.chromosome.plots, print)
+
 sd.by.chromosome.plots <- plot.families$sd.by.chromosome
+walk(sd.by.chromosome.plots, print)
+
 combined.mean.sd.plots <- plot.families$combined.mean.sd
+walk(combined.mean.sd.plots, print)
+
 length.versus.mean.plots <- plot.families$length.versus.mean
+walk(length.versus.mean.plots, print)
+
 length.versus.sd.plots <- plot.families$length.versus.sd
+walk(length.versus.sd.plots, print)
+
 histogram.plots <- plot.families$histograms
+walk(histogram.plots, print)
