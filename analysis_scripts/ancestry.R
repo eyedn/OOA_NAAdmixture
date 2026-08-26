@@ -1048,14 +1048,14 @@ mean.by.chromosome.plot <- make.mean.by.chrom.plot(
   PLOT.SIMULATION.SOURCE, PLOT.SAMPLE.SET, SELECTED.CHROMOSOMES,
   PLOT.STYLES
 )
-print(mean.by.chromosome.plot)
+# print(mean.by.chromosome.plot)
 
 sd.by.chromosome.plot <- make.sd.by.chrom.plot(
   ancestry.summary.data, PLOT.EMPIRICAL.METHOD,
   PLOT.SIMULATION.SOURCE, PLOT.SAMPLE.SET, SELECTED.CHROMOSOMES,
   PLOT.STYLES
 )
-print(sd.by.chromosome.plot)
+# print(sd.by.chromosome.plot)
 
 combined.mean.sd.plot <- make.mean.sd.plot(
   ancestry.summary.data, PLOT.EMPIRICAL.METHOD,
@@ -1068,13 +1068,13 @@ length.versus.mean.plot <- make.length.mean.plot(
   ancestry.summary.data, chromosome.lengths, PLOT.EMPIRICAL.METHOD,
   PLOT.SIMULATION.SOURCE, PLOT.SAMPLE.SET, CHROMOSOMES, PLOT.STYLES
 )
-print(length.versus.mean.plot)
+# print(length.versus.mean.plot)
 
 length.versus.sd.plot <- make.length.sd.plot(
   ancestry.summary.data, chromosome.lengths, PLOT.EMPIRICAL.METHOD,
   PLOT.SIMULATION.SOURCE, PLOT.SAMPLE.SET, CHROMOSOMES, PLOT.STYLES
 )
-print(length.versus.sd.plot)
+# print(length.versus.sd.plot)
 
 combined.length.mean.sd.plot <- make.length.mean.sd.plot(
   ancestry.summary.data, chromosome.lengths, PLOT.EMPIRICAL.METHOD,

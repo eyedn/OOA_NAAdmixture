@@ -8,9 +8,6 @@
 # kinship.R
 # ______________________________________________________________________________
 
-# pattern: Mixed (unavoidable)
-# reason: required live analysis follows pure helpers with sequential data I/O
-
 
 # set up ----
 library(tidyverse)
@@ -21,7 +18,7 @@ SIM.SMALL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_small/stats"
 SIM.LARGE.DATA.DIR <- "~/scratch/OOA_NAAdmixture_large/stats"
 EMPIRICAL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_1kG/stats"
 CHROMOSOMES <- as.character(1:22)
-SELECTED.CHROMOSOMES <- c("1", "5", "10", "14", "18", "22")
+SELECTED.CHROMOSOMES <- c("1", "18")
 DOWNSAMPLE.SIZE <- 50
 RANDOM.SEED <- 123
 KINSHIP.BIN.WIDTH <- 0.01
@@ -240,11 +237,11 @@ summarize.kinship.histograms <- function(data) {
 
 
 # construct the pairwise kinship distribution plot
-make.kinship.plot <- function(data, sample.set, breaks, styles) {
+make.kinship.plot <- function(data, plot.sample.set, breaks, styles) {
   plot.data <- data %>%
     filter(
       data.type == "Empirical" |
-        (data.type != "Empirical" & sample.set == !!sample.set)
+        (data.type != "Empirical" & sample.set == plot.sample.set)
     )
   dodge <- position_dodge(width = diff(breaks)[1] * 0.9)
   plot <- ggplot(
@@ -256,19 +253,19 @@ make.kinship.plot <- function(data, sample.set, breaks, styles) {
   ) +
     geom_col(
       position = dodge, width = diff(breaks)[1] * 0.85,
-      color = "black", linewidth = 0.45
+      color = "black", linewidth = 0.1
     ) +
-    geom_errorbar(
-      data = plot.data,
-      aes(
-        ymin = pmax(0, mean.fraction - 2 * sd.fraction),
-        ymax = mean.fraction + 2 * sd.fraction
-      ),
-      position = dodge, width = 0, linewidth = 0.45,
-      color = "black", na.rm = TRUE
-    ) +
+    # geom_errorbar(
+    #   data = plot.data,
+    #   aes(
+    #     ymin = pmax(0, mean.fraction - 2 * sd.fraction),
+    #     ymax = mean.fraction + 2 * sd.fraction
+    #   ),
+    #   position = dodge, width = 0, linewidth = 0.45,
+    #   color = "black", na.rm = TRUE
+    # ) +
     facet_grid(
-      data.type ~ chrom, drop = FALSE,
+      chrom ~ data.type, drop = FALSE, scales = "free_y",
       labeller = labeller(
         data.type = as_labeller(styles$series.labels)
       )
@@ -279,6 +276,7 @@ make.kinship.plot <- function(data, sample.set, breaks, styles) {
       title = "Pairwise Kinship Distributions Across Chromosomes",
       fill = NULL
     ) +
+    xlim(-0.2, 0.0442) +
     guides(fill = guide_legend(order = 1)) +
     theme_bw(base_size = PLOT.BASE.SIZE) +
     theme(
