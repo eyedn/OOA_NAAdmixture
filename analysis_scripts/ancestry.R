@@ -243,31 +243,69 @@ apply.downsample.ids <- function(
   # retain all rows as full and duplicate selected simulation rows only
   full <- mutate(data, sample.set = "full")
   downsampled <- data %>%
-    filter(data.type != "Empirical", role == "ADX") %>%
+    filter(data.type != "Empirical") %>%
     inner_join(selected.ids, by = c(grouping.columns, sample.id.column)) %>%
     mutate(sample.set = "downsampled")
   method.groups <- data %>%
     filter(data.type != "Empirical") %>%
     distinct(across(all_of(c(grouping.columns, "method"))))
-  expected.counts <- selected.ids %>%
-    count(across(all_of(grouping.columns)), name = "expected.count") %>%
-    inner_join(method.groups, by = grouping.columns)
-  actual.counts <- downsampled %>%
+  expected.method.ids <- method.groups %>%
+    inner_join(
+      selected.ids, by = grouping.columns,
+      relationship = "many-to-many"
+    )
+  actual.method.ids <- downsampled %>%
     distinct(across(all_of(c(
       grouping.columns, "method", sample.id.column
-    )))) %>%
-    count(
-      across(all_of(c(grouping.columns, "method"))),
-      name = "actual.count"
-    )
-  incomplete <- expected.counts %>%
-    left_join(
-      actual.counts, by = c(grouping.columns, "method")
+    ))))
+  missing.ids <- expected.method.ids %>%
+    anti_join(
+      actual.method.ids,
+      by = c(grouping.columns, "method", sample.id.column)
     ) %>%
-    mutate(actual.count = replace_na(actual.count, 0L)) %>%
-    filter(actual.count != expected.count)
-  if (nrow(incomplete)) {
-    stop("Simulation ancestry methods are missing selected ADX IDs")
+    group_by(across(all_of(c(grouping.columns, "method")))) %>%
+    summarise(
+      missing.count = n(),
+      missing.ids = glue_collapse(
+        sort(.data[[sample.id.column]]), sep = ","
+      ),
+      .groups = "drop"
+    )
+  if (nrow(missing.ids)) {
+    # report role metadata separately because it does not select inferred rows
+    role.metadata <- data %>%
+      filter(data.type != "Empirical") %>%
+      inner_join(selected.ids, by = c(grouping.columns, sample.id.column)) %>%
+      group_by(across(all_of(c(grouping.columns, "method")))) %>%
+      summarise(
+        role.metadata = case_when(
+          any(role == "ADX", na.rm = TRUE) ~ "ADX present",
+          all(is.na(role)) ~ "missing",
+          TRUE ~ "aliased/non-ADX"
+        ),
+        .groups = "drop"
+      )
+    failures <- missing.ids %>%
+      left_join(
+        role.metadata, by = c(grouping.columns, "method")
+      ) %>%
+      mutate(role.metadata = replace_na(role.metadata, "missing"))
+    diagnostic.columns <- c(
+      grouping.columns, "method", "missing.count", "missing.ids",
+      "role.metadata"
+    )
+    diagnostics <- apply(
+      select(failures, all_of(diagnostic.columns)), 1,
+      function(values) {
+        return(glue_collapse(
+          glue("{diagnostic.columns}={values}"), sep = ", "
+        ))
+      }
+    )
+    stop(glue(
+      "Simulation ancestry methods are missing selected IDs:\n",
+      "{glue_collapse(diagnostics, sep = '\n')}"
+    ))
   }
   data <- bind_rows(full, downsampled)
 
