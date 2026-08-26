@@ -11,6 +11,7 @@
 
 # set up ----
 library(tidyverse)
+library(glue)
 library(nanoparquet)
 
 
@@ -161,13 +162,13 @@ build.diversity.plot.data <- function(
     duplicate.simulation.masks() %>%
     transmute(
       data.type, role, stat, chrom, mask,
-      estimate = mean, sd
+      estimate = mean, sd, replicate.count
     )
   empirical.points <- empirical.chromosome %>%
     filter(chrom %in% chromosomes, stat %in% c("pi", "theta")) %>%
     transmute(
       data.type, role, stat, chrom, mask,
-      estimate = value, sd = NA_real_
+      estimate = value, sd = NA_real_, replicate.count = 1L
     )
   points <- bind_rows(simulation.points, empirical.points) %>%
     mutate(
@@ -197,6 +198,23 @@ build.diversity.plot.data <- function(
 
 # construct the selected-chromosome diversity plot
 make.diversity.plot <- function(points, genome.lines, styles) {
+  replicate.count <- max(
+    points$replicate.count[points$data.type != "Empirical"]
+  )
+  chromosome.scope <- points$chrom %>%
+    as.character() %>%
+    unique() %>%
+    glue_collapse(sep = ", ")
+  masks <- points$mask %>%
+    as.character() %>%
+    unique() %>%
+    glue_collapse(sep = " and ")
+  subtitle <- glue(
+    "π and Watterson’s θ · Full sample sets · Empirical masks: ",
+    "{masks} · Simulation replicates: {replicate.count} · Selected ",
+    "chromosomes: {chromosome.scope} · Dotted lines: genome-wide ",
+    "empirical references"
+  )
   dodge <- position_dodge(width = 0.75)
   plot <- ggplot(
     points,
@@ -235,6 +253,7 @@ make.diversity.plot <- function(points, genome.lines, styles) {
     labs(
       x = "Chromosome", y = NULL,
       title = "Genetic Diversity Across Selected Chromosomes",
+      subtitle = subtitle,
       color = NULL, fill = NULL, shape = NULL
     ) +
     guides(

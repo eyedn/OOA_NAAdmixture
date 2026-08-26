@@ -14,15 +14,15 @@
 
 # set up ----
 library(tidyverse)
+library(glue)
 library(nanoparquet)
 
 
 SIM.SMALL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_small/stats"
 SIM.LARGE.DATA.DIR <- "~/scratch/OOA_NAAdmixture_large/stats"
 EMPIRICAL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_1kG/stats"
-CHROMOSOME.LENGTHS.PATH <- paste0(
-  "~/proj/1000GenomeNYGC_hg38_karatas/", "ONEKG_chr_lens.tsv"
-)
+CHROMOSOME.LENGTHS.PATH <-
+  "~/proj/1000GenomeNYGC_hg38_karatas/ONEKG_chr_lens.tsv"
 CHROMOSOMES <- as.character(1:22)
 SELECTED.CHROMOSOMES <- c("1", "5", "10", "14", "18", "22")
 SIMULATION.K <- 2
@@ -98,12 +98,12 @@ normalize.ancestry.table <- function(
     data <- select(data, -afr_tspop, -eur_tspop)
     data$k <- 0
   } else {
-    components <- paste0("component_", seq_len(k), "_q")
+    components <- glue("component_{seq_len(k)}_q")
     if (!"k" %in% names(data)) data$k <- k
     data <- filter(data, k == !!k)
   }
   # pad unused components and enforce numeric ancestry columns
-  for (component in paste0("component_", 3:5, "_q")) {
+  for (component in glue("component_{3:5}_q")) {
     if (!component %in% names(data)) data[[component]] <- NA_real_
   }
   data <- data %>% mutate(
@@ -192,15 +192,22 @@ select.downsample.ids <- function(
 ) {
   # use tspop identifiers as the candidates shared across all methods
   candidates <- data %>%
-    filter(data.type != "Empirical", method == "tspop") %>%
+    filter(
+      data.type != "Empirical", method == "tspop", role == "ADX"
+    ) %>%
     distinct(across(all_of(c(grouping.columns, sample.id.column))))
   # Verify every simulation group can supply the fixed sample size.
+  expected.groups <- data %>%
+    filter(data.type != "Empirical") %>%
+    distinct(across(all_of(grouping.columns)))
   sizes <- candidates %>%
     count(across(all_of(grouping.columns)), name = "available")
+  sizes <- expected.groups %>%
+    left_join(sizes, by = grouping.columns) %>%
+    mutate(available = replace_na(available, 0L))
   if (any(sizes$available < downsample.size)) {
-    stop(paste0(
-      "A simulation group contains fewer than ", downsample.size,
-      " candidates"
+    stop(glue(
+      "A simulation group contains fewer than {downsample.size} candidates"
     ))
   }
   # draw reproducibly while allowing selections to vary by replicate
@@ -236,9 +243,32 @@ apply.downsample.ids <- function(
   # retain all rows as full and duplicate selected simulation rows only
   full <- mutate(data, sample.set = "full")
   downsampled <- data %>%
-    filter(data.type != "Empirical") %>%
+    filter(data.type != "Empirical", role == "ADX") %>%
     inner_join(selected.ids, by = c(grouping.columns, sample.id.column)) %>%
     mutate(sample.set = "downsampled")
+  method.groups <- data %>%
+    filter(data.type != "Empirical") %>%
+    distinct(across(all_of(c(grouping.columns, "method"))))
+  expected.counts <- selected.ids %>%
+    count(across(all_of(grouping.columns)), name = "expected.count") %>%
+    inner_join(method.groups, by = grouping.columns)
+  actual.counts <- downsampled %>%
+    distinct(across(all_of(c(
+      grouping.columns, "method", sample.id.column
+    )))) %>%
+    count(
+      across(all_of(c(grouping.columns, "method"))),
+      name = "actual.count"
+    )
+  incomplete <- expected.counts %>%
+    left_join(
+      actual.counts, by = c(grouping.columns, "method")
+    ) %>%
+    mutate(actual.count = replace_na(actual.count, 0L)) %>%
+    filter(actual.count != expected.count)
+  if (nrow(incomplete)) {
+    stop("Simulation ancestry methods are missing selected ADX IDs")
+  }
   data <- bind_rows(full, downsampled)
 
   return(data)
@@ -327,7 +357,8 @@ summarize.histograms <- function(
       h <- hist(group$afr.q, breaks = breaks, plot = FALSE)
       return(tibble(
         xmin = head(h$breaks, -1), xmax = tail(h$breaks, -1),
-        xmid = h$mids, fraction = h$counts / sum(h$counts)
+        xmid = h$mids, fraction = h$counts / sum(h$counts),
+        sample.size = sum(h$counts)
       ))
     }) %>%
     ungroup() %>%
@@ -339,7 +370,9 @@ summarize.histograms <- function(
     summarise(
       mean.frac = mean(fraction),
       sd.frac = if (n() > 1) sd(fraction) else NA_real_,
-      n.rep = n_distinct(rep), .groups = "drop"
+      n.rep = n_distinct(rep),
+      sample.size.min = min(sample.size),
+      sample.size.max = max(sample.size), .groups = "drop"
     ) %>%
     mutate(
       ymin = if_else(data.type == "Empirical", NA_real_,
@@ -387,10 +420,9 @@ resolve.plot.choices <- function(
     empirical.method = empirical.method,
     simulation.source = simulation.source,
     sample.set = sample.set.input,
-    subtitle = paste0(
-      "Empirical: ", empirical.method,
-      " · Simulation: ", simulation.source,
-      " · Sample set: ", sample.set.input
+    subtitle = glue(
+      "Empirical: {empirical.method} · Simulation: {simulation.source} · ",
+      "Sample set: {sample.set.input}"
     )
   )
 
@@ -419,7 +451,7 @@ prepare.plot.data <- function(
     ) %>%
     mutate(
       chrom = factor(chrom, levels = c(chromosomes, "all")),
-      series = paste(data.type, sample.set, sep = ".")
+      series = glue("{data.type}.{sample.set}")
     )
   attr(plot.data, "plot.choices") <- choices
 
@@ -442,10 +474,22 @@ make.stat.by.chrom.plot <- function(
   empirical <- filter(data, data.type == "Empirical")
   genome <- filter(empirical, chrom == "all")
   empirical.chrom <- filter(empirical, chrom != "all")
-  lower <- paste0(statistic, ".boot.lower")
-  upper <- paste0(statistic, ".boot.upper")
-  estimate <- paste0(statistic, ".boot")
+  lower <- glue("{statistic}.boot.lower")
+  upper <- glue("{statistic}.boot.upper")
+  estimate <- glue("{statistic}.boot")
   color <- styles$empirical.colors[[choices$empirical.method]]
+  simulation.sample.size <- glue_collapse(
+    sort(unique(simulation$n)), sep = "/"
+  )
+  replicate.count <- n_distinct(simulation$rep)
+  chromosome.scope <- glue_collapse(chromosomes, sep = ", ")
+  subtitle <- glue(
+    "Simulation: {choices$simulation.source}; empirical: ",
+    "{choices$empirical.method} (K = {EMPIRICAL.K}) · ADX sample set: ",
+    "{choices$sample.set} (n = {simulation.sample.size} per size × ",
+    "replicate × chromosome) · Simulation replicates: ",
+    "{replicate.count} · Scope: chromosomes {chromosome.scope}"
+  )
   title <- if (statistic == "mean") {
     "Mean African Ancestry Across Chromosomes"
   } else {
@@ -472,7 +516,7 @@ make.stat.by.chrom.plot <- function(
     scale_x_discrete(limits = chromosomes, drop = FALSE) +
     scale_fill_manual(values = styles$colors, labels = styles$labels) +
     labs(
-      title = title, subtitle = choices$subtitle,
+      title = title, subtitle = subtitle,
       x = "Chromosome", y = y.label, fill = NULL
     ) +
     theme_bw(base_size = PLOT.BASE.SIZE) +
@@ -533,6 +577,18 @@ make.mean.sd.plot <- function(
   simulation <- data %>%
     filter(data.type != "Empirical") %>%
     pivot_longer(c(mean, sd), names_to = "stat", values_to = "estimate")
+  simulation.sample.size <- glue_collapse(
+    sort(unique(simulation$n)), sep = "/"
+  )
+  replicate.count <- n_distinct(simulation$rep)
+  chromosome.scope <- glue_collapse(chromosomes, sep = ", ")
+  subtitle <- glue(
+    "Simulation: {choices$simulation.source}; empirical: ",
+    "{choices$empirical.method} (K = {EMPIRICAL.K}) · ADX sample set: ",
+    "{choices$sample.set} (n = {simulation.sample.size} per size × ",
+    "replicate × chromosome) · Simulation replicates: ",
+    "{replicate.count} · Scope: chromosomes {chromosome.scope}"
+  )
   # reshape empirical estimates and bounds to the same statistic key
   empirical <- data %>%
     filter(data.type == "Empirical") %>%
@@ -577,7 +633,7 @@ make.mean.sd.plot <- function(
     scale_fill_manual(values = styles$colors, labels = styles$labels) +
     labs(
       title = "Mean and Variation in African Ancestry Across Chromosomes",
-      subtitle = choices$subtitle,
+      subtitle = subtitle,
       x = "Chromosome", y = NULL, fill = NULL
     ) +
     theme_bw(base_size = PLOT.BASE.SIZE) +
@@ -603,6 +659,24 @@ make.length.stat.plot <- function(
     sample.set.input, chromosomes
   )
   choices <- attr(selected.data, "plot.choices")
+  simulation.data <- selected.data %>%
+    filter(data.type != "Empirical")
+  simulation.sample.size <- glue_collapse(
+    sort(unique(simulation.data$n)), sep = "/"
+  )
+  replicate.count <- n_distinct(simulation.data$rep)
+  genomic.scope <- if (setequal(chromosomes, CHROMOSOMES)) {
+    "all autosomes"
+  } else {
+    glue("chromosomes {glue_collapse(chromosomes, sep = ', ')}")
+  }
+  subtitle <- glue(
+    "Simulation: {choices$simulation.source}; empirical: ",
+    "{choices$empirical.method} (K = {EMPIRICAL.K}) · ADX sample set: ",
+    "{choices$sample.set} (n = {simulation.sample.size} per size × ",
+    "replicate × chromosome) · Simulation replicates: ",
+    "{replicate.count} · Scope: {genomic.scope}"
+  )
   data <- selected.data %>%
     filter(chrom != "all") %>%
     mutate(chrom = as.character(chrom)) %>%
@@ -636,7 +710,7 @@ make.length.stat.plot <- function(
     scale_shape_manual(values = styles$shapes) +
     scale_linetype_manual(values = styles$linetypes) +
     labs(
-      title = title, subtitle = choices$subtitle,
+      title = title, subtitle = subtitle,
       x = "Chromosome length (Mb)", y = y.label,
       color = NULL, fill = NULL, shape = NULL, linetype = NULL
     ) +
@@ -695,6 +769,24 @@ make.length.mean.sd.plot <- function(
     sample.set.input, chromosomes
   )
   choices <- attr(selected.data, "plot.choices")
+  simulation.data <- selected.data %>%
+    filter(data.type != "Empirical")
+  simulation.sample.size <- glue_collapse(
+    sort(unique(simulation.data$n)), sep = "/"
+  )
+  replicate.count <- n_distinct(simulation.data$rep)
+  genomic.scope <- if (setequal(chromosomes, CHROMOSOMES)) {
+    "all autosomes"
+  } else {
+    glue("chromosomes {glue_collapse(chromosomes, sep = ', ')}")
+  }
+  subtitle <- glue(
+    "Simulation: {choices$simulation.source}; empirical: ",
+    "{choices$empirical.method} (K = {EMPIRICAL.K}) · ADX sample set: ",
+    "{choices$sample.set} (n = {simulation.sample.size} per size × ",
+    "replicate × chromosome) · Simulation replicates: ",
+    "{replicate.count} · Scope: {genomic.scope}"
+  )
   data <- selected.data %>%
     filter(chrom != "all") %>%
     mutate(chrom = as.character(chrom)) %>%
@@ -731,11 +823,8 @@ make.length.mean.sd.plot <- function(
     scale_shape_manual(values = styles$shapes) +
     scale_linetype_manual(values = styles$linetypes) +
     labs(
-      title = paste(
-        "Chromosome Length, Mean, and Variation in African Ancestry",
-        "Across Autosomes"
-      ),
-      subtitle = choices$subtitle,
+      title = "Chromosome Length, Mean, and Variation in African Ancestry Across Autosomes",
+      subtitle = subtitle,
       x = "Chromosome length (Mb)", y = NULL,
       color = NULL, fill = NULL, shape = NULL, linetype = NULL
     ) +
@@ -769,7 +858,7 @@ prepare.histogram.plot.data <- function(
         (data.type == "Empirical" & method == choices$empirical.method &
           sample.set == "full" & chrom %in% c(chromosomes, "all"))
     ) %>%
-    mutate(series = paste(data.type, sample.set, sep = "."))
+    mutate(series = glue("{data.type}.{sample.set}"))
   attr(data, "plot.choices") <- choices
 
   return(data)
@@ -787,6 +876,24 @@ make.histogram.plot <- function(
     sample.set.input, chromosomes
   )
   choices <- attr(data, "plot.choices")
+  simulation <- data %>%
+    filter(data.type != "Empirical")
+  replicate.count <- max(simulation$n.rep)
+  sample.size.min <- min(simulation$sample.size.min)
+  sample.size.max <- max(simulation$sample.size.max)
+  sample.size <- if (sample.size.min == sample.size.max) {
+    sample.size.min
+  } else {
+    glue("{sample.size.min}–{sample.size.max}")
+  }
+  chromosome.scope <- glue_collapse(chromosomes, sep = ", ")
+  subtitle <- glue(
+    "Simulation: {choices$simulation.source}; empirical: ",
+    "{choices$empirical.method} (K = {EMPIRICAL.K}) · ADX sample set: ",
+    "{choices$sample.set} (n = {sample.size} per size × replicate × ",
+    "chromosome) · Simulation replicates: {replicate.count} · Scope: ",
+    "chromosomes {chromosome.scope} plus empirical genome-wide"
+  )
   dodge <- position_dodge(width = diff(breaks)[1] * 0.95)
   # draw aligned bins, simulation errors, and the empirical all facet
   plot <- ggplot(data, aes(xmid, mean.frac, fill = series, group = series)) +
@@ -800,7 +907,7 @@ make.histogram.plot <- function(
     scale_fill_manual(values = styles$colors, labels = styles$labels) +
     labs(
       title = "Distribution of African Ancestry Across Chromosomes",
-      subtitle = choices$subtitle,
+      subtitle = subtitle,
       x = "African ancestry",
       y = "Mean fraction of individuals per bin", fill = NULL
     ) +
@@ -822,12 +929,15 @@ make.diagnostic.admixture.plot <- function(
 ) {
   # validate identifiers, component columns, and requested facets
   required <- c(
-    "chrom", "data.type", "method", "sample.set", component.columns,
-    sample.id.column, facet.columns
+    "rep", "chrom", "data.type", "method", "sample.set", "k",
+    component.columns, sample.id.column, facet.columns
   )
   missing <- setdiff(required, names(individual.data))
   if (length(missing)) {
-    stop("Diagnostic data are missing: ", paste(missing, collapse = ", "))
+    stop(glue(
+      "Diagnostic data are missing: ",
+      "{glue_collapse(missing, sep = ', ')}"
+    ))
   }
   # reshape ancestry components into stacked-bar observations
   data <- individual.data %>%
@@ -849,13 +959,38 @@ make.diagnostic.admixture.plot <- function(
     filter(chrom %in% chromosomes) %>%
     pull(sample.set) %>%
     unique()
-  title <- paste(
-    paste(data.type.labels, collapse = " / "),
+  title <- glue(
+    "{glue_collapse(data.type.labels, sep = ' / ')} ",
     "Ancestry Component Profiles"
   )
-  subtitle <- paste0(
-    "Method: ", paste(sort(methods), collapse = " / "),
-    " · Sample set: ", paste(sort(sample.sets), collapse = " / ")
+  k.values <- individual.data %>%
+    filter(chrom %in% chromosomes, k > 0) %>%
+    pull(k) %>%
+    unique() %>%
+    sort()
+  k.label <- if (length(k.values)) {
+    glue_collapse(k.values, sep = "/")
+  } else {
+    "truth"
+  }
+  sample.size <- individual.data %>%
+    filter(chrom %in% chromosomes) %>%
+    distinct(across(all_of(c(facet.columns, "chrom", sample.id.column)))) %>%
+    count(across(all_of(c(facet.columns, "chrom")))) %>%
+    pull(n) %>%
+    unique() %>%
+    sort() %>%
+    glue_collapse(sep = "/")
+  replicate.count <- individual.data %>%
+    filter(chrom %in% chromosomes) %>%
+    pull(rep) %>%
+    n_distinct()
+  subtitle <- glue(
+    "Method: {glue_collapse(sort(methods), sep = ' / ')} ",
+    "(K = {k.label}) · Sample set: ",
+    "{glue_collapse(sort(sample.sets), sep = ' / ')} ",
+    "(n = {sample.size} per group) · Replicates: {replicate.count} · ",
+    "Scope: chromosomes {glue_collapse(chromosomes, sep = ', ')}"
   )
   # draw one free-width panel for every requested diagnostic group
   plot <- ggplot(data, aes(.data[[sample.id.column]], q, fill = component)) +

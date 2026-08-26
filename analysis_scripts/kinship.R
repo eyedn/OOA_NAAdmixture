@@ -11,6 +11,7 @@
 
 # set up ----
 library(tidyverse)
+library(glue)
 library(nanoparquet)
 
 
@@ -90,7 +91,7 @@ read.kinship.chromosomes <- function(
 ) {
   paths <- file.path(
     path.expand(data.directory),
-    paste0("kinship_unrelated.chr", chromosomes, ".parquet")
+    glue("kinship_unrelated.chr{chromosomes}.parquet")
   )
   data <- map2_dfr(paths, chromosomes, function(path, chrom) {
     table <- read_parquet(path)
@@ -123,12 +124,21 @@ select.kinship.ids <- function(data, downsample.size, seed) {
       c(endpoint.1, endpoint.2), values_to = "sample.id"
     ) %>%
     distinct(data.type, rep, role, chrom, sample.id)
+  expected.groups <- data %>%
+    filter(data.type != "Empirical") %>%
+    distinct(data.type, rep, chrom) %>%
+    crossing(role = c("AFR", "ADX", "EUR"))
   sizes <- candidates %>%
     count(data.type, rep, role, chrom, name = "available")
+  sizes <- expected.groups %>%
+    left_join(
+      sizes, by = c("data.type", "rep", "role", "chrom")
+    ) %>%
+    mutate(available = replace_na(available, 0L))
   if (any(sizes$available < downsample.size)) {
-    stop(paste0(
+    stop(glue(
       "A simulation kinship group contains fewer than ",
-      downsample.size, " unique IDs"
+      "{downsample.size} unique IDs"
     ))
   }
   set.seed(seed)
@@ -154,6 +164,37 @@ apply.kinship.selection <- function(data, selected.ids) {
     inner_join(selected.endpoint.1, by = c(keys, "endpoint.1")) %>%
     inner_join(selected.endpoint.2, by = c(keys, "endpoint.2")) %>%
     mutate(sample.set = "downsampled")
+  expected.counts <- selected.ids %>%
+    count(across(all_of(keys)), name = "selected.count") %>%
+    mutate(expected.pairs = choose(selected.count, 2))
+  canonical.pairs <- downsampled %>%
+    mutate(
+      endpoint.low = pmin(endpoint.1, endpoint.2),
+      endpoint.high = pmax(endpoint.1, endpoint.2)
+    )
+  actual.counts <- canonical.pairs %>%
+    count(across(all_of(keys)), name = "actual.rows")
+  unique.counts <- canonical.pairs %>%
+    distinct(
+      across(all_of(keys)), endpoint.low, endpoint.high
+    ) %>%
+    count(across(all_of(keys)), name = "actual.pairs")
+  incomplete <- expected.counts %>%
+    left_join(actual.counts, by = keys) %>%
+    left_join(unique.counts, by = keys) %>%
+    mutate(
+      actual.rows = replace_na(actual.rows, 0L),
+      actual.pairs = replace_na(actual.pairs, 0L)
+    ) %>%
+    filter(
+      actual.rows != expected.pairs | actual.pairs != expected.pairs
+    )
+  has.self.pairs <- any(
+    canonical.pairs$endpoint.1 == canonical.pairs$endpoint.2
+  )
+  if (nrow(incomplete) || has.self.pairs) {
+    stop("Downsampled kinship groups require a complete pair table")
+  }
   combined <- bind_rows(full, downsampled)
 
   return(combined)
@@ -187,7 +228,8 @@ build.kinship.histograms <- function(data, breaks) {
         xmax = tail(histogram$breaks, -1),
         xmid = histogram$mids,
         count = histogram$counts,
-        fraction = histogram$counts / sum(histogram$counts)
+        fraction = histogram$counts / sum(histogram$counts),
+        sample.size = n_distinct(c(group$endpoint.1, group$endpoint.2))
       )
       return(bins)
     }) %>%
@@ -208,13 +250,17 @@ summarize.kinship.histograms <- function(data) {
       mean.fraction = mean(fraction),
       sd.fraction = sd(fraction),
       replicate.count = n_distinct(rep),
+      sample.size.min = min(sample.size),
+      sample.size.max = max(sample.size),
       .groups = "drop"
     )
   empirical <- data %>%
     filter(data.type == "Empirical") %>%
-    select(
+    transmute(
       data.type, role, chrom, sample.set, xmin, xmax, xmid,
-      mean.fraction = fraction
+      mean.fraction = fraction,
+      sample.size.min = sample.size,
+      sample.size.max = sample.size
     ) %>%
     distinct() %>%
     mutate(sd.fraction = NA_real_, replicate.count = 1L)
@@ -243,6 +289,29 @@ make.kinship.plot <- function(data, plot.sample.set, breaks, styles) {
       data.type == "Empirical" |
         (data.type != "Empirical" & sample.set == plot.sample.set)
     )
+  simulation <- plot.data %>%
+    filter(data.type != "Empirical")
+  replicate.count <- max(simulation$replicate.count)
+  sample.size.min <- min(simulation$sample.size.min)
+  sample.size.max <- max(simulation$sample.size.max)
+  sample.description <- if (sample.size.min == sample.size.max) {
+    glue("n = {sample.size.min}")
+  } else {
+    glue("n = {sample.size.min}–{sample.size.max}")
+  }
+  chromosome.scope <- plot.data %>%
+    filter(data.type != "Empirical") %>%
+    pull(chrom) %>%
+    as.character() %>%
+    unique() %>%
+    glue_collapse(sep = ", ")
+  subtitle <- glue(
+    "KING estimator · Simulations: {plot.sample.set} ",
+    "({sample.description} per size × replicate × chromosome × ",
+    "population) · Empirical: full sample · Simulation replicates: ",
+    "{replicate.count} · Scope: chromosomes {chromosome.scope} plus ",
+    "empirical genome-wide"
+  )
   dodge <- position_dodge(width = diff(breaks)[1] * 0.9)
   plot <- ggplot(
     plot.data,
@@ -274,6 +343,7 @@ make.kinship.plot <- function(data, plot.sample.set, breaks, styles) {
     labs(
       x = "Pairwise Kinship", y = "Fraction of pairs",
       title = "Pairwise Kinship Distributions Across Chromosomes",
+      subtitle = subtitle,
       fill = NULL
     ) +
     xlim(-0.2, 0.0442) +

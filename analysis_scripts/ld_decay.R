@@ -11,6 +11,7 @@
 
 # set up ----
 library(tidyverse)
+library(glue)
 library(nanoparquet)
 
 
@@ -86,7 +87,7 @@ read.ld.chromosomes <- function(
 ) {
   paths <- file.path(
     path.expand(data.directory),
-    paste0("ld_decay.chr", chromosomes, ".parquet")
+    glue("ld_decay.chr{chromosomes}.parquet")
   )
   data <- map2_dfr(paths, chromosomes, function(path, chrom) {
     table <- read_parquet(path)
@@ -184,7 +185,7 @@ summarize.ld.curves <- function(data) {
 
 
 # add shared scales, labels, guides, and theme to one LD plot
-style.ld.plot <- function(plot, title, styles) {
+style.ld.plot <- function(plot, title, subtitle, styles) {
   plot <- plot +
     scale_color_manual(values = styles$population.colors) +
     scale_fill_manual(values = styles$population.colors) +
@@ -198,7 +199,8 @@ style.ld.plot <- function(plot, title, styles) {
     labs(
       x = "Distance Between SNPs (bp)",
       y = expression("Mean " * r^2),
-      title = title, color = NULL, fill = NULL, linetype = NULL
+      title = title, subtitle = subtitle,
+      color = NULL, fill = NULL, linetype = NULL
     ) +
     guides(
       color = guide_legend(
@@ -261,6 +263,21 @@ make.ld.plots <- function(data, styles) {
         as.character(chrom), levels = SELECTED.CHROMOSOMES
       )
     )
+  replicate.count <- max(
+    data$replicate.count[data$data.type != "Empirical"]
+  )
+  genome.subtitle <- glue(
+    "Rogers–Huff r² · Full sample sets · Simulation replicates: ",
+    "{replicate.count} · Scope: pooled genome-wide"
+  )
+  selected.scope <- selected$chrom %>%
+    as.character() %>%
+    unique() %>%
+    glue_collapse(sep = ", ")
+  selected.subtitle <- glue(
+    "Rogers–Huff r² · Full sample sets · Simulation replicates: ",
+    "{replicate.count} · Scope: selected chromosomes {selected.scope}"
+  )
   genome.base <- ggplot(
     genome,
     aes(
@@ -279,17 +296,20 @@ make.ld.plots <- function(data, styles) {
   genome.by.data.set <- add.ld.geometries(genome.base, genome) +
     facet_wrap(~data.type)
   genome.by.data.set <- style.ld.plot(
-    genome.by.data.set, "Genome-wide LD Decay by Data Set", styles
+    genome.by.data.set, "Genome-wide LD Decay by Data Set",
+    genome.subtitle, styles
   )
   genome.by.role <- add.ld.geometries(genome.base, genome) +
     facet_wrap(~role)
   genome.by.role <- style.ld.plot(
-    genome.by.role, "Genome-wide LD Decay by Population Role", styles
+    genome.by.role, "Genome-wide LD Decay by Population Role",
+    genome.subtitle, styles
   )
   genome.populations <- genome.base %>%
     add.ld.geometries(genome) %>%
     style.ld.plot(
-      "Genome-wide LD Decay Across Populations", styles
+      "Genome-wide LD Decay Across Populations", genome.subtitle,
+      styles
     )
   selected.chromosomes <- add.ld.geometries(
     selected.base, selected
@@ -297,7 +317,8 @@ make.ld.plots <- function(data, styles) {
     facet_wrap(~chrom, ncol = 3, drop = FALSE)
   selected.chromosomes <- style.ld.plot(
     selected.chromosomes,
-    "LD Decay Across Selected Chromosomes", styles
+    "LD Decay Across Selected Chromosomes", selected.subtitle,
+    styles
   )
   plots <- list(
     genome.by.data.set = genome.by.data.set,
