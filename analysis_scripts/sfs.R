@@ -503,6 +503,10 @@ style.sfs.plot <- function(
   plot <- plot +
     scale_color_manual(values = styles$population.colors) +
     scale_fill_manual(values = styles$population.colors) +
+    scale_x_continuous(
+      limits = c(1, DISPLAY.BIN.MAX),
+      breaks = seq_len(DISPLAY.BIN.MAX)
+    ) +
     scale_y_continuous(trans = pseudo_log_trans(base = 10)) +
     labs(
       x = x.label, y = y.label, title = title,
@@ -680,13 +684,6 @@ make.standalone.sfs.plots <- function(
 
 # construct the four combined comparison views
 make.combined.sfs.plots <- function(data, value.type, styles) {
-  if ("sample.size" %in% names(data)) {
-    data <- data %>%
-      mutate(minor.allele.frequency = allele.count / sample.size)
-  } else {
-    data <- data %>%
-      mutate(minor.allele.frequency = allele.count)
-  }
   data <- data %>% filter.display.bins()
   genome <- data %>% filter(chrom == "all")
   selected <- data %>%
@@ -720,14 +717,14 @@ make.combined.sfs.plots <- function(data, value.type, styles) {
   genome.base <- ggplot(
     genome,
     aes(
-      x = minor.allele.frequency, y = mean,
+      x = allele.count, y = mean,
       color = pop, fill = pop
     )
   )
   selected.base <- ggplot(
     selected,
     aes(
-      x = minor.allele.frequency, y = mean,
+      x = allele.count, y = mean,
       color = pop, fill = pop
     )
   )
@@ -739,7 +736,7 @@ make.combined.sfs.plots <- function(data, value.type, styles) {
     genome.by.data.set,
     "Genome-wide SFS by Data Set",
     genome.subtitle,
-    "Minor allele frequency", y.label, styles,
+    "Minor allele count", y.label, styles,
     include.linetype = TRUE
   )
   genome.by.role <- add.sfs.geometries(
@@ -750,7 +747,7 @@ make.combined.sfs.plots <- function(data, value.type, styles) {
     genome.by.role,
     "Genome-wide SFS by Population Role",
     genome.subtitle,
-    "Minor allele frequency", y.label, styles,
+    "Minor allele count", y.label, styles,
     include.linetype = TRUE
   )
   genome.populations <- genome.base %>%
@@ -758,7 +755,7 @@ make.combined.sfs.plots <- function(data, value.type, styles) {
     style.sfs.plot(
       "Genome-wide SFS Across Populations",
       genome.subtitle,
-      "Minor allele frequency", y.label, styles,
+      "Minor allele count", y.label, styles,
       include.linetype = TRUE
     )
   selected.chromosomes <- add.sfs.geometries(
@@ -769,7 +766,7 @@ make.combined.sfs.plots <- function(data, value.type, styles) {
     selected.chromosomes,
     "SFS Across Selected Chromosomes",
     selected.subtitle,
-    "Minor allele frequency", y.label, styles,
+    "Minor allele count", y.label, styles,
     include.linetype = TRUE
   )
   plots <- list(
