@@ -12,7 +12,6 @@
 
 
 ##### set up ##################################################################
-from .aggregate_genome_stats import *
 from .build_global_ancestry_table import *
 from .build_sample_ids import *
 from .calc_stats import *
@@ -28,7 +27,6 @@ from .write_local_ancestry import *
 
 
 __all__ = [
-    "aggregate_genome_stats",
     "build_global_ancestry_table",
     "build_sample_ids",
     "calc_stats",

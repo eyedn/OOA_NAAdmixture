@@ -7,7 +7,7 @@
 #           Department of Quantitative and Computational Biology
 #           Mooney Lab
 #           ---
-#           4_submit_calc_onekg_chrom_stats.sh
+#           3_submit_calc_onekg_chrom_stats.sh
 ###############################################################################
 
 # workflow: prepare and analyze 1000 Genomes chromosome-population inputs, then

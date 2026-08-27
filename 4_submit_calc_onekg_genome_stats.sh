@@ -7,7 +7,7 @@
 #           Department of Quantitative and Computational Biology
 #           Mooney Lab
 #           ---
-#           5_submit_calc_onekg_genome_stats.sh
+#           4_submit_calc_onekg_genome_stats.sh
 ###############################################################################
 
 # workflow: validate chromosome outputs, calculate per-population genome
