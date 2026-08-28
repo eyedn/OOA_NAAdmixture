@@ -34,21 +34,37 @@ source "${project_dir}/other_scripts/log_msg.sh"
 
 
 ##### variables ###############################################################
-# read the statistics directory, replicate count, and chromosome list.
+# read the statistics directory, replicate count, chromosomes, and optional
+# table selection used by focused recovery workflows.
 stats_dir="$1"
 num_reps="$2"
 shift 2
 shift 1 # skip the "--" from input arguments
-chroms=( "$@" )
+chroms=()
+while (( $# > 0 )) && [[ "$1" != "--" ]]; do
+    chroms+=( "$1" )
+    shift
+done
+tables=()
+if (( $# > 0 )); then
+    shift
+    tables=( "$@" )
+fi
 
 
 ##### combine statistics ######################################################
 # combine per-replicate summaries
 log_msg "combining simulation chromosome statistics across replicates"
-python "${project_dir}/job_scripts/python_utils/combine_sim_chr_stats.py" \
-    --stats-dir "${stats_dir}" \
-    --num-reps "${num_reps}" \
-    --chrom-index "${SLURM_ARRAY_TASK_ID}" \
+combine_args=(
+    --stats-dir "${stats_dir}"
+    --num-reps "${num_reps}"
+    --chrom-index "${SLURM_ARRAY_TASK_ID}"
     --chroms "${chroms[@]}"
+)
+if (( ${#tables[@]} > 0 )); then
+    combine_args+=( --tables "${tables[@]}" )
+fi
+python "${project_dir}/job_scripts/python_utils/combine_sim_chr_stats.py" \
+    "${combine_args[@]}"
 
 log_msg "done combining simulation chromosome statistics"

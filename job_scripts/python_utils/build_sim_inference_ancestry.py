@@ -15,12 +15,8 @@
 from pathlib import Path
 import argparse
 import csv
-from shared_utils.build_multik_ancestry_rows import (
-    build_multik_ancestry_rows,
-)
-from shared_utils.parse_faststructure_choose_k import (
-    parse_faststructure_choose_k,
-)
+from shared_utils.build_multik_ancestry_rows import build_multik_ancestry_rows
+from shared_utils.parse_faststructure_choose_k import parse_faststructure_choose_k
 from shared_utils.parse_k_path_specs import parse_k_path_specs
 from shared_utils.write_stats_table import write_stats_table
 
@@ -34,13 +30,13 @@ parser.add_argument(
     "--admixture-q-path",
     action="append",
     required=True,
-    metavar="K=PATH",
+    metavar="K=PATH"
 )
 parser.add_argument(
     "--faststructure-q-path",
     action="append",
     required=True,
-    metavar="K=PATH",
+    metavar="K=PATH"
 )
 parser.add_argument("--faststructure-choose-k-path", required=True)
 parser.add_argument("--faststructure-prior", required=True)
@@ -56,7 +52,7 @@ if __name__ == "__main__":
         args.sample_metadata_path,
         "r",
         encoding="utf-8",
-        newline="",
+        newline=""
     ) as in_file:
         metadata_rows = list(csv.DictReader(in_file, delimiter="\t"))
     metadata_by_sample = {row["iid"]: row for row in metadata_rows}
@@ -84,11 +80,11 @@ if __name__ == "__main__":
 
     admixture_paths = parse_k_path_specs(
         args.admixture_q_path,
-        "ADMIXTURE",
+        "ADMIXTURE"
     )
     faststructure_paths = parse_k_path_specs(
         args.faststructure_q_path,
-        "fastStructure",
+        "fastStructure"
     )
     if sorted(admixture_paths) != sorted(faststructure_paths):
         raise ValueError(
@@ -98,7 +94,7 @@ if __name__ == "__main__":
     ancestry_by_tool = {}
     for table_name, paths in (
         ("ancestry_ADMIXTURE_multik", admixture_paths),
-        ("ancestry_fastStructure_multik", faststructure_paths),
+        ("ancestry_fastStructure_multik", faststructure_paths)
     ):
         values_by_k = {}
         for k, q_path in sorted(paths.items()):
@@ -118,7 +114,7 @@ if __name__ == "__main__":
             values_by_k,
             chrom=args.chrom,
             rep=args.rep,
-            sample_ids=sample_ids,
+            sample_ids=sample_ids
         )
         write_stats_table(
             stats_dir / f"{table_name}.rep_{args.rep}{suffix}",
@@ -128,7 +124,7 @@ if __name__ == "__main__":
     with open(
         args.faststructure_choose_k_path,
         "r",
-        encoding="utf-8",
+        encoding="utf-8"
     ) as in_file:
         choose_k_report = in_file.read()
     choose_k_row = parse_faststructure_choose_k(
@@ -137,9 +133,9 @@ if __name__ == "__main__":
         args.faststructure_seed,
         sorted(faststructure_paths),
         chrom=args.chrom,
-        rep=args.rep,
+        rep=args.rep
     )
     write_stats_table(
         stats_dir / f"fastStructure_chooseK.rep_{args.rep}{suffix}",
-        [choose_k_row],
+        [choose_k_row]
     )

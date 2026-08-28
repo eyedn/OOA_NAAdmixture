@@ -12,10 +12,8 @@
 
 
 ##### set up ##################################################################
-from itertools import combinations
 from pathlib import Path
 import argparse
-from onekg_utils.build_folded_2d_sfs_rows import build_folded_2d_sfs_rows
 from onekg_utils.read_tsv_rows import read_tsv_rows
 from shared_utils.write_stats_table import write_stats_table
 
@@ -41,7 +39,7 @@ if __name__ == "__main__":
         "pi_theta_stats_full_callable_chrom",
         "sfs",
         "ld_decay",
-        "kinship_unrelated",
+        "kinship_unrelated"
     ]
     combined = {}
     for table_name in partial_tables:
@@ -54,53 +52,19 @@ if __name__ == "__main__":
         combined[table_name] = rows
         write_stats_table(
             stats_dir / f"{table_name}.rep_0.chr{args.chrom}",
-            rows,
+            rows
         )
         write_stats_table(
             stats_dir / f"{table_name}.chr{args.chrom}",
-            rows,
+            rows
         )
     write_stats_table(
         stats_dir / f"kinship.rep_0.chr{args.chrom}",
-        combined["kinship_unrelated"],
+        combined["kinship_unrelated"]
     )
     write_stats_table(
         stats_dir / f"kinship.chr{args.chrom}",
-        combined["kinship_unrelated"],
-    )
-
-    # build the folded pairwise SFS from shared per-population allele counts.
-    counts_by_pop = {}
-    for pop in args.pops:
-        path = stats_dir / (
-            f"allele_counts.rep_0.chr{args.chrom}.{pop}.tsv"
-        )
-        counts_by_pop[pop] = {
-            int(row["position"]): (
-                int(row["ref_count"]),
-                int(row["alt_count"]),
-            )
-            for row in read_tsv_rows(path)
-        }
-    sfs_2d = []
-    for pop1, pop2 in combinations(args.pops, 2):
-        sfs_2d.extend(
-            build_folded_2d_sfs_rows(
-                0,
-                args.chrom,
-                pop1,
-                pop2,
-                counts_by_pop[pop1],
-                counts_by_pop[pop2],
-            )
-        )
-    write_stats_table(
-        stats_dir / f"sfs_2d.rep_0.chr{args.chrom}",
-        sfs_2d,
-    )
-    write_stats_table(
-        stats_dir / f"sfs_2d.chr{args.chrom}",
-        sfs_2d,
+        combined["kinship_unrelated"]
     )
 
     # write chromosome-level ancestry and variant-QC handoffs.
@@ -108,7 +72,7 @@ if __name__ == "__main__":
         "ancestry_ADMIXTURE_super",
         "ancestry_ADMIXTURE_multik",
         "ancestry_fastStructure_multik",
-        "fastStructure_chooseK",
+        "fastStructure_chooseK"
     ]
     for table_name in ancestry_tables:
         rows = read_tsv_rows(

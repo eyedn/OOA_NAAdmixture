@@ -12,7 +12,6 @@
 
 
 ##### set up ##################################################################
-from itertools import combinations
 from pathlib import Path
 import csv
 import allel
@@ -20,11 +19,10 @@ import numpy as np
 import pandas as pd
 import tszip
 from .parse_king_file import parse_king_file
-from .read_fam_order import read_q_rows
+from .read_fam_order import read_fam_order
 from shared_utils.log_msg import log_msg
+from shared_utils.project_complete_sfs import project_complete_sfs
 
-
-##### internal functions ######################################################
 ANCESTRY_COLUMNS = [
     "rep",
     "chrom",
@@ -35,8 +33,36 @@ ANCESTRY_COLUMNS = [
     "eur_tspop",
     "afr_q",
     "eur_q",
-    "span",
+    "span"
 ]
+
+
+##### internal functions ######################################################
+'''
+internal: read ADMIXTURE Q rows and validate exact correspondence to FAM order.
+'''
+def _read_q_rows(rep, q_path, fam_path):
+    fam_table = read_fam_order(fam_path)
+    q_rows = []
+    with open(q_path, "r", encoding="utf-8") as in_file:
+        for line in in_file:
+            fields = line.strip().split()
+            if fields:
+                q_rows.append((float(fields[0]), float(fields[1])))
+    if len(q_rows) != len(fam_table):
+        raise ValueError(
+            "ADMIXTURE Q row count does not match final FAM row count"
+        )
+    return [
+        {
+            "rep": rep,
+            "pop": fam_row["iid"].split("_", 1)[0],
+            "vcf_sample_id": fam_row["iid"],
+            "afr_q": q_row[0],
+            "eur_q": q_row[1]
+        }
+        for fam_row, q_row in zip(fam_table, q_rows)
+    ]
 
 '''
 internal: return sample nodes for one population in tree-sequence sample order.
@@ -49,66 +75,6 @@ def _sample_nodes_for_pop(ts, pops, sample_size, pop):
     for ind_id in range(start, end):
         nodes.extend(int(node) for node in ts.individual(ind_id).nodes)
     return nodes
-
-
-'''
-internal: build one-dimensional SFS rows for every population. Returns derived
-allele-count bins for one chromosome and replicate.
-'''
-def _build_1d_sfs_rows(ts, rep, pops, sample_size, chrom=None):
-    rows = []
-    for pop in pops:
-        sample_nodes = _sample_nodes_for_pop(ts, pops, sample_size, pop)
-        spectrum = ts.allele_frequency_spectrum(
-            [sample_nodes],
-            polarised=True,
-            span_normalise=False,
-            mode="site",
-        )
-        for derived_count, count in enumerate(spectrum):
-            rows.append(
-                {
-                    "rep": rep,
-                    "chrom": chrom,
-                    "pop": pop,
-                    "derived_allele_count": derived_count,
-                    "count": count,
-                }
-            )
-    return rows
-
-
-'''
-internal: build pairwise two-dimensional SFS rows. Returns joint derived-count
-bins for every population pair.
-'''
-def _build_2d_sfs_rows(ts, rep, pops, sample_size, chrom=None):
-    rows = []
-    for pop1, pop2 in combinations(pops, 2):
-        sample_sets = [
-            _sample_nodes_for_pop(ts, pops, sample_size, pop1),
-            _sample_nodes_for_pop(ts, pops, sample_size, pop2),
-        ]
-        spectrum = ts.allele_frequency_spectrum(
-            sample_sets,
-            polarised=True,
-            span_normalise=False,
-            mode="site",
-        )
-        for pop1_count in range(spectrum.shape[0]):
-            for pop2_count in range(spectrum.shape[1]):
-                rows.append(
-                    {
-                        "rep": rep,
-                        "chrom": chrom,
-                        "pop1": pop1,
-                        "pop2": pop2,
-                        "pop1_count": pop1_count,
-                        "pop2_count": pop2_count,
-                        "count": spectrum[pop1_count, pop2_count],
-                    }
-                )
-    return rows
 
 
 '''
@@ -129,7 +95,7 @@ def _build_pi_theta_rows(ts, rep, pops, sample_size, mutation_rate, chrom=None):
         )
         segregating_sites = ts.segregating_sites(
             [sample_nodes],
-            mode="site",
+            mode="site"
         )[0]
         theta_value = segregating_sites / wattersons_const
 
@@ -145,7 +111,7 @@ def _build_pi_theta_rows(ts, rep, pops, sample_size, mutation_rate, chrom=None):
                 "mutation_rate": mutation_rate,
                 "span": float(ts.sequence_length),
                 "segregating_sites": None,
-                "wattersons_const": wattersons_const,
+                "wattersons_const": wattersons_const
             }
         )
         rows.append(
@@ -159,7 +125,7 @@ def _build_pi_theta_rows(ts, rep, pops, sample_size, mutation_rate, chrom=None):
                 "mutation_rate": mutation_rate,
                 "span": float(ts.sequence_length),
                 "segregating_sites": segregating_sites,
-                "wattersons_const": wattersons_const,
+                "wattersons_const": wattersons_const
             }
         )
     return rows
@@ -183,7 +149,7 @@ def _build_ld_decay_rows(
     chrom=None,
     window_size_bp=2_000_000,
     distance_bin_bp=5_000,
-    maf_threshold=0.10,
+    maf_threshold=0.10
 ):
     rows = []
     positions = np.array([site.position for site in ts.sites()])
@@ -198,7 +164,7 @@ def _build_ld_decay_rows(
     genotypes = haploid_genotypes.reshape(
         haploid_genotypes.shape[0],
         num_individuals,
-        2,
+        2
     )
     requested_individuals = len(pops) * sample_size
     if requested_individuals > num_individuals:
@@ -275,7 +241,7 @@ def _build_ld_decay_rows(
                             if finite_values else float("nan")
                         ),
                         "sum_r2": float(np.sum(finite_values)),
-                        "n_pairs": len(finite_values),
+                        "n_pairs": len(finite_values)
                     }
                 )
     return rows
@@ -292,7 +258,7 @@ def _build_ancestry_rows(
     global_anc_dir,
     q_path,
     fam_path,
-    chrom=None,
+    chrom=None
 ):
     global_rows = []
     for pop in pops:
@@ -317,7 +283,7 @@ def _build_ancestry_rows(
 
     q_by_sample = {
         (row["pop"], row["vcf_sample_id"]): row
-        for row in read_q_rows(rep, q_path, fam_path)
+        for row in _read_q_rows(rep, q_path, fam_path)
     }
     ancestry_rows = []
     for row in global_rows:
@@ -326,7 +292,7 @@ def _build_ancestry_rows(
             {
                 **row,
                 "afr_q": q_row.get("afr_q"),
-                "eur_q": q_row.get("eur_q"),
+                "eur_q": q_row.get("eur_q")
             }
         )
 
@@ -341,11 +307,50 @@ def _build_ancestry_table(*args, **kwargs):
     return pd.DataFrame(rows, columns=ANCESTRY_COLUMNS)
 
 
-##### main function ###########################################################
+'''
+internal: build projected unfolded chromosome SFS rows for each population.
+'''
+def _build_1d_sfs_rows(
+    ts,
+    rep,
+    pops,
+    sample_size,
+    projection_size,
+    chrom=None
+):
+    rows = []
+    for pop_index, pop in enumerate(pops):
+        start = pop_index * sample_size
+        sample_nodes = []
+        for individual_id in range(start, start + sample_size):
+            sample_nodes.extend(
+                int(node) for node in ts.individual(individual_id).nodes
+            )
+        spectrum = ts.allele_frequency_spectrum(
+            [sample_nodes],
+            polarised=True,
+            span_normalise=False,
+            mode="site"
+        )
+        projected = project_complete_sfs(spectrum, projection_size)
+        for derived_count, count in enumerate(projected):
+            rows.append(
+                {
+                    "rep": rep,
+                    "chrom": chrom,
+                    "pop": pop,
+                    "derived_allele_count": derived_count,
+                    "count": count
+                }
+            )
+    return rows
+
+
+##### main ####################################################################
 '''
 calculate all simulation statistics for one chromosome and replicate. Writes
-joined ancestry, population and combined KING tables, pi, theta, one- and
-two-dimensional SFS tables, and LD-decay summaries.
+joined ancestry, population and combined KING tables, pi, theta, projected
+one-dimensional SFS tables, and LD-decay summaries.
 '''
 def calc_stats(args):
     # validate inputs and load the chromosome tree sequence.
@@ -383,7 +388,7 @@ def calc_stats(args):
         global_anc_dir=args.global_anc_dir,
         q_path=q_path,
         fam_path=args.admixture_fam_path,
-        chrom=args.chr,
+        chrom=args.chr
     )
     ancestry_tsv_path = (
         stats_dir / f"ancestry.rep_{args.rep}.chr{args.chr}.tsv"
@@ -398,7 +403,7 @@ def calc_stats(args):
     ancestry_table.to_csv(
         ancestry_tsv_path,
         sep="\t",
-        index=False,
+        index=False
     )
     ancestry_table.to_parquet(
         ancestry_parquet_path,
@@ -460,12 +465,12 @@ def calc_stats(args):
             args.pops,
             args.sample_size,
             args.mutation_rate,
-            args.chr,
+            args.chr
         )
     )
     log_msg(f"completed pi/theta rep={args.rep} chr={args.chr}")
 
-    # calculate one- and two-dimensional SFS from the tree sequence.
+    # calculate projected one-dimensional SFS from the tree sequence.
     log_msg(f"calculating SFS rep={args.rep} chr={args.chr}")
     sfs = pd.DataFrame(
         _build_1d_sfs_rows(
@@ -473,16 +478,8 @@ def calc_stats(args):
             args.rep,
             args.pops,
             args.sample_size,
-            args.chr,
-        )
-    )
-    sfs_2d = pd.DataFrame(
-        _build_2d_sfs_rows(
-            ts,
-            args.rep,
-            args.pops,
-            args.sample_size,
-            args.chr,
+            2 * args.sfs_size,
+            args.chr
         )
     )
     log_msg(f"completed SFS rep={args.rep} chr={args.chr}")
@@ -498,7 +495,7 @@ def calc_stats(args):
             args.chr,
             args.ld_decay_window_size_bp,
             args.ld_decay_distance_bin_bp,
-            args.ld_decay_maf_threshold,
+            args.ld_decay_maf_threshold
         )
     )
     log_msg(f"completed LD decay rep={args.rep} chr={args.chr}")
@@ -507,8 +504,7 @@ def calc_stats(args):
     tables = {
         "pi_theta_stats": pi_theta,
         "sfs": sfs,
-        "sfs_2d": sfs_2d,
-        "ld_decay": ld_decay,
+        "ld_decay": ld_decay
     }
     for table_name, table in tables.items():
         tsv_path = (
@@ -524,10 +520,10 @@ def calc_stats(args):
         table.to_csv(
             tsv_path,
             sep="\t",
-            index=False,
+            index=False
         )
         table.to_parquet(
             parquet_path,
-            index=False,
+            index=False
         )
     log_msg(f"completed simulation statistics rep={args.rep} chr={args.chr}")

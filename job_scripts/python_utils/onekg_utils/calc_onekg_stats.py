@@ -10,7 +10,6 @@
 
 # overview: coordinate empirical folded-SFS, diversity, LD, and kinship stats.
 
-
 ##### set up ##################################################################
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -22,9 +21,103 @@ from .read_onekg_sample_pops import read_onekg_sample_pops
 from .read_tsv_rows import read_tsv_rows
 from .scan_onekg_vcf import scan_onekg_vcf
 from shared_utils.log_msg import log_msg
+from shared_utils.project_complete_sfs import project_complete_sfs
 from shared_utils.write_stats_table import write_stats_table
 
+
 ##### internal functions #####################################################
+'''
+internal: build a complete projected and folded empirical SFS table. 
+'''
+def _build_projected_folded_1d_sfs_rows(
+    rep, chrom, pop, allele_counts, sample_count, projection_size,
+    projection_pop_ref
+):
+    source_size = 2 * sample_count
+    if source_size < projection_size:
+        raise ValueError(
+            f"Population {pop} has {sample_count} diploid individuals; "
+            f"projection requires at least {projection_size // 2}"
+        )
+    if pop == projection_pop_ref and source_size != projection_size:
+        raise ValueError(
+            f"{projection_pop_ref} must contain exactly "
+            f"{projection_size // 2} diploid individuals"
+        )
+    unfolded = [0.0] * (source_size + 1)
+    for ref_count, alt_count in allele_counts:
+        if ref_count < 0 or alt_count < 0:
+            raise ValueError("Allele counts must be nonnegative")
+        if ref_count + alt_count != source_size:
+            raise ValueError("Allele counts do not match the sample size")
+        unfolded[alt_count] += 1.0
+    projected = (
+        tuple(unfolded)
+        if source_size == projection_size
+        else project_complete_sfs(unfolded, projection_size)
+    )
+    folded = Counter()
+    for alt_count, count in enumerate(projected):
+        folded[min(alt_count, projection_size - alt_count)] += count
+    return [
+        {
+            "rep": rep,
+            "chrom": chrom,
+            "pop": pop,
+            "minor_allele_count": minor_count,
+            "count": folded[minor_count],
+            "source_allele_count": source_size,
+            "projection_allele_count": projection_size
+        }
+        for minor_count in range(projection_size // 2 + 1)
+    ]
+
+
+'''
+internal: validate and sum projected chromosome SFS rows by population.
+'''
+def _aggregate_projected_sfs_rows(rows):
+    if not rows:
+        raise ValueError("Cannot aggregate an empty SFS")
+    projections = {int(row["projection_allele_count"]) for row in rows}
+    if len(projections) != 1:
+        raise ValueError("Chromosome SFS projection metadata do not match")
+    projection_size = projections.pop()
+    expected_bins = set(range(projection_size // 2 + 1))
+    grouped = defaultdict(float)
+    metadata = {}
+    bins_by_chrom_pop = defaultdict(set)
+    for row in rows:
+        count = float(row["count"])
+        if not math.isfinite(count) or count < 0:
+            raise ValueError(
+                "Chromosome SFS counts must be finite and nonnegative"
+            )
+        rep = int(row["rep"])
+        pop = row["pop"]
+        chrom = str(row["chrom"])
+        minor_count = int(row["minor_allele_count"])
+        bins_by_chrom_pop[(chrom, pop)].add(minor_count)
+        grouped[(rep, pop, minor_count)] += count
+        source_size = int(row["source_allele_count"])
+        previous = metadata.setdefault((rep, pop), source_size)
+        if previous != source_size:
+            raise ValueError("Chromosome SFS source metadata do not match")
+    if any(bins != expected_bins for bins in bins_by_chrom_pop.values()):
+        raise ValueError("Chromosome SFS bins are incomplete or inconsistent")
+    return [
+        {
+            "rep": rep,
+            "pop": pop,
+            "minor_allele_count": minor_count,
+            "count": count,
+            "source_allele_count": metadata[(rep, pop)],
+            "projection_allele_count": projection_size
+        }
+        for (rep, pop, minor_count), count in sorted(grouped.items())
+    ]
+
+
 '''
 internal: calculate pooled-MAF-filtered Rogers-Huff rows for one empirical
 physical window, then summarize target-population r2 by distance bin.
@@ -38,7 +131,7 @@ def _build_onekg_ld_decay_rows(
     window_start,
     window_end,
     distance_bin_bp,
-    maf_threshold,
+    maf_threshold
 ):
     positions = np.asarray(positions)
     genotypes = np.asarray(genotypes)
@@ -96,7 +189,7 @@ def _build_onekg_ld_decay_rows(
                         if finite_values else float("nan")
                     ),
                     "sum_r2": float(np.sum(finite_values)),
-                    "n_pairs": len(finite_values),
+                    "n_pairs": len(finite_values)
                 }
             )
     return rows
@@ -116,7 +209,7 @@ def _stream_onekg_ld_decay_rows(
     chrom_len,
     window_size_bp,
     distance_bin_bp,
-    maf_threshold,
+    maf_threshold
 ):
     sample_indexes = None
     target_indexes = None
@@ -138,7 +231,7 @@ def _stream_onekg_ld_decay_rows(
             window_start,
             window_end,
             distance_bin_bp,
-            maf_threshold,
+            maf_threshold
         )
 
     for raw_line in vcf_file:
@@ -217,28 +310,6 @@ def _stream_onekg_ld_decay_rows(
 
 
 '''
-internal: sum folded one-dimensional SFS bins across chromosome tables.
-'''
-def _aggregate_folded_sfs_rows(rows):
-    grouped = defaultdict(float)
-    for row in rows:
-        key = (
-            int(row["rep"]),
-            row["pop"],
-            int(row["minor_allele_count"]),
-        )
-        grouped[key] += float(row["count"])
-    return [
-        {
-            "rep": rep,
-            "pop": pop,
-            "minor_allele_count": minor_count,
-            "count": count,
-        }
-        for (rep, pop, minor_count), count in sorted(grouped.items())
-    ]
-
-'''
 internal: aggregate chromosome LD-decay summaries at genome scope.
 '''
 def _aggregate_ld_rows(rows):
@@ -247,7 +318,7 @@ def _aggregate_ld_rows(rows):
         key = (
             int(row["rep"]),
             row["pop"],
-            int(row["distance_bin_bp"]),
+            int(row["distance_bin_bp"])
         )
         grouped[key]["sum_r2"] += float(row["sum_r2"])
         grouped[key]["n_pairs"] += int(row["n_pairs"])
@@ -264,7 +335,7 @@ def _aggregate_ld_rows(rows):
                     if num_pairs else math.nan
                 ),
                 "sum_r2": values["sum_r2"],
-                "n_pairs": num_pairs,
+                "n_pairs": num_pairs
             }
         )
     return output
@@ -306,28 +377,10 @@ def _aggregate_pi_theta_rows(rows):
                 "ne_value": value / (4 * mutation_rate),
                 "mutation_rate": mutation_rate,
                 "segregating_sites": segregating_sites,
-                "wattersons_const": wattersons_const,
+                "wattersons_const": wattersons_const
             }
         )
     return aggregated
-
-'''
-internal: build a folded 1D SFS from REF and ALT allele counts; here, we do not
-use polarization/ancestral-state inference.
-'''
-def _build_folded_1d_sfs_rows(rep, chrom, pop, allele_counts):
-    bins = Counter(min(ref_count, alt_count)
-                   for ref_count, alt_count in allele_counts)
-    return [
-        {
-            "rep": rep,
-            "chrom": chrom,
-            "pop": pop,
-            "minor_allele_count": minor_count,
-            "count": count,
-        }
-        for minor_count, count in sorted(bins.items())
-    ]
 
 '''
 internal: build pi and Watterson theta rows using one explicit sequence denom.
@@ -339,7 +392,7 @@ def _build_pi_theta_rows(
     allele_counts,
     span,
     mutation_rate,
-    num_haplotypes,
+    num_haplotypes
 ):
     if span <= 0:
         raise ValueError("Sequence span must be positive")
@@ -372,7 +425,7 @@ def _build_pi_theta_rows(
         "pop": pop,
         "mutation_rate": mutation_rate,
         "span": span,
-        "wattersons_const": wattersons_const,
+        "wattersons_const": wattersons_const
     }
     return [
         {
@@ -380,14 +433,14 @@ def _build_pi_theta_rows(
             "stat": "pi",
             "value": pi_value,
             "ne_value": pi_value / (4 * mutation_rate),
-            "segregating_sites": None,
+            "segregating_sites": None
         },
         {
             **common,
             "stat": "theta",
             "value": theta_value,
             "ne_value": theta_value / (4 * mutation_rate),
-            "segregating_sites": segregating_sites,
+            "segregating_sites": segregating_sites
         },
     ]
 
@@ -405,15 +458,15 @@ def _read_onekg_chr_lengths(path, chrom):
     qc_names = ("chr_len_after_qc", "length_after_qc", "callable_length")
     chrom_index = next(
         (headers.index(name) for name in chrom_names if name in headers),
-        None,
+        None
     )
     qc_index = next(
         (headers.index(name) for name in qc_names if name in headers),
-        None,
+        None
     )
     length_index = next(
         (headers.index(name) for name in length_names if name in headers),
-        None,
+        None
     )
     if None in (chrom_index, length_index, qc_index):
         raise ValueError(
@@ -433,9 +486,8 @@ def _read_onekg_chr_lengths(path, chrom):
             return chrom_len, callable_span
     raise ValueError(f"Chromosome {chrom} is absent from chromosome lengths")
 
-'''
-parse positive zero-based, half-open BED intervals for one chromosome.
-'''
+''' internal: parse positive zero-based half-open BED intervals by
+chromosome. '''
 def _read_bed_intervals(rows, chrom, source_name):
     target_chrom = str(chrom).lower().removeprefix("chr")
     intervals = []
@@ -474,8 +526,9 @@ def _read_bed_intervals(rows, chrom, source_name):
 
     return intervals
 
+
 '''
-merge sorted or unsorted half-open intervals, including adjacent intervals.
+internal: merge sorted or unsorted adjacent half-open intervals. 
 '''
 def _merge_bed_intervals(intervals):
     intervals.sort()
@@ -490,8 +543,9 @@ def _merge_bed_intervals(intervals):
     merged.append((current_start, current_end))
     return merged
 
+
 '''
-calculate the shared span of two BED inputs using half-open coordinates.
+internal: calculate the shared span of two half-open BED inputs.
 '''
 def _calc_bed_intersection_span(intergenic_rows, included_rows, chrom):
     intergenic = _merge_bed_intervals(
@@ -520,6 +574,7 @@ def _calc_bed_intersection_span(intergenic_rows, included_rows, chrom):
             "intergenic and included-span inputs"
         )
     return span
+
 
 ##### main function ###########################################################
 '''
@@ -554,6 +609,8 @@ def calc_onekg_stats(args):
             "ld_decay_distance_bin_bp": args.ld_decay_distance_bin_bp,
             "ld_decay_maf_threshold": args.ld_decay_maf_threshold,
             "pops": args.pops,
+            "sfs_size": args.sfs_size,
+            "sfs_size_pop_ref": args.sfs_size_pop_ref
         }
         missing_args = [
             name for name, value in required_args.items() if value is None
@@ -586,7 +643,7 @@ def calc_onekg_stats(args):
                 "pop": args.pop,
                 "id1": raw.get("IID1", raw.get("ID1")),
                 "id2": raw.get("IID2", raw.get("ID2")),
-                "kinship": raw.get("KINSHIP", raw.get("Kinship")),
+                "kinship": raw.get("KINSHIP", raw.get("Kinship"))
             }
         )
         king_rows.append(row)
@@ -613,7 +670,7 @@ def calc_onekg_stats(args):
         sample_pops = read_onekg_sample_pops(
             args.unrels_path,
             args.fam_path,
-            args.pops,
+            args.pops
         )
         open_vcf = gzip.open if args.vcf_path.endswith(".gz") else open
         open_ld_vcf = gzip.open if args.ld_vcf_path.endswith(".gz") else open
@@ -624,12 +681,11 @@ def calc_onekg_stats(args):
         with open_vcf(args.vcf_path, "rt", encoding="utf-8") as vcf_file:
             scan = scan_onekg_vcf(vcf_file, sample_pops, args.pops)
 
-        pop_counts = scan["counts_by_pop"][args.pop]
-        allele_counts = list(pop_counts.values())
+        allele_counts = list(scan["counts_by_pop"][args.pop].values())
         num_haplotypes = 2 * scan["sample_counts"][args.pop]
         chrom_len, callable_span = _read_onekg_chr_lengths(
             args.chr_lens_path,
-            args.chrom,
+            args.chrom
         )
         log_msg(
             f"calculating LD decay chr={args.chrom} pop={args.pop} "
@@ -638,7 +694,7 @@ def calc_onekg_stats(args):
         with open_ld_vcf(
             args.ld_vcf_path,
             "rt",
-            encoding="utf-8",
+            encoding="utf-8"
         ) as vcf_file:
             ld_decay = _stream_onekg_ld_decay_rows(
                 vcf_file,
@@ -650,7 +706,7 @@ def calc_onekg_stats(args):
                 chrom_len,
                 args.ld_decay_window_size_bp,
                 args.ld_decay_distance_bin_bp,
-                args.ld_decay_maf_threshold,
+                args.ld_decay_maf_threshold
             )
         log_msg(
             f"scanning intergenic VCF chr={args.chrom} pop={args.pop} "
@@ -669,12 +725,12 @@ def calc_onekg_stats(args):
         with open_intergenic_vcf(
             args.intergenic_vcf_path,
             "rt",
-            encoding="utf-8",
+            encoding="utf-8"
         ) as vcf_file:
             intergenic_scan = scan_onekg_vcf(
                 vcf_file,
                 intergenic_sample_pops,
-                [args.pop],
+                [args.pop]
             )
         intergenic_counts = list(
             intergenic_scan["counts_by_pop"][args.pop].values()
@@ -682,16 +738,16 @@ def calc_onekg_stats(args):
         with open(
             args.intergenic_bed_path,
             "r",
-            encoding="utf-8",
+            encoding="utf-8"
         ) as intergenic_bed_file, open(
             args.span_incl_bed_path,
             "r",
-            encoding="utf-8",
+            encoding="utf-8"
         ) as included_bed_file:
             intergenic_span = _calc_bed_intersection_span(
                 intergenic_bed_file,
                 included_bed_file,
-                args.chrom,
+                args.chrom
             )
         if intergenic_span > callable_span:
             raise ValueError(
@@ -710,7 +766,7 @@ def calc_onekg_stats(args):
             intergenic_counts,
             intergenic_span,
             args.mutation_rate,
-            num_haplotypes,
+            num_haplotypes
         )
         pi_theta_callable = _build_pi_theta_rows(
             0,
@@ -719,28 +775,17 @@ def calc_onekg_stats(args):
             allele_counts,
             callable_span,
             args.mutation_rate,
-            num_haplotypes,
+            num_haplotypes
         )
-        sfs = _build_folded_1d_sfs_rows(
+        sfs = _build_projected_folded_1d_sfs_rows(
             0,
             args.chrom,
             args.pop,
             allele_counts,
+            scan["sample_counts"][args.pop],
+            2 * args.sfs_size,
+            args.sfs_size_pop_ref
         )
-        counts_rows = [
-            {
-                "rep": 0,
-                "chrom": site.split(":", 1)[0],
-                "position": int(site.split(":", 1)[1]),
-                "pop": args.pop,
-                "ref_count": counts[0],
-                "alt_count": counts[1],
-            }
-            for site, counts in sorted(
-                pop_counts.items(),
-                key=lambda item: int(item[0].split(":", 1)[1]),
-            )
-        ]
         qc_row = {
             "rep": 0,
             "chrom": args.chrom,
@@ -749,12 +794,9 @@ def calc_onekg_stats(args):
             **{
                 f"retained_{pop}_samples": scan["sample_counts"][pop]
                 for pop in args.pops
-            },
+            }
         }
         outputs = {
-            (
-                f"allele_counts.rep_0.chr{args.chrom}.{args.pop}"
-            ): counts_rows,
             (
                 f"pi_theta_stats_intergenic.rep_0.chr{args.chrom}."
                 f"{args.pop}"
@@ -770,7 +812,7 @@ def calc_onekg_stats(args):
             ): [qc_row],
             (
                 f"ld_decay.rep_0.chr{args.chrom}.{args.pop}"
-            ): ld_decay,
+            ): ld_decay
         }
         for output_name, rows in outputs.items():
             log_msg(
@@ -787,7 +829,7 @@ def calc_onekg_stats(args):
     # aggregate chromosome tables into genome-wide population statistics.
     for table_name in (
         "pi_theta_stats_intergenic",
-        "pi_theta_stats_full_callable_chrom",
+        "pi_theta_stats_full_callable_chrom"
     ):
         rows = []
         for chrom in args.chroms:
@@ -806,7 +848,7 @@ def calc_onekg_stats(args):
         )
         write_stats_table(
             output_path,
-            aggregated,
+            aggregated
         )
 
     # aggregate folded SFS and LD decay across chromosome outputs.
@@ -830,11 +872,11 @@ def calc_onekg_stats(args):
     log_msg(f"writing genome folded SFS pop={args.pop} path={sfs_output_path}")
     write_stats_table(
         sfs_output_path,
-        _aggregate_folded_sfs_rows(sfs_rows),
+        _aggregate_projected_sfs_rows(sfs_rows)
     )
     log_msg(f"writing genome LD decay pop={args.pop} path={ld_output_path}")
     write_stats_table(
         ld_output_path,
-        _aggregate_ld_rows(ld_rows),
+        _aggregate_ld_rows(ld_rows)
     )
     log_msg(f"completed 1000G genome statistics pop={args.pop}")

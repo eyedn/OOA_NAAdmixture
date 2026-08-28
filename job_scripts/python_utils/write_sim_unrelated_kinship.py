@@ -69,7 +69,7 @@ if __name__ == "__main__":
                     "pop": row["pop"],
                     "sample1": row["sample1"],
                     "sample2": row["sample2"],
-                    "kinship": row["kinship"],
+                    "kinship": row["kinship"]
                 }
                 for row in pop_rows
             ]
@@ -95,12 +95,12 @@ if __name__ == "__main__":
             out_file,
             fieldnames=fieldnames,
             delimiter="\t",
-            lineterminator="\n",
+            lineterminator="\n"
         )
         writer.writeheader()
         writer.writerows(rows)
 
     pd.DataFrame(rows, columns=fieldnames).to_parquet(
         parquet_path,
-        index=False,
+        index=False
     )

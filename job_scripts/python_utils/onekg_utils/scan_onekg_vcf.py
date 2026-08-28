@@ -12,10 +12,26 @@
 
 
 ##### set up ##################################################################
-from .parse_gt import parse_gt
+import re
 
 
-##### main function ###########################################################
+##### internal functions #####################################################
+'''
+internal: convert one diploid GT field to reference and alternate counts.
+'''
+def _parse_gt(gt):
+    alleles = re.split(r"[|/]", gt)
+    if len(alleles) != 2:
+        raise ValueError(f"Expected diploid GT, found {gt}")
+    if any(allele == "." for allele in alleles):
+        return None
+    if any(allele not in {"0", "1"} for allele in alleles):
+        raise ValueError(f"Invalid biallelic allele index in GT {gt}")
+    alt_count = sum(allele == "1" for allele in alleles)
+    return 2 - alt_count, alt_count
+
+
+##### main ###################################################################
 '''
 scan a VCF and retain complete biallelic sites across requested samples.
 Returns population allele counts, retained sample counts, and QC totals.
@@ -33,7 +49,7 @@ def scan_onekg_vcf(vcf_file, sample_pops, pops):
         "non_biallelic_or_malformed_variant_count": 0,
         "missing_genotype_removal_count": 0,
         "complete_site_retained_count": 0,
-        "folded_sfs_variant_count": 0,
+        "folded_sfs_variant_count": 0
     }
 
     for raw_line in vcf_file:
@@ -78,7 +94,7 @@ def scan_onekg_vcf(vcf_file, sample_pops, pops):
                 malformed_gt = True
                 break
             try:
-                counts = parse_gt(sample_fields[gt_index])
+                counts = _parse_gt(sample_fields[gt_index])
             except ValueError:
                 malformed_gt = True
                 break
@@ -94,14 +110,15 @@ def scan_onekg_vcf(vcf_file, sample_pops, pops):
             qc["missing_genotype_removal_count"] += 1
             continue
 
-        # retain polymorphic complete sites for folded frequency summaries.
+        # retain every complete biallelic site so population-fixed mass remains
+        # in bin zero after projection and folding.
         qc["complete_site_retained_count"] += 1
+        site_key = f"{fields[0]}:{fields[1]}"
+        for pop in pops:
+            counts_by_pop[pop][site_key] = tuple(site_counts[pop])
         total_ref = sum(counts[0] for counts in site_counts.values())
         total_alt = sum(counts[1] for counts in site_counts.values())
         if total_ref > 0 and total_alt > 0:
-            site_key = f"{fields[0]}:{fields[1]}"
-            for pop in pops:
-                counts_by_pop[pop][site_key] = tuple(site_counts[pop])
             qc["folded_sfs_variant_count"] += 1
 
     if sample_names is None:
@@ -109,5 +126,5 @@ def scan_onekg_vcf(vcf_file, sample_pops, pops):
     return {
         "counts_by_pop": counts_by_pop,
         "sample_counts": sample_counts,
-        "qc": qc,
+        "qc": qc
     }

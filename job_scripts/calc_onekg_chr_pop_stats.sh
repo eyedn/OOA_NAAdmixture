@@ -49,7 +49,9 @@ mutation_rate="${12}"
 ld_decay_window_size_bp="${13}"
 ld_decay_distance_bin_bp="${14}"
 ld_decay_maf_threshold="${15}"
-shift 15
+sfs_size="${16}"
+sfs_size_pop_ref="${17}"
+shift 17
 shift 1 # skip the "--" from input arguments
 chroms=()
 while [[ "$1" != "--" ]]; do
@@ -105,5 +107,7 @@ python "${project_dir}/job_scripts/python_utils/calc_onekg_stats.py" \
     --ld-decay-window-size-bp "${ld_decay_window_size_bp}" \
     --ld-decay-distance-bin-bp "${ld_decay_distance_bin_bp}" \
     --ld-decay-maf-threshold "${ld_decay_maf_threshold}" \
+    --sfs-size "${sfs_size}" \
+    --sfs-size-pop-ref "${sfs_size_pop_ref}" \
     --pops "${pops[@]}"
 log_msg "done with 1000 Genomes statistics chr=${chr} pop=${pop}"

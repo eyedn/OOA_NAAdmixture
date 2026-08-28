@@ -14,16 +14,33 @@
 ##### set up ##################################################################
 from pathlib import Path
 import argparse
-from shared_utils.build_multik_ancestry_rows import (
-    build_multik_ancestry_rows,
-)
-from onekg_utils.orient_admixture_rows import orient_admixture_rows
-from shared_utils.parse_faststructure_choose_k import (
-    parse_faststructure_choose_k,
-)
+from shared_utils.build_multik_ancestry_rows import build_multik_ancestry_rows
+from shared_utils.parse_faststructure_choose_k import parse_faststructure_choose_k
 from shared_utils.parse_k_path_specs import parse_k_path_specs
 from onekg_utils.read_onekg_sample_pops import read_onekg_sample_pops
 from shared_utils.write_stats_table import write_stats_table
+
+
+##### internal functions ######################################################
+'''
+internal: orient two ADMIXTURE components using AFR and EUR reference rows.
+'''
+def _orient_admixture_rows(rows, afr_pop, eur_pop):
+    afr_rows = [row for row in rows if row["pop"] == afr_pop]
+    eur_rows = [row for row in rows if row["pop"] == eur_pop]
+    if not afr_rows or not eur_rows:
+        raise ValueError("Both reference populations require Q rows")
+    afr_q1 = sum(row["q1"] for row in afr_rows) / len(afr_rows)
+    eur_q1 = sum(row["q1"] for row in eur_rows) / len(eur_rows)
+    q1_is_afr = afr_q1 > eur_q1
+    return [
+        {
+            **row,
+            "afr_unsupervised_q": row["q1"] if q1_is_afr else row["q2"],
+            "eur_unsupervised_q": row["q2"] if q1_is_afr else row["q1"],
+        }
+        for row in rows
+    ]
 
 
 ##### arguments ###############################################################
@@ -40,13 +57,13 @@ parser.add_argument(
     "--admixture-q-path",
     action="append",
     required=True,
-    metavar="K=PATH",
+    metavar="K=PATH"
 )
 parser.add_argument(
     "--faststructure-q-path",
     action="append",
     required=True,
-    metavar="K=PATH",
+    metavar="K=PATH"
 )
 parser.add_argument("--faststructure-choose-k-path", required=True)
 parser.add_argument("--faststructure-prior", required=True)
@@ -65,7 +82,7 @@ if __name__ == "__main__":
     sample_pops = read_onekg_sample_pops(
         args.unrels_path,
         args.source_fam_path,
-        pops,
+        pops
     )
     with open(args.admixture_fam_path, "r", encoding="utf-8") as in_file:
         samples = [line.split()[1] for line in in_file if line.strip()]
@@ -84,24 +101,24 @@ if __name__ == "__main__":
             "sample": sample,
             "pop": sample_pops[sample],
             "q1": float(q_values[0]),
-            "q2": float(q_values[1]),
+            "q2": float(q_values[1])
         }
         for sample, q_values in zip(samples, supervised_values)
     ]
-    supervised = orient_admixture_rows(
+    supervised = _orient_admixture_rows(
         supervised_rows,
         args.afr_pop,
-        args.eur_pop,
+        args.eur_pop
     )
 
     # read both unsupervised tools against one authoritative final FAM order.
     admixture_q_paths = parse_k_path_specs(
         args.admixture_q_path,
-        "ADMIXTURE",
+        "ADMIXTURE"
     )
     faststructure_q_paths = parse_k_path_specs(
         args.faststructure_q_path,
-        "fastStructure",
+        "fastStructure"
     )
     if sorted(admixture_q_paths) != sorted(faststructure_q_paths):
         raise ValueError(
@@ -110,7 +127,7 @@ if __name__ == "__main__":
     values_by_tool = {}
     for tool_name, paths in (
         ("ADMIXTURE", admixture_q_paths),
-        ("fastStructure", faststructure_q_paths),
+        ("fastStructure", faststructure_q_paths)
     ):
         values_by_k = {}
         for k, q_path in sorted(paths.items()):
@@ -125,13 +142,13 @@ if __name__ == "__main__":
         samples,
         sample_pops,
         values_by_tool["ADMIXTURE"],
-        args.chrom,
+        args.chrom
     )
     faststructure_multik_rows = build_multik_ancestry_rows(
         samples,
         sample_pops,
         values_by_tool["fastStructure"],
-        args.chrom,
+        args.chrom
     )
 
     # format supervised estimates in the canonical ancestry table schema.
@@ -149,7 +166,7 @@ if __name__ == "__main__":
                 "eur_tspop": "NA",
                 "afr_q": supervised_row["afr_unsupervised_q"],
                 "eur_q": supervised_row["eur_unsupervised_q"],
-                "span": "NA",
+                "span": "NA"
             }
         )
         rows.append(row)
@@ -157,20 +174,20 @@ if __name__ == "__main__":
     stats_dir = Path(args.stats_dir)
     write_stats_table(
         stats_dir / f"ancestry_ADMIXTURE_super.rep_0{suffix}",
-        rows,
+        rows
     )
     write_stats_table(
         stats_dir / f"ancestry_ADMIXTURE_multik.rep_0{suffix}",
-        admixture_multik_rows,
+        admixture_multik_rows
     )
     write_stats_table(
         stats_dir / f"ancestry_fastStructure_multik.rep_0{suffix}",
-        faststructure_multik_rows,
+        faststructure_multik_rows
     )
     with open(
         args.faststructure_choose_k_path,
         "r",
-        encoding="utf-8",
+        encoding="utf-8"
     ) as in_file:
         choose_k_report = in_file.read()
     choose_k_row = parse_faststructure_choose_k(
@@ -178,11 +195,11 @@ if __name__ == "__main__":
         args.faststructure_prior,
         args.faststructure_seed,
         sorted(faststructure_q_paths),
-        args.chrom,
+        args.chrom
     )
     write_stats_table(
         stats_dir / f"fastStructure_chooseK.rep_0{suffix}",
-        [choose_k_row],
+        [choose_k_row]
     )
 
     # remove superseded empirical filenames after all replacement tables exist.

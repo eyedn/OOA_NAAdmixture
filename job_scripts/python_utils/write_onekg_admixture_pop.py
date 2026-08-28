@@ -26,7 +26,7 @@ def _build_onekg_admixture_labels(
     sample_pops,
     afr_pop,
     eur_pop,
-    admixed_pop,
+    admixed_pop
 ):
     missing = sorted(set(fam_samples) - set(sample_pops))
     if missing:
@@ -73,7 +73,7 @@ if __name__ == "__main__":
     sample_pops = read_onekg_sample_pops(
         args.unrels_path,
         args.source_fam_path,
-        pops,
+        pops
     )
     with open(args.admixture_fam_path, "r", encoding="utf-8") as in_file:
         fam_samples = [line.split()[1] for line in in_file if line.strip()]
@@ -82,7 +82,7 @@ if __name__ == "__main__":
         sample_pops,
         args.afr_pop,
         args.eur_pop,
-        args.admixed_pop,
+        args.admixed_pop
     )
     with open(args.pop_path, "w", encoding="utf-8") as out_file:
         out_file.writelines(f"{label}\n" for label in labels)

@@ -42,8 +42,10 @@ ACCOUNT="jazlynmo_738" # typically use "jazlynmo_738"; can use "qcb_640"
 MAIL_TYPE="ALL"
 MAIL_USER="karatas@usc.edu"
 
-# chromosome structure specifications 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22
-CHROMS=(1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19)
+# chromosome structure specifications
+CHROMS=(
+    1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22
+)
 GENETIC_MAP="HapMapII_GRCh38"
 
 # statistics specification
@@ -54,6 +56,8 @@ ADMIXTURE_LD_R2="0.1"
 LD_DECAY_WINDOW_SIZE_BP="2000000"
 LD_DECAY_DISTANCE_BIN_BP="5000"
 LD_DECAY_MAF_THRESHOLD="0.10"
+SFS_SIZE="50"
+SFS_SIZE_POP_REF="ASW"
 
 
 ##### simulation configuration ################################################

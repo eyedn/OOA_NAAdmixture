@@ -26,7 +26,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument(
     "--analysis-level",
     choices=["chromosome", "genome"],
-    required=True,
+    required=True
 )
 parser.add_argument("--stats-dir", required=True)
 parser.add_argument("--pop", required=True)
@@ -46,6 +46,8 @@ parser.add_argument("--ld-decay-window-size-bp", type=int)
 parser.add_argument("--ld-decay-distance-bin-bp", type=int)
 parser.add_argument("--ld-decay-maf-threshold", type=float)
 parser.add_argument("--pops", nargs="+")
+parser.add_argument("--sfs-size", type=int)
+parser.add_argument("--sfs-size-pop-ref")
 
 
 ##### main ####################################################################

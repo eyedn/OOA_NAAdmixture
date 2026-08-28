@@ -73,7 +73,8 @@ admixture_ld_r2="${15}"
 ld_decay_window_size_bp="${16}"
 ld_decay_distance_bin_bp="${17}"
 ld_decay_maf_threshold="${18}"
-shift 18
+sfs_size="${19}"
+shift 19
 shift 1 # skip the "--" from input arguments
 unsupervised_ks=()
 while [[ "$1" != "--" ]]; do
@@ -324,6 +325,7 @@ python "${project_dir}/job_scripts/python_utils/calc_sim_stats.py" \
     --king-dir "${king_dir}" \
     --stats-dir "${stats_dir}" \
     --sample-size "${sample_size}" \
+    --sfs-size "${sfs_size}" \
     --chr "${chr}" \
     --genetic-map "${genetic_map}" \
     --mutation-rate "${mutation_rate}" \

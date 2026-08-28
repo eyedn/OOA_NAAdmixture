@@ -14,12 +14,26 @@
 ##### set up ##################################################################
 from pathlib import Path
 import argparse
-from onekg_utils.aggregate_folded_2d_sfs_rows import (
-    aggregate_folded_2d_sfs_rows,
-)
-from onekg_utils.aggregate_variant_qc_rows import aggregate_variant_qc_rows
 from onekg_utils.read_tsv_rows import read_tsv_rows
 from shared_utils.write_stats_table import write_stats_table
+
+
+##### internal functions ######################################################
+'''
+internal: sum chromosome variant-QC counts while retaining sample counts.
+'''
+def _aggregate_variant_qc_rows(rows):
+    output = {"rep": 0, "chrom": "genome", "pop": "ALL"}
+    for row in rows:
+        for key, value in row.items():
+            if key in {"rep", "chrom", "pop"} or value in {None, ""}:
+                continue
+            number = int(float(value))
+            if key.startswith("retained_") and key.endswith("_samples"):
+                output[key] = max(output.get(key, 0), number)
+            else:
+                output[key] = output.get(key, 0) + number
+    return [output]
 
 
 ##### arguments ###############################################################
@@ -43,7 +57,7 @@ if __name__ == "__main__":
         "pi_theta_stats_full_callable_chrom",
         "sfs",
         "ld_decay",
-        "kinship_unrelated",
+        "kinship_unrelated"
     ]
     combined = {}
     for table_name in pop_tables:
@@ -57,30 +71,23 @@ if __name__ == "__main__":
         write_stats_table(stats_dir / table_name, rows)
     write_stats_table(
         stats_dir / "kinship.rep_0",
-        combined["kinship_unrelated"],
+        combined["kinship_unrelated"]
     )
     write_stats_table(
         stats_dir / "kinship",
-        combined["kinship_unrelated"],
+        combined["kinship_unrelated"]
     )
 
-    # aggregate pairwise SFS and variant-QC rows across chromosomes.
-    sfs_2d_rows = []
+    # aggregate variant-QC rows across chromosomes.
     qc_rows = []
     for chrom in args.chroms:
-        sfs_2d_rows.extend(
-            read_tsv_rows(stats_dir / f"sfs_2d.rep_0.chr{chrom}.tsv")
-        )
         qc_rows.extend(
             read_tsv_rows(stats_dir / f"variant_qc.chr{chrom}.tsv")
         )
-    sfs_2d = aggregate_folded_2d_sfs_rows(sfs_2d_rows)
-    variant_qc = aggregate_variant_qc_rows(qc_rows)
+    variant_qc = _aggregate_variant_qc_rows(qc_rows)
     for output_name, rows in (
-        ("sfs_2d.rep_0", sfs_2d),
-        ("sfs_2d", sfs_2d),
         ("variant_qc.rep_0", variant_qc),
-        ("variant_qc", variant_qc),
+        ("variant_qc", variant_qc)
     ):
         write_stats_table(stats_dir / output_name, rows)
 
@@ -88,7 +95,7 @@ if __name__ == "__main__":
         "ancestry_ADMIXTURE_super",
         "ancestry_ADMIXTURE_multik",
         "ancestry_fastStructure_multik",
-        "fastStructure_chooseK",
+        "fastStructure_chooseK"
     ]
     for table_name in ancestry_tables:
         rows = read_tsv_rows(stats_dir / f"{table_name}.rep_0.tsv")

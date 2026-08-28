@@ -15,7 +15,7 @@
 import pandas as pd
 
 
-##### main function ###########################################################
+##### main ####################################################################
 '''
 given a KING output path, rep id, and pop label, build a standard table of
     - rep
@@ -35,6 +35,6 @@ def parse_king_file(king_path, rep, pop):
             "pop": pop,
             "sample1": king_table[sample1_col],
             "sample2": king_table[sample2_col],
-            "kinship": king_table[kinship_col],
+            "kinship": king_table[kinship_col]
         }
     )

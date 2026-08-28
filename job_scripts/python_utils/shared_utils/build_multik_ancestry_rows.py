@@ -12,9 +12,7 @@
 
 
 ##### set up ##################################################################
-from .normalize_multik_admixture_rows import (
-    normalize_multik_admixture_rows,
-)
+from .normalize_multik_admixture_rows import normalize_multik_admixture_rows
 
 
 ##### main function ###########################################################
@@ -27,7 +25,7 @@ def build_multik_ancestry_rows(
     values_by_k,
     chrom=None,
     rep=0,
-    sample_ids=None,
+    sample_ids=None
 ):
     output_rows = []
     for k in sorted(values_by_k):
@@ -38,7 +36,7 @@ def build_multik_ancestry_rows(
             {
                 "sample": sample,
                 "pop": sample_pops[sample],
-                "q_values": q_values,
+                "q_values": q_values
             }
             for sample, q_values in zip(samples, values)
         ]
@@ -61,7 +59,7 @@ def build_multik_ancestry_rows(
                     "component_3_q": normalized["component_3_q"],
                     "component_4_q": normalized["component_4_q"],
                     "component_5_q": normalized["component_5_q"],
-                    "span": "NA",
+                    "span": "NA"
                 }
             )
             output_rows.append(row)

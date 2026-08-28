@@ -10,9 +10,9 @@
 
 # overview: validate unsupervised ancestry rows and preserve component order.
 
+
 ##### set up ##################################################################
 import math
-
 
 MAX_COMPONENTS = 5
 Q_SUM_TOLERANCE = 1e-5
@@ -47,7 +47,7 @@ def normalize_multik_admixture_rows(rows, k):
                     row["q_values"][index - 1] if index <= k else "NA"
                 )
                 for index in range(1, MAX_COMPONENTS + 1)
-            },
+            }
         }
         for row in rows
     ]

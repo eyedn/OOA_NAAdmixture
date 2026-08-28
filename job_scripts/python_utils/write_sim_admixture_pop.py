@@ -13,8 +13,15 @@
 
 ##### set up ##################################################################
 import argparse
+import csv
 from sim_utils.read_fam_order import read_fam_order
-from sim_utils.read_sample_metadata import read_sample_metadata
+
+
+##### internal functions #####################################################
+''' internal: read simulation metadata for supervised ADMIXTURE labels. '''
+def _read_sample_metadata(sample_metadata_path):
+    with open(sample_metadata_path, "r", encoding="utf-8") as in_file:
+        return list(csv.DictReader(in_file, delimiter="\t"))
 
 
 ##### arguments ###############################################################
@@ -30,17 +37,16 @@ parser.add_argument("--fam-path", required=True)
 parser.add_argument("--pop-path", required=True)
 
 
-##### main ####################################################################
+##### main ###################################################################
 if __name__ == "__main__":
     args = parser.parse_args()
     sample_metadata_path = args.sample_metadata_path
     fam_path = args.fam_path
     pop_path = args.pop_path
 
-    # read sample/population metadata from simulation with read_sample_metadata
     metadata_by_sample = {
         (row["fid"], row["iid"]): row
-        for row in read_sample_metadata(sample_metadata_path)
+        for row in _read_sample_metadata(sample_metadata_path)
     }
 
     '''

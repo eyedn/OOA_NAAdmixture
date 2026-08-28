@@ -14,7 +14,6 @@
 ##### set up ##################################################################
 import re
 
-
 REPORT_PATTERNS = {
     "max_marginal_likelihood_k": re.compile(
         r"^\s*Model complexity that maximizes marginal likelihood"
@@ -25,7 +24,7 @@ REPORT_PATTERNS = {
         r"^\s*Model components used to explain structure in data"
         r"\s*=\s*(\S+)\s*$",
         re.MULTILINE,
-    ),
+    )
 }
 
 
@@ -39,7 +38,7 @@ def parse_faststructure_choose_k(
     seed,
     requested_ks,
     chrom=None,
-    rep=0,
+    rep=0
 ):
     ks = sorted(set(requested_ks))
     if not ks or len(ks) != len(requested_ks):
@@ -70,7 +69,7 @@ def parse_faststructure_choose_k(
             "seed": seed,
             "k_min": ks[0],
             "k_max": ks[-1],
-            **parsed,
+            **parsed
         }
     )
     return row

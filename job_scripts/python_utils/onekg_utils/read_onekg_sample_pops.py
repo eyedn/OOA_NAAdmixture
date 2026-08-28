@@ -26,11 +26,11 @@ def read_onekg_sample_pops(unrels_path, fam_path, pops):
     pop_names = ("pop", "population", "population_code")
     iid_index = next(
         (headers.index(name) for name in iid_names if name in headers),
-        None,
+        None
     )
     pop_index = next(
         (headers.index(name) for name in pop_names if name in headers),
-        None,
+        None
     )
     if iid_index is None or pop_index is None:
         raise ValueError(

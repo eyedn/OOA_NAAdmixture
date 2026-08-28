@@ -17,19 +17,8 @@ import pickle
 import msprime
 import stdpopsim
 import tskit
+import tspop
 from shared_utils import log_msg
-from .build_global_ancestry_table import (
-    build_global_ancestry_table
-)
-from .get_local_ancestry_table import (
-    get_local_ancestry_table
-)
-from .write_global_ancestry import (
-    write_global_ancestry
-)
-from .write_local_ancestry import (
-    write_local_ancestry
-)
 
 
 ##### internal functions ######################################################
@@ -58,11 +47,125 @@ def _build_metadata(pops, sample_size):
                     "iid": f"{pop}_{sample_idx}",
                     "pop": pop,
                     "supervised_label": supervised_label,
-                    "original_order": original_order,
+                    "original_order": original_order
                 }
             )
             original_order += 1
     return rows
+
+
+''' internal: construct tree-sequence and VCF labels for one sample. '''
+def _build_sample_ids(pop, sample_ind, pop_start_ind):
+    sample_id = f"{pop}_{sample_ind + 1}"
+    vcf_sample_id = f"{pop}_{sample_ind - pop_start_ind + 1}"
+    return sample_id, vcf_sample_id
+
+
+''' internal: extract a copy of local ancestry intervals at the census time. '''
+def _get_local_ancestry_table(ts, census_time):
+    return tspop.get_pop_ancestry(
+        ts,
+        census_time=census_time,
+    ).ancestry_table.copy()
+
+
+''' internal: write one population's local ancestry intervals to TSV. '''
+def _write_local_ancestry(
+    ancestry_table, sample_node_rows, out_tsv, chr_used, pop,
+):
+    pop_id_to_name = {0: "AFR", 1: "EUR", 2: "ADX"}
+    sample_to_ind = {node: ind_id for node, ind_id, _ in sample_node_rows}
+    sample_to_hap = {node: hap for node, _, hap in sample_node_rows}
+    ancestry_table = ancestry_table.copy()
+    pop_start_ind = min(
+        sample_to_ind[int(node)] for node in ancestry_table["sample"]
+    )
+    ancestry_table["sample_id"] = ancestry_table["sample"].map(
+        lambda node: _build_sample_ids(
+            pop, sample_to_ind[int(node)], pop_start_ind
+        )[0]
+    )
+    ancestry_table["vcf_sample_id"] = ancestry_table["sample"].map(
+        lambda node: _build_sample_ids(
+            pop, sample_to_ind[int(node)], pop_start_ind
+        )[1]
+    )
+    ancestry_table["hap"] = ancestry_table["sample"].map(
+        lambda node: sample_to_hap[int(node)]
+    )
+    ancestry_table["population_name"] = ancestry_table["population"].map(
+        lambda population: pop_id_to_name.get(
+            int(population), f"pop_{int(population)}"
+        )
+    )
+    ancestry_table.insert(0, "chrom", f"chr{chr_used}")
+    ancestry_table = ancestry_table[
+        [
+            "chrom", "left", "right", "sample_id", "vcf_sample_id", "hap",
+            "population_name", "population", "ancestor"
+        ]
+    ]
+    ancestry_table.to_csv(out_tsv, sep="\t", header=False, index=False)
+
+
+''' internal: construct global ancestry proportions for one population. '''
+def _build_global_ancestry_table(ancestry_table, sample_node_rows, pop):
+    pop_id_to_name = {0: "AFR", 1: "EUR"}
+    sample_to_ind = {node: ind_id for node, ind_id, _ in sample_node_rows}
+    ancestry_table = ancestry_table.copy()
+    pop_start_ind = min(
+        sample_to_ind[int(node)] for node in ancestry_table["sample"]
+    )
+    ancestry_table["sample_ind"] = ancestry_table["sample"].map(
+        lambda node: sample_to_ind[int(node)]
+    )
+    ancestry_table["sample_id"] = ancestry_table["sample"].map(
+        lambda node: _build_sample_ids(
+            pop, sample_to_ind[int(node)], pop_start_ind
+        )[0]
+    )
+    ancestry_table["vcf_sample_id"] = ancestry_table["sample"].map(
+        lambda node: _build_sample_ids(
+            pop, sample_to_ind[int(node)], pop_start_ind
+        )[1]
+    )
+    ancestry_table["population_name"] = ancestry_table["population"].map(
+        lambda population: pop_id_to_name.get(
+            int(population), f"pop_{int(population)}"
+        )
+    )
+    ancestry_table["span"] = ancestry_table["right"] - ancestry_table["left"]
+    ancestry_by_pop = ancestry_table.groupby(
+        ["sample_ind", "sample_id", "vcf_sample_id", "population_name"],
+        as_index=False
+    )["span"].sum()
+    ancestry_wide = ancestry_by_pop.pivot(
+        index=["sample_ind", "sample_id", "vcf_sample_id"],
+        columns="population_name",
+        values="span"
+    ).fillna(0.0)
+    for pop_name in ("AFR", "EUR"):
+        if pop_name not in ancestry_wide.columns:
+            ancestry_wide[pop_name] = 0.0
+    ancestry_wide = ancestry_wide[["AFR", "EUR"]].copy()
+    total_span = ancestry_wide.sum(axis=1)
+    ancestry_wide["AFR_prop"] = ancestry_wide["AFR"] / total_span
+    ancestry_wide["EUR_prop"] = ancestry_wide["EUR"] / total_span
+    ancestry_wide["span"] = total_span
+    ancestry_wide = ancestry_wide.reset_index().sort_values("sample_ind")
+    return ancestry_wide[
+        ["sample_id", "vcf_sample_id", "AFR_prop", "EUR_prop", "span"]
+    ]
+
+
+''' internal: write global ancestry proportions in the canonical TSV layout. '''
+def _write_global_ancestry(global_ancestry_table, out_tsv):
+    global_ancestry_table.to_csv(
+        out_tsv,
+        sep="\t",
+        header=True,
+        index=False
+    )
 
 
 '''
@@ -93,7 +196,7 @@ def _build_demography(
     admix_eur_props_by_generation=None,
     admix_prioradmix_props_by_generation=None,
     admix_modern_growth_rate=0.023175,
-    census_time_offset=1e-6,
+    census_time_offset=1e-6
 ):
     # define defaults for admixture process
     if admix_ne_by_generation is None:
@@ -101,25 +204,25 @@ def _build_demography(
             493.7874, 5755.8703, 15296.0328, 58666.1031,
             146967.1421, 260312.8139, 436921.0291, 858109.3961,
             1845355.3309, 3322796.2758, 3400701.3175, 3480432.8916,
-            3562033.8225, 3645547.9384, 3731020.0950,
+            3562033.8225, 3645547.9384, 3731020.0950
         ]
     if admix_afr_props_by_generation is None:
         admix_afr_props_by_generation = [
             0.850000, 0.904820, 0.791384, 0.786692, 0.719992,
             0.494960, 0.130456, 0.060000, 0.060000, 0.060000,
-            0.000000, 0.000000, 0.000000, 0.000000, 0.000000,
+            0.000000, 0.000000, 0.000000, 0.000000, 0.000000
         ]
     if admix_eur_props_by_generation is None:
         admix_eur_props_by_generation = [
             0.150000, 0.080000, 0.080000, 0.080000, 0.080000,
             0.080000, 0.080000, 0.030000, 0.030000, 0.030000,
-            0.000000, 0.000000, 0.000000, 0.000000, 0.000000,
+            0.000000, 0.000000, 0.000000, 0.000000, 0.000000
         ]
     if admix_prioradmix_props_by_generation is None:
         admix_prioradmix_props_by_generation = [
             0.000000, 0.015180, 0.128616, 0.133308, 0.200008,
             0.425040, 0.789544, 0.910000, 0.910000, 0.910000,
-            1.000000, 1.000000, 1.000000, 1.000000, 1.000000,
+            1.000000, 1.000000, 1.000000, 1.000000, 1.000000
         ]
 
     admix_vectors = [
@@ -128,8 +231,8 @@ def _build_demography(
         ("admix_eur_props_by_generation", admix_eur_props_by_generation),
         (
             "admix_prioradmix_props_by_generation",
-            admix_prioradmix_props_by_generation,
-        ),
+            admix_prioradmix_props_by_generation
+        )
     ]
 
     # validate admixture process inputs
@@ -150,7 +253,7 @@ def _build_demography(
         admixture_time,
         admix_generation_count - 1,
         rel_tol=0,
-        abs_tol=1e-9,
+        abs_tol=1e-9
     ):
         raise ValueError(
             "admixture_time must equal admix_generation_count - 1"
@@ -170,7 +273,7 @@ def _build_demography(
         props = [
             admix_afr_props_by_generation[idx],
             admix_eur_props_by_generation[idx],
-            admix_prioradmix_props_by_generation[idx],
+            admix_prioradmix_props_by_generation[idx]
         ]
         if not all(value >= 0 for value in props):
             raise ValueError("admixture proportions must be non-negative")
@@ -195,13 +298,13 @@ def _build_demography(
         description="African population from the Tennessen 2012",
         initial_size=n_af,
         growth_rate=r_af,
-        initially_active=True,
+        initially_active=True
     )
     demography.add_population(
         name="EUR",
         description="European population from the Tennessen 2012",
         initial_size=n_eu,
-        growth_rate=r_eu,
+        growth_rate=r_eu
     )
     demography.add_population(
         name="ADX",
@@ -209,7 +312,7 @@ def _build_demography(
             "Admixed population inspired from Hacker 2020 and Mooney 2023"
         ),
         initial_size=admix_ne_by_generation[-1],
-        growth_rate=admix_modern_growth_rate,
+        growth_rate=admix_modern_growth_rate
     )
 
     # define intermediate ADX populations
@@ -222,7 +325,7 @@ def _build_demography(
             ),
             initial_size=admix_ne_by_generation[gen_number - 1],
             growth_rate=0,
-            initially_active=True,
+            initially_active=True
         )
 
     # define the admixture event that derives modern ADX
@@ -235,8 +338,8 @@ def _build_demography(
         proportions=[
             admix_afr_props_by_generation[gen_number - 1],
             admix_eur_props_by_generation[gen_number - 1],
-            admix_prioradmix_props_by_generation[gen_number - 1],
-        ],
+            admix_prioradmix_props_by_generation[gen_number - 1]
+        ]
     )
 
     # define intermediate admixture events for ADX_G* populations after ADX_G1.
@@ -245,7 +348,7 @@ def _build_demography(
         raw_proportions = [
             admix_afr_props_by_generation[gen_number - 1],
             admix_eur_props_by_generation[gen_number - 1],
-            admix_prioradmix_props_by_generation[gen_number - 1],
+            admix_prioradmix_props_by_generation[gen_number - 1]
         ]
         sources = [
             source for source, proportion in zip(raw_sources, raw_proportions)
@@ -258,7 +361,7 @@ def _build_demography(
             time=admix_generation_count - gen_number,
             derived=f"ADX_G{gen_number}",
             ancestral=sources,
-            proportions=proportions,
+            proportions=proportions
         )
 
     # add a backward-time census after the ADX_G1 event for true local ancestry.
@@ -269,8 +372,8 @@ def _build_demography(
         ancestral=["AFR", "EUR"],
         proportions=[
             admix_afr_props_by_generation[0],
-            admix_eur_props_by_generation[0],
-        ],
+            admix_eur_props_by_generation[0]
+        ]
     )
 
     # define AFR/EUR OOA events from Tennessen 2012
@@ -278,41 +381,41 @@ def _build_demography(
     demography.add_symmetric_migration_rate_change(
         time=t_eg,
         populations=["AFR", "EUR"],
-        rate=m_af_eu,
+        rate=m_af_eu
     )
     demography.add_population_parameters_change(
         time=t_eg,
         population="EUR",
         growth_rate=r_eu0,
-        initial_size=n_eu1,
+        initial_size=n_eu1
     )
     demography.add_population_parameters_change(
         time=t_eg,
         population="AFR",
         growth_rate=0,
-        initial_size=n_af1,
+        initial_size=n_af1
     )
     demography.add_symmetric_migration_rate_change(
         time=t_eu0,
         populations=["AFR", "EUR"],
-        rate=m_af_b,
+        rate=m_af_b
     )
     demography.add_population_parameters_change(
         time=t_eu0,
         population="EUR",
         initial_size=n_b,
-        growth_rate=0,
+        growth_rate=0
     )
     demography.add_population_split(
         time=t_ooa,
         derived=["EUR"],
-        ancestral="AFR",
+        ancestral="AFR"
     )
     demography.add_migration_rate_change(time=t_ooa, rate=0)
     demography.add_population_parameters_change(
         time=t_af,
         population="AFR",
-        initial_size=n_a,
+        initial_size=n_a
     )
 
     # sort events and return the demography object and msprime metadata
@@ -331,12 +434,12 @@ def _build_demography(
         "admix_size_at_mixing_boundary": (
             admix_ne_by_generation[admix_mixing_generation_count - 1]
         ),
-        "admix_modern_growth_rate": admix_modern_growth_rate,
+        "admix_modern_growth_rate": admix_modern_growth_rate
     }
     return demography, metadata
 
 
-##### main function ###########################################################
+##### main ####################################################################
 '''
 simulate one OOA_NAAdmixture chromosome and write every downstream handoff:
 tree sequence, demography metadata, VCF, sample metadata, and ancestry tables.
@@ -400,7 +503,7 @@ def run_simulation(args):
             args.admix_prioradmix_props_by_generation
         ),
         admix_modern_growth_rate=args.admix_modern_growth_rate,
-        census_time_offset=args.census_time_offset,
+        census_time_offset=args.census_time_offset
     )
 
     # simulate the above demography with msprime and output the tree sequence
@@ -417,14 +520,14 @@ def run_simulation(args):
         sequence_length=contig.length,
         ploidy=2,
         random_seed=args.seed,
-        model=args.msprime_model,
+        model=args.msprime_model
     )
 
     # generate mutations
     ts = msprime.sim_mutations(
         ts,
         rate=args.mutation_rate,
-        random_seed=args.seed,
+        random_seed=args.seed
     )
 
     # verify the result is a valid tree sequence
@@ -463,7 +566,7 @@ def run_simulation(args):
     )
     sample_metadata_rows = _build_metadata(
         args.pops,
-        args.sample_size,
+        args.sample_size
     )
     with open(args.sample_metadata_path, "w", encoding="utf-8") as out_file:
         out_file.write("fid\tiid\tpop\tsupervised_label\toriginal_order\n")
@@ -479,7 +582,7 @@ def run_simulation(args):
         f"chr={args.chromosome}"
     )
     census_time = args.admixture_time + args.census_time_offset
-    ancestry_table = get_local_ancestry_table(ts, census_time)
+    ancestry_table = _get_local_ancestry_table(ts, census_time)
     sample_node_rows = []
     for ind_id in range(ts.num_individuals):
         nodes = sorted(int(node) for node in ts.individual(ind_id).nodes)
@@ -499,20 +602,20 @@ def run_simulation(args):
             f"{args.anc_dir}/{args.genetic_map}_{args.rep}_"
             f"chr{args.chromosome}_{pop}.tsv"
         )
-        write_local_ancestry(
+        _write_local_ancestry(
             pop_ancestry,
             sample_node_rows,
             local_path,
             args.chromosome,
-            pop,
+            pop
         )
         global_path = (
             f"{args.global_anc_dir}/{args.genetic_map}_{args.rep}_"
             f"chr{args.chromosome}_{pop}.tsv"
         )
-        global_table = build_global_ancestry_table(
+        global_table = _build_global_ancestry_table(
             pop_ancestry,
             sample_node_rows,
-            pop,
+            pop
         )
-        write_global_ancestry(global_table, global_path)
+        _write_global_ancestry(global_table, global_path)

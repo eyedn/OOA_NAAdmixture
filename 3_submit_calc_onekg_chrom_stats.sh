@@ -127,6 +127,8 @@ stats_jid=$(sbatch \
         "${LD_DECAY_WINDOW_SIZE_BP}" \
         "${LD_DECAY_DISTANCE_BIN_BP}" \
         "${LD_DECAY_MAF_THRESHOLD}" \
+        "${SFS_SIZE}" \
+        "${SFS_SIZE_POP_REF}" \
         -- \
         "${CHROMS[@]}" \
         -- \

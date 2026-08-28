@@ -43,7 +43,7 @@ if __name__ == "__main__":
     sample_pops = read_onekg_sample_pops(
         args.unrels_path,
         args.fam_path,
-        args.pops,
+        args.pops
     )
     open_vcf = gzip.open if args.vcf_path.endswith(".gz") else open
 
