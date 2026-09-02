@@ -302,6 +302,7 @@ python \
     --rep "${rep}" \
     --sample-metadata-path "${sample_metadata_path}" \
     --admixture-fam-path "${admixture_prefix}.fam" \
+    --supervised-q-path "${admixture_prefix}.supervised.2.Q" \
     "${admixture_q_args[@]}" \
     "${faststructure_q_args[@]}" \
     --faststructure-choose-k-path "${faststructure_choose_k_path}" \

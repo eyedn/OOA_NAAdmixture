@@ -10,6 +10,7 @@
 
 # overview: coordinate empirical folded-SFS, diversity, LD, and kinship stats.
 
+
 ##### set up ##################################################################
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -27,7 +28,7 @@ from shared_utils.write_stats_table import write_stats_table
 
 ##### internal functions #####################################################
 '''
-internal: build a complete projected and folded empirical SFS table. 
+internal: build a complete projected and folded empirical SFS table.
 '''
 def _build_projected_folded_1d_sfs_rows(
     rep, chrom, pop, allele_counts, sample_count, projection_size,
@@ -486,8 +487,9 @@ def _read_onekg_chr_lengths(path, chrom):
             return chrom_len, callable_span
     raise ValueError(f"Chromosome {chrom} is absent from chromosome lengths")
 
-''' internal: parse positive zero-based half-open BED intervals by
-chromosome. '''
+'''
+internal: parse positive zero-based half-open BED intervals by chromosome.
+'''
 def _read_bed_intervals(rows, chrom, source_name):
     target_chrom = str(chrom).lower().removeprefix("chr")
     intervals = []
@@ -528,7 +530,7 @@ def _read_bed_intervals(rows, chrom, source_name):
 
 
 '''
-internal: merge sorted or unsorted adjacent half-open intervals. 
+internal: merge sorted or unsorted adjacent half-open intervals.
 '''
 def _merge_bed_intervals(intervals):
     intervals.sort()
@@ -576,7 +578,7 @@ def _calc_bed_intersection_span(intergenic_rows, included_rows, chrom):
     return span
 
 
-##### main function ###########################################################
+##### main ####################################################################
 '''
 calculate chromosome statistics or aggregate genome statistics for one
 population. Writes canonical diversity, folded-SFS, LD, KING, and QC tables.
@@ -635,7 +637,7 @@ def calc_onekg_stats(args):
     king_rows = []
     for values in lines[1:]:
         raw = dict(zip(headers, values))
-        row = {"rep": 0}
+        row = {"rep": args.rep}
         if args.analysis_level == "chromosome":
             row["chrom"] = args.chrom
         row.update(
@@ -648,9 +650,9 @@ def calc_onekg_stats(args):
         )
         king_rows.append(row)
     king_suffix = (
-        f"rep_0.chr{args.chrom}.{args.pop}"
+        f"rep_{args.rep}.chr{args.chrom}.{args.pop}"
         if args.analysis_level == "chromosome"
-        else f"rep_0.{args.pop}"
+        else f"rep_{args.rep}.{args.pop}"
     )
     write_stats_table(
         stats_dir / f"kinship_unrelated.{king_suffix}",
@@ -701,7 +703,7 @@ def calc_onekg_stats(args):
                 sample_pops,
                 args.pops,
                 args.pop,
-                0,
+                args.rep,
                 args.chrom,
                 chrom_len,
                 args.ld_decay_window_size_bp,
@@ -760,7 +762,7 @@ def calc_onekg_stats(args):
             f"pop={args.pop}"
         )
         pi_theta_intergenic = _build_pi_theta_rows(
-            0,
+            args.rep,
             args.chrom,
             args.pop,
             intergenic_counts,
@@ -769,7 +771,7 @@ def calc_onekg_stats(args):
             num_haplotypes
         )
         pi_theta_callable = _build_pi_theta_rows(
-            0,
+            args.rep,
             args.chrom,
             args.pop,
             allele_counts,
@@ -778,7 +780,7 @@ def calc_onekg_stats(args):
             num_haplotypes
         )
         sfs = _build_projected_folded_1d_sfs_rows(
-            0,
+            args.rep,
             args.chrom,
             args.pop,
             allele_counts,
@@ -787,7 +789,7 @@ def calc_onekg_stats(args):
             args.sfs_size_pop_ref
         )
         qc_row = {
-            "rep": 0,
+            "rep": args.rep,
             "chrom": args.chrom,
             "pop": args.pop,
             **scan["qc"],
@@ -798,20 +800,20 @@ def calc_onekg_stats(args):
         }
         outputs = {
             (
-                f"pi_theta_stats_intergenic.rep_0.chr{args.chrom}."
+                f"pi_theta_stats_intergenic.rep_{args.rep}.chr{args.chrom}."
                 f"{args.pop}"
             ): pi_theta_intergenic,
             (
-                f"pi_theta_stats_full_callable_chrom.rep_0."
+                f"pi_theta_stats_full_callable_chrom.rep_{args.rep}."
                 f"chr{args.chrom}."
                 f"{args.pop}"
             ): pi_theta_callable,
-            f"sfs.rep_0.chr{args.chrom}.{args.pop}": sfs,
+            f"sfs.rep_{args.rep}.chr{args.chrom}.{args.pop}": sfs,
             (
-                f"variant_qc.rep_0.chr{args.chrom}.{args.pop}"
+                f"variant_qc.rep_{args.rep}.chr{args.chrom}.{args.pop}"
             ): [qc_row],
             (
-                f"ld_decay.rep_0.chr{args.chrom}.{args.pop}"
+                f"ld_decay.rep_{args.rep}.chr{args.chrom}.{args.pop}"
             ): ld_decay
         }
         for output_name, rows in outputs.items():
@@ -834,7 +836,7 @@ def calc_onekg_stats(args):
         rows = []
         for chrom in args.chroms:
             path = stats_dir / (
-                f"{table_name}.rep_0.chr{chrom}.{args.pop}.tsv"
+                f"{table_name}.rep_{args.rep}.chr{chrom}.{args.pop}.tsv"
             )
             log_msg(
                 f"reading chromosome diversity table chr={chrom} "
@@ -842,7 +844,7 @@ def calc_onekg_stats(args):
             )
             rows.extend(read_tsv_rows(path))
         aggregated = _aggregate_pi_theta_rows(rows)
-        output_path = stats_dir / f"{table_name}.rep_0.{args.pop}"
+        output_path = stats_dir / f"{table_name}.rep_{args.rep}.{args.pop}"
         log_msg(
             f"writing genome diversity table pop={args.pop} path={output_path}"
         )
@@ -855,8 +857,12 @@ def calc_onekg_stats(args):
     sfs_rows = []
     ld_rows = []
     for chrom in args.chroms:
-        sfs_path = stats_dir / f"sfs.rep_0.chr{chrom}.{args.pop}.tsv"
-        ld_path = stats_dir / f"ld_decay.rep_0.chr{chrom}.{args.pop}.tsv"
+        sfs_path = stats_dir / (
+            f"sfs.rep_{args.rep}.chr{chrom}.{args.pop}.tsv"
+        )
+        ld_path = stats_dir / (
+            f"ld_decay.rep_{args.rep}.chr{chrom}.{args.pop}.tsv"
+        )
         log_msg(
             f"reading chromosome SFS and LD tables chr={chrom} "
             f"pop={args.pop}"
@@ -867,8 +873,8 @@ def calc_onekg_stats(args):
         ld_rows.extend(
             read_tsv_rows(ld_path)
         )
-    sfs_output_path = stats_dir / f"sfs.rep_0.{args.pop}"
-    ld_output_path = stats_dir / f"ld_decay.rep_0.{args.pop}"
+    sfs_output_path = stats_dir / f"sfs.rep_{args.rep}.{args.pop}"
+    ld_output_path = stats_dir / f"ld_decay.rep_{args.rep}.{args.pop}"
     log_msg(f"writing genome folded SFS pop={args.pop} path={sfs_output_path}")
     write_stats_table(
         sfs_output_path,

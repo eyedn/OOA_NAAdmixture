@@ -16,7 +16,9 @@ from pathlib import Path
 import argparse
 import csv
 from shared_utils.build_multik_ancestry_rows import build_multik_ancestry_rows
-from shared_utils.parse_faststructure_choose_k import parse_faststructure_choose_k
+from shared_utils.parse_faststructure_choose_k import (
+    parse_faststructure_choose_k,
+)
 from shared_utils.parse_k_path_specs import parse_k_path_specs
 from shared_utils.write_stats_table import write_stats_table
 
@@ -26,6 +28,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--rep", required=True, type=int)
 parser.add_argument("--sample-metadata-path", required=True)
 parser.add_argument("--admixture-fam-path", required=True)
+parser.add_argument("--supervised-q-path", required=True)
 parser.add_argument(
     "--admixture-q-path",
     action="append",
@@ -78,6 +81,34 @@ if __name__ == "__main__":
         for sample in samples
     }
 
+    # orient supervised components from AFR and EUR reference samples.
+    with open(args.supervised_q_path, "r", encoding="utf-8") as in_file:
+        supervised_values = [
+            [float(value) for value in line.split()]
+            for line in in_file
+            if line.strip()
+        ]
+    if len(supervised_values) != len(samples):
+        raise ValueError("Supervised Q/FAM row count mismatch")
+    if any(len(values) != 2 for values in supervised_values):
+        raise ValueError("Supervised ADMIXTURE requires exactly two components")
+    supervised_rows = [
+        {
+            "sample": sample,
+            "pop": sample_pops[sample],
+            "q1": values[0],
+            "q2": values[1]
+        }
+        for sample, values in zip(samples, supervised_values)
+    ]
+    afr_rows = [row for row in supervised_rows if row["pop"] == "AFR"]
+    eur_rows = [row for row in supervised_rows if row["pop"] == "EUR"]
+    if not afr_rows or not eur_rows:
+        raise ValueError("Supervised ancestry requires AFR and EUR references")
+    afr_q1 = sum(row["q1"] for row in afr_rows) / len(afr_rows)
+    eur_q1 = sum(row["q1"] for row in eur_rows) / len(eur_rows)
+    q1_is_afr = afr_q1 > eur_q1
+
     admixture_paths = parse_k_path_specs(
         args.admixture_q_path,
         "ADMIXTURE"
@@ -107,6 +138,28 @@ if __name__ == "__main__":
         ancestry_by_tool[table_name] = values_by_k
     suffix = f".chr{args.chrom}" if args.chrom is not None else ""
     stats_dir = Path(args.stats_dir)
+    supervised_output = []
+    for raw_row in supervised_rows:
+        row = {"rep": args.rep}
+        if args.chrom is not None:
+            row["chrom"] = args.chrom
+        row.update(
+            {
+                "pop": raw_row["pop"],
+                "sample_id": sample_ids[raw_row["sample"]],
+                "vcf_sample_id": raw_row["sample"],
+                "afr_tspop": "NA",
+                "eur_tspop": "NA",
+                "afr_q": raw_row["q1"] if q1_is_afr else raw_row["q2"],
+                "eur_q": raw_row["q2"] if q1_is_afr else raw_row["q1"],
+                "span": "NA"
+            }
+        )
+        supervised_output.append(row)
+    write_stats_table(
+        stats_dir / f"ancestry_ADMIXTURE_super.rep_{args.rep}{suffix}",
+        supervised_output
+    )
     for table_name, values_by_k in ancestry_by_tool.items():
         rows = build_multik_ancestry_rows(
             samples,
@@ -118,7 +171,7 @@ if __name__ == "__main__":
         )
         write_stats_table(
             stats_dir / f"{table_name}.rep_{args.rep}{suffix}",
-            rows,
+            rows
         )
 
     with open(

@@ -58,11 +58,18 @@ EMPTY_TABLE_COLUMNS = {
     "sfs": [
         "rep", "chrom", "pop", "minor_allele_count", "count",
         "source_allele_count", "projection_allele_count"
+    ],
+    "snp_density": [
+        "rep", "chrom", "bin_start", "bin_end", "window_size_bp",
+        "empirical_snp_count", "simulation_snp_count",
+        "selected_snp_count", "empirical_variants_per_kb",
+        "simulation_variants_per_kb", "selected_variants_per_kb",
+        "deficit_snp_count", "simulation_below_target"
     ]
 }
 
 
-##### main function ###########################################################
+##### main ####################################################################
 '''
 write one statistics table as canonical TSV and Parquet files. Empty tables use
 the registered schema so downstream combination retains stable columns.

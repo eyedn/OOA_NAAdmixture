@@ -8,7 +8,7 @@
 #           calc_onekg_stats.py
 ###############################################################################
 
-# overview: calculate 1000 Genomes chromosome or genome statistics from CLI 
+# overview: calculate 1000 Genomes chromosome or genome statistics from CLI
 # inputs.
 
 
@@ -29,6 +29,7 @@ parser.add_argument(
     required=True
 )
 parser.add_argument("--stats-dir", required=True)
+parser.add_argument("--rep", type=int, default=0)
 parser.add_argument("--pop", required=True)
 parser.add_argument("--king-path", required=True)
 parser.add_argument("--vcf-path")
