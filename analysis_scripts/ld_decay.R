@@ -19,7 +19,7 @@ SIM.SMALL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_small/stats"
 SIM.LARGE.DATA.DIR <- "~/scratch/OOA_NAAdmixture_large/stats"
 EMPIRICAL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_1kG/stats"
 CHROMOSOMES <- as.character(1:22)
-SELECTED.CHROMOSOMES <- c("1", "5", "10", "14", "18", "22")
+SELECTED.CHROMOSOMES <- c("1", "18")
 LD.X.LOWER <- 0
 LD.X.UPPER <- 250000
 LD.X.BREAKS <- seq(LD.X.LOWER, LD.X.UPPER, by = 50000)

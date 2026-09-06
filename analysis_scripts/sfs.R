@@ -9,9 +9,6 @@
 # ______________________________________________________________________________
 
 
-# pattern: Mixed (unavoidable)
-# Reason: self-contained helpers accompany sequential I/O orchestration.
-
 # set up ----
 library(tidyverse)
 library(furrr)
@@ -23,9 +20,9 @@ SIM.SMALL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_small/stats"
 SIM.LARGE.DATA.DIR <- "~/scratch/OOA_NAAdmixture_large/stats"
 EMPIRICAL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_1kG/stats"
 CHROMOSOMES <- as.character(1:22)
-DISPLAY.BIN.MAX <- 10
+DISPLAY.BIN.MAX <- 15
 SFS.PROJECTION.ALLELE.COUNT <- 100
-SFS.FACET.LEVELS <- c("all", "1", "5", "10", "14", "18", "22")
+SFS.FACET.LEVELS <- c("all", "1")
 SFS.SERIES.LEVELS <- c(
   "small AFR", "small ADX", "small EUR",
   "large AFR", "large ADX", "large EUR",
@@ -234,7 +231,7 @@ make.sfs.plot <- function(data, value.column, y.label, pseudo.log) {
     geom_errorbar(
       aes(ymin = lower, ymax = upper),
       position = SFS.DODGE,
-      width = 0.25,
+      width = 0.25, linewidth = 0.5,
       na.rm = TRUE
     ) +
     facet_wrap(~chrom, nrow = 1, drop = FALSE) +
@@ -248,10 +245,10 @@ make.sfs.plot <- function(data, value.column, y.label, pseudo.log) {
       y = y.label,
       fill = NULL
     ) +
-    theme_bw(base_size = 18) +
+    theme_bw(base_size = 24) +
     theme(
-      legend.position = "top",
-      axis.text.x = element_text(angle = 90, vjust = 0.5)
+      legend.position = "top", legend.direction = "horizontal", 
+      legend.box = "horizontal", panel.grid.minor = element_blank()
     )
   if (pseudo.log) {
     plot <- plot + scale_y_continuous(trans = pseudo_log_trans())
@@ -300,7 +297,8 @@ sfs.inputs <- read.sfs.inputs(
 sfs.data <- prepare.sfs.analysis(
   sfs.inputs$simulation,
   sfs.inputs$empirical
-)
+) %>%
+  filter(!(chrom == "all" & data.set != "empirical"))
 sfs.summaries <- summarize.sfs.analysis(sfs.data)
 
 sfs.count.plot <- make.sfs.plot(

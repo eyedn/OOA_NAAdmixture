@@ -324,15 +324,15 @@ make.kinship.plot <- function(data, plot.sample.set, breaks, styles) {
       position = dodge, width = diff(breaks)[1] * 0.85,
       color = "black", linewidth = 0.1
     ) +
-    # geom_errorbar(
-    #   data = plot.data,
-    #   aes(
-    #     ymin = pmax(0, mean.fraction - 2 * sd.fraction),
-    #     ymax = mean.fraction + 2 * sd.fraction
-    #   ),
-    #   position = dodge, width = 0, linewidth = 0.45,
-    #   color = "black", na.rm = TRUE
-    # ) +
+    geom_errorbar(
+      data = plot.data,
+      aes(
+        ymin = pmax(0, mean.fraction - 2 * sd.fraction),
+        ymax = mean.fraction + 2 * sd.fraction
+      ),
+      position = dodge, width = 0, linewidth = 0.45,
+      color = "black", na.rm = TRUE
+    ) +
     facet_grid(
       chrom ~ data.type, drop = FALSE, scales = "free_y",
       labeller = labeller(

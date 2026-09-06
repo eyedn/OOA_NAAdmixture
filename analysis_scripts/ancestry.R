@@ -8,9 +8,6 @@
 # ancestry.R
 # ______________________________________________________________________________
 
-# pattern: Mixed (unavoidable)
-# reason: required live analysis follows pure helpers with sequential data I/O
-
 
 # set up ----
 library(tidyverse)
