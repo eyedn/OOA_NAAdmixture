@@ -273,6 +273,9 @@ make.diversity.plot <- function(points, genome.lines, styles) {
       values = styles$series.shapes,
       labels = styles$series.labels
     ) +
+    scale_y_continuous(
+      labels = scales::label_number(accuracy = 0.00001)
+    ) +
     labs(
       x = "Chromosome", y = NULL,
       title = "Genetic Diversity Across Selected Chromosomes",

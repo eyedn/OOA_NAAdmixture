@@ -9,10 +9,6 @@
 # ______________________________________________________________________________
 
 
-# pattern: Mixed (unavoidable)
-# reason: standalone live execution requires I/O and plot helpers together
-
-
 # set up ----
 library(tidyverse)
 library(glue)

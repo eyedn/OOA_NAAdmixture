@@ -343,7 +343,7 @@ make.kinship.plot <- function(data, breaks, styles) {
       color = "black", na.rm = TRUE
     ) +
     facet_grid(
-      data.type ~ chrom, drop = FALSE, scales = "free_y",
+      chrom ~ data.type, drop = FALSE, scales = "free_y",
       labeller = labeller(
         data.type = as_labeller(styles$series.labels)
       )

@@ -21,7 +21,8 @@ SIMDOWN.SMALL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_smallOnekgDownsample/stats"
 SIM.LARGE.DATA.DIR <- "~/scratch/OOA_NAAdmixture_large/stats"
 SIMDOWN.LARGE.DATA.DIR <- "~/scratch/OOA_NAAdmixture_largeOnekgDownsample/stats"
 EMPIRICAL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_1kG/stats"
-CHROMOSOMES <- as.character(1:22)
+# CHROMOSOMES <- as.character(1:22)
+CHROMOSOMES <- c("1", "18")
 DISPLAY.BIN.MAX <- 15
 SFS.PROJECTION.ALLELE.COUNT <- 100
 SOURCE.LEVELS <- c(
@@ -31,8 +32,8 @@ SOURCE.LEVELS <- c(
 SFS.FACET.LEVELS <- c("1", "18", "all")
 SFS.SERIES.LEVELS <- c(
   "small AFR", "small ADX", "small EUR",
-  "small simDown AFR", "small simDown ADX", "small simDown EUR",
-  "large AFR", "large ADX", "large EUR", "large simDown ADX",
+  "small simDown AFR", "small simDown ADX", "small simDown EUR", 
+  "large ADX", "large simDown ADX",
   "empirical YRI", "empirical ASW", "empirical CEU"
 )
 SFS.COLORS <- c(
@@ -42,9 +43,7 @@ SFS.COLORS <- c(
   "small simDown AFR" = "#56B4E9",
   "small simDown ADX" = "#6F55B5",
   "small simDown EUR" = "#FB8072",
-  "large AFR" = "#0072B2",
   "large ADX" = "#32146F",
-  "large EUR" = "#D94A3A",
   "large simDown ADX" = "#4B1FA8",
   "empirical YRI" = "#EEC4DC",
   "empirical ASW" = "#E44B8D",
@@ -57,9 +56,7 @@ SFS.SERIES.LABELS <- c(
   "small simDown AFR" = "Sm. D. Sim. AFR",
   "small simDown ADX" = "Sm. D. Sim. ADX",
   "small simDown EUR" = "Sm. D. Sim. EUR",
-  "large AFR" = "Lg. Sim. AFR",
   "large ADX" = "Lg. Sim. ADX",
-  "large EUR" = "Lg. Sim. EUR",
   "large simDown ADX" = "Lg. D. Sim. ADX",
   "empirical YRI" = "Emp. YRI",
   "empirical ASW" = "Emp. ASW",
@@ -253,7 +250,9 @@ prepare.sfs.analysis <- function(simulation, simDown = NULL, empirical = NULL) {
     ) %>%
     rename(minor.allele.count = minor_allele_count) %>%
     add.empirical.genome() %>%
-    select(data.set, rep, chrom, pop, minor.allele.count, count)
+    select(
+      data.set, data.type, rep, chrom, pop, minor.allele.count, count
+    )
 
   prepared <- bind_rows(simulation, simDown, empirical) %>%
     apply.sfs.source.contract() %>%

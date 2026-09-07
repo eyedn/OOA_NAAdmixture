@@ -20,7 +20,8 @@ SIM.LARGE.DATA.DIR <- "~/scratch/OOA_NAAdmixture_large/stats"
 SIMDOWN.LARGE.DATA.DIR <- "~/scratch/OOA_NAAdmixture_largeOnekgDownsample/stats"
 EMPIRICAL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_1kG/stats"
 CHROMOSOME.LENGTHS.PATH <- "~/proj/1000GenomeNYGC_hg38_karatas/ONEKG_chr_lens.tsv"
-CHROMOSOMES <- as.character(1:22)
+# CHROMOSOMES <- as.character(1:22)
+CHROMOSOMES <- c("1", "18")
 SELECTED.CHROMOSOMES <- c("1", "18")
 SIMULATION.K <- 2
 EMPIRICAL.K <- 2
@@ -600,7 +601,7 @@ make.mean.sd.plot <- function(
       aes(yintercept = estimate),
       color = color, linetype = "dashed"
     ) +
-    geom_boxplot(aes(group = interaction(chrom, series)), outlier.shape = NA) +
+    geom_boxplot(aes(group = interaction(chrom, series)), outliers = FALSE) +
     geom_errorbar(data = filter(empirical, chrom != "all"),
       aes(chrom, ymin = lower, ymax = upper), inherit.aes = FALSE,
       color = color, width = 0.15
@@ -830,9 +831,9 @@ make.histogram.plot <- function(
   plot <- ggplot(data, aes(xmid, mean.frac, fill = series, group = series)) +
     geom_col(position = dodge, width = diff(breaks)[1] * 0.95,
       color = "black", linewidth = 0.3) +
-    geom_errorbar(
-      aes(ymin = ymin, ymax = ymax), position = dodge, width = 0.01
-      ) +
+    # geom_errorbar(
+    #   aes(ymin = ymin, ymax = ymax), position = dodge, width = 0.01
+    #   ) +
     facet_wrap(~ chrom, ncol = 3, drop = TRUE) +
     scale_x_continuous(limits = c(0, 1), breaks = seq(0, 1, 0.2)) +
     scale_fill_manual(values = styles$colors, labels = styles$labels) +
@@ -1115,23 +1116,23 @@ combined.mean.sd.plot <- make.mean.sd.plot(
 )
 print(combined.mean.sd.plot)
 
-length.versus.mean.plot <- make.length.mean.plot(
-  ancestry.summary.data, chromosome.lengths, PLOT.EMPIRICAL.METHOD,
-  PLOT.SAMPLE.SET, CHROMOSOMES, PLOT.STYLES
-)
+# length.versus.mean.plot <- make.length.mean.plot(
+#   ancestry.summary.data, chromosome.lengths, PLOT.EMPIRICAL.METHOD,
+#   PLOT.SAMPLE.SET, CHROMOSOMES, PLOT.STYLES
+# )
 # print(length.versus.mean.plot)
 
-length.versus.sd.plot <- make.length.sd.plot(
-  ancestry.summary.data, chromosome.lengths, PLOT.EMPIRICAL.METHOD,
-  PLOT.SAMPLE.SET, CHROMOSOMES, PLOT.STYLES
-)
+# length.versus.sd.plot <- make.length.sd.plot(
+#   ancestry.summary.data, chromosome.lengths, PLOT.EMPIRICAL.METHOD,
+#   PLOT.SAMPLE.SET, CHROMOSOMES, PLOT.STYLES
+# )
 # print(length.versus.sd.plot)
 
-combined.length.mean.sd.plot <- make.length.mean.sd.plot(
-  ancestry.summary.data, chromosome.lengths, PLOT.EMPIRICAL.METHOD,
-  PLOT.SAMPLE.SET, CHROMOSOMES, PLOT.STYLES
-)
-print(combined.length.mean.sd.plot)
+# combined.length.mean.sd.plot <- make.length.mean.sd.plot(
+#   ancestry.summary.data, chromosome.lengths, PLOT.EMPIRICAL.METHOD,
+#   PLOT.SAMPLE.SET, CHROMOSOMES, PLOT.STYLES
+# )
+# print(combined.length.mean.sd.plot)
 
 histogram.plot <- make.histogram.plot(
   ancestry.histogram.data, PLOT.EMPIRICAL.METHOD,
