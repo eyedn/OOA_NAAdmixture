@@ -9,10 +9,6 @@
 # ______________________________________________________________________________
 
 
-# pattern: Mixed (unavoidable)
-# reason: the required standalone workflow combines table reads and plotting logic
-
-
 # set up ----
 library(tidyverse)
 library(glue)
@@ -38,16 +34,26 @@ PLOT.STYLES <- list(
     YRI = "#eec4dc", ASW = "#e44b8d", CEU = "#bb437e"
   ),
   series.labels = c(
-    Simulation_small = "Simulation small",
-    Simulation_small_simDown = "Simulation small simDown",
-    Simulation_large = "Simulation large",
-    Simulation_large_simDown = "Simulation large simDown",
-    Empirical = "Empirical"
+    Simulation_small = "Sm. Sim.",
+    Simulation_small_simDown = "Sm. D. Sim.",
+    Simulation_large = "Lg. Sim.",
+    Simulation_large_simDown = "Lg. D. Sim.",
+    Empirical = "Emp."
   )
 )
 
 
 # internal functions ----
+
+
+# describe the kinship estimator, scope, and uncertainty concisely
+kinship.plot.subtitle <- function(chromosomes) {
+  subtitle <- paste0(
+    "KING estimator · chromosomes ", paste(chromosomes, collapse = ", "),
+    " and empirical genome-wide · ±2 SD simulations"
+  )
+  return(subtitle)
+}
 
 
 # retain source-specific populations before any histogram calculations
@@ -309,29 +315,12 @@ summarize.kinship.histograms <- function(data) {
 # construct the pairwise kinship distribution plot
 make.kinship.plot <- function(data, breaks, styles) {
   plot.data <- data
-  simulation <- plot.data %>%
-    filter(data.type != "Empirical")
-  replicate.count <- max(simulation$replicate.count)
-  sample.size.min <- min(simulation$sample.size.min)
-  sample.size.max <- max(simulation$sample.size.max)
-  sample.description <- if (sample.size.min == sample.size.max) {
-    glue("n = {sample.size.min}")
-  } else {
-    glue("n = {sample.size.min}–{sample.size.max}")
-  }
   chromosome.scope <- plot.data %>%
     filter(data.type != "Empirical") %>%
     pull(chrom) %>%
     as.character() %>%
-    unique() %>%
-    glue_collapse(sep = ", ")
-  subtitle <- glue(
-    "KING unrelated estimates · All available unrelated individuals ",
-    "({sample.description} per source × replicate × chromosome × ",
-    "population) · Simulation replicates: ",
-    "{replicate.count} · Scope: chromosomes {chromosome.scope} plus ",
-    "empirical genome-wide"
-  )
+    unique()
+  subtitle <- kinship.plot.subtitle(chromosome.scope)
   dodge <- position_dodge(width = diff(breaks)[1] * 0.9)
   plot <- ggplot(
     plot.data,

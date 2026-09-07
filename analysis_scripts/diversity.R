@@ -9,13 +9,8 @@
 # ______________________________________________________________________________
 
 
-# pattern: Mixed (unavoidable)
-# reason: the required standalone workflow combines table reads and plotting logic
-
-
 # set up ----
 library(tidyverse)
-library(glue)
 library(nanoparquet)
 
 
@@ -44,16 +39,26 @@ PLOT.STYLES <- list(
     Empirical = 25
   ),
   series.labels = c(
-    Simulation_small = "Simulation small",
-    Simulation_small_simDown = "Simulation small simDown",
-    Simulation_large = "Simulation large",
-    Simulation_large_simDown = "Simulation large simDown",
-    Empirical = "Empirical"
+    Simulation_small = "Sm. Sim.",
+    Simulation_small_simDown = "Sm. D. Sim.",
+    Simulation_large = "Lg. Sim.",
+    Simulation_large_simDown = "Lg. D. Sim.",
+    Empirical = "Emp."
   )
 )
 
 
 # internal functions ----
+
+
+# describe the diversity estimators, scope, and uncertainty concisely
+diversity.plot.subtitle <- function(chromosomes) {
+  subtitle <- paste0(
+    "π and Watterson’s θ · chromosomes ",
+    paste(chromosomes, collapse = ", "), " · ±2 SD simulations"
+  )
+  return(subtitle)
+}
 
 
 # retain source-specific populations before any replicate summaries
@@ -229,23 +234,10 @@ build.diversity.plot.data <- function(
 
 # construct the selected-chromosome diversity plot
 make.diversity.plot <- function(points, genome.lines, styles) {
-  replicate.count <- max(
-    points$replicate.count[points$data.type != "Empirical"]
-  )
   chromosome.scope <- points$chrom %>%
     as.character() %>%
-    unique() %>%
-    glue_collapse(sep = ", ")
-  masks <- points$mask %>%
-    as.character() %>%
-    unique() %>%
-    glue_collapse(sep = " and ")
-  subtitle <- glue(
-    "π and Watterson’s θ · Full sample sets · Empirical masks: ",
-    "{masks} · Simulation replicates: {replicate.count} · Selected ",
-    "chromosomes: {chromosome.scope} · Dotted lines: genome-wide ",
-    "empirical references"
-  )
+    unique()
+  subtitle <- diversity.plot.subtitle(chromosome.scope)
   dodge <- position_dodge(width = 0.75)
   plot <- ggplot(
     points,

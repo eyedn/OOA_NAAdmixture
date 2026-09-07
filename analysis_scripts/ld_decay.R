@@ -10,7 +10,7 @@
 
 
 # pattern: Mixed (unavoidable)
-# reason: the required standalone workflow combines table reads and plotting logic
+# reason: standalone live execution requires I/O and plot helpers together
 
 
 # set up ----
@@ -25,7 +25,7 @@ SIM.LARGE.DATA.DIR <- "~/scratch/OOA_NAAdmixture_large/stats"
 SIMDOWN.LARGE.DATA.DIR <- "~/scratch/OOA_NAAdmixture_largeOnekgDownsample/stats"
 EMPIRICAL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_1kG/stats"
 CHROMOSOMES <- as.character(1:22)
-SELECTED.CHROMOSOMES <- c("1", "18")
+PLOT.CHROMOSOME <- "1"
 SOURCE.LEVELS <- c(
   "Simulation_small", "Simulation_small_simDown",
   "Simulation_large", "Simulation_large_simDown", "Empirical"
@@ -47,16 +47,26 @@ PLOT.STYLES <- list(
     Empirical = "solid"
   ),
   series.labels = c(
-    Simulation_small = "Simulation small",
-    Simulation_small_simDown = "Simulation small simDown",
-    Simulation_large = "Simulation large",
-    Simulation_large_simDown = "Simulation large simDown",
-    Empirical = "Empirical"
+    Simulation_small = "Sm. Sim.",
+    Simulation_small_simDown = "Sm. D. Sim.",
+    Simulation_large = "Lg. Sim.",
+    Simulation_large_simDown = "Lg. D. Sim.",
+    Empirical = "Emp."
   )
 )
 
 
 # internal functions ----
+
+
+# describe the selected LD estimator, chromosome, and uncertainty
+ld.plot.subtitle <- function(chromosome) {
+  subtitle <- paste0(
+    "Rogers–Huff r² · chromosome ", chromosome,
+    " · ribbons show ±2 SD"
+  )
+  return(subtitle)
+}
 
 
 # retain source-specific populations before pooling sufficient statistics
@@ -198,9 +208,7 @@ summarize.ld.curves <- function(data) {
   summary <- bind_rows(simulation, empirical) %>%
     mutate(
       role = factor(role, levels = c("AFR", "ADX", "EUR")),
-      chrom = factor(
-        chrom, levels = c(SELECTED.CHROMOSOMES, "all")
-      ),
+      chrom = as.character(chrom),
       data.type = factor(
         data.type,
         levels = SOURCE.LEVELS
@@ -281,19 +289,34 @@ add.ld.geometries <- function(plot, data) {
 }
 
 
-# construct the chromosome 1, chromosome 18, and empirical all view
-make.ld.plot <- function(data, styles) {
+# construct the source-group view for exactly one chromosome
+make.ld.plot <- function(data, chromosome, styles) {
+  if (length(chromosome) != 1L) {
+    stop("LD plotting requires exactly one chromosome")
+  }
+  chromosome <- as.character(chromosome)
+  if (!chromosome %in% CHROMOSOMES) {
+    stop("LD plotting requires exactly one autosomal chromosome")
+  }
   plot.data <- data %>%
-    mutate(chrom = factor(
-      as.character(chrom), levels = c(SELECTED.CHROMOSOMES, "all")
-    ))
-  replicate.count <- max(
-    data$replicate.count[data$data.type != "Empirical"]
-  )
-  subtitle <- glue(
-    "Rogers–Huff r² · Full sample sets · Simulation replicates: ",
-    "{replicate.count} · Chromosomes 1 and 18 plus empirical genome-wide"
-  )
+    filter(as.character(chrom) == chromosome) %>%
+    mutate(
+      source.group = case_when(
+        data.type %in% c(
+          "Simulation_small", "Simulation_large"
+        ) ~ "Sim.",
+        data.type %in% c(
+          "Simulation_small_simDown", "Simulation_large_simDown"
+        ) ~ "D. Sim.",
+        data.type == "Empirical" ~ "Emp."
+      ),
+      source.group = factor(
+        source.group, levels = c("Sim.", "D. Sim.", "Emp.")
+      )
+    )
+  if (!nrow(plot.data)) {
+    stop("LD data do not contain the selected chromosome")
+  }
   plot <- ggplot(
     plot.data,
     aes(
@@ -302,9 +325,10 @@ make.ld.plot <- function(data, styles) {
     )
   )
   plot <- add.ld.geometries(plot, plot.data) +
-    facet_wrap(~chrom, nrow = 1, drop = FALSE)
+    facet_wrap(~source.group, nrow = 1, drop = FALSE)
   plot <- style.ld.plot(
-    plot, "LD Decay Across Chromosomes", subtitle, styles
+    plot, "LD Decay by Source Group",
+    ld.plot.subtitle(chromosome), styles
   )
 
   return(plot)
@@ -314,19 +338,19 @@ make.ld.plot <- function(data, styles) {
 # analysis ----
 
 
-# read chromosomes 1 and 18 for all four simulation sources
+# read the selected chromosome for all four simulation sources
 sim.small.ld.chromosomes <- read.ld.chromosomes(
-  SIM.SMALL.DATA.DIR, SELECTED.CHROMOSOMES, "Simulation_small"
+  SIM.SMALL.DATA.DIR, PLOT.CHROMOSOME, "Simulation_small"
 )
 simDown.small.ld.chromosomes <- read.ld.chromosomes(
-  SIMDOWN.SMALL.DATA.DIR, SELECTED.CHROMOSOMES,
+  SIMDOWN.SMALL.DATA.DIR, PLOT.CHROMOSOME,
   "Simulation_small_simDown"
 )
 sim.large.ld.chromosomes <- read.ld.chromosomes(
-  SIM.LARGE.DATA.DIR, SELECTED.CHROMOSOMES, "Simulation_large"
+  SIM.LARGE.DATA.DIR, PLOT.CHROMOSOME, "Simulation_large"
 )
 simDown.large.ld.chromosomes <- read.ld.chromosomes(
-  SIMDOWN.LARGE.DATA.DIR, SELECTED.CHROMOSOMES,
+  SIMDOWN.LARGE.DATA.DIR, PLOT.CHROMOSOME,
   "Simulation_large_simDown"
 )
 simulation.ld.chromosomes <- bind_rows(
@@ -338,20 +362,16 @@ simulation.ld.chromosomes <- bind_rows(
 simulation.ld.selected <- simulation.ld.chromosomes %>%
   pool.ld.curves(include.chromosome = TRUE)
 
-# read and pool the empirical selected-chromosome and genome curves
+# read and pool the empirical selected chromosome
 empirical.ld.selected <- read.ld.chromosomes(
-  EMPIRICAL.DATA.DIR, SELECTED.CHROMOSOMES, "Empirical"
-) %>%
-  pool.ld.curves(include.chromosome = TRUE)
-empirical.ld.genome <- read.empirical.ld.genome(
-  EMPIRICAL.DATA.DIR
+  EMPIRICAL.DATA.DIR, PLOT.CHROMOSOME, "Empirical"
 ) %>%
   pool.ld.curves(include.chromosome = TRUE)
 
-# summarize curves and construct the combined chromosome view
+# summarize curves and construct the grouped source view
 ld.summary <- bind_rows(
-  simulation.ld.selected, empirical.ld.selected, empirical.ld.genome
+  simulation.ld.selected, empirical.ld.selected
 ) %>%
   summarize.ld.curves()
-ld.plot <- make.ld.plot(ld.summary, PLOT.STYLES)
+ld.plot <- make.ld.plot(ld.summary, PLOT.CHROMOSOME, PLOT.STYLES)
 print(ld.plot)

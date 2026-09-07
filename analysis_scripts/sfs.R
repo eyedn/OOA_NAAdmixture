@@ -24,46 +24,80 @@ EMPIRICAL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_1kG/stats"
 CHROMOSOMES <- as.character(1:22)
 DISPLAY.BIN.MAX <- 15
 SFS.PROJECTION.ALLELE.COUNT <- 100
-SOURCE.LEVELS <- c("Simulation_small", "Simulation_small_simDown",
-                   "Simulation_large", "Simulation_large_simDown", "Empirical")
+SOURCE.LEVELS <- c(
+  "Simulation_small", "Simulation_small_simDown",
+  "Simulation_large", "Simulation_large_simDown", "Empirical"
+)
 SFS.FACET.LEVELS <- c("1", "18", "all")
 SFS.SERIES.LEVELS <- c(
-  "Simulation_small ADX", "Simulation_small_simDown ADX",
-  "Simulation_large ADX", "Simulation_large_simDown ADX",
-  "Empirical ASW"
+  "small AFR", "small ADX", "small EUR",
+  "small simDown AFR", "small simDown ADX", "small simDown EUR",
+  "large AFR", "large ADX", "large EUR", "large simDown ADX",
+  "empirical YRI", "empirical ASW", "empirical CEU"
 )
 SFS.COLORS <- c(
   "small AFR" = "#9BD5F2",
   "small ADX" = "#9A83CE",
   "small EUR" = "#FBB4AE",
+  "small simDown AFR" = "#56B4E9",
+  "small simDown ADX" = "#6F55B5",
+  "small simDown EUR" = "#FB8072",
   "large AFR" = "#0072B2",
   "large ADX" = "#32146F",
   "large EUR" = "#D94A3A",
+  "large simDown ADX" = "#4B1FA8",
   "empirical YRI" = "#EEC4DC",
   "empirical ASW" = "#E44B8D",
   "empirical CEU" = "#BB437E"
 )
+SFS.SERIES.LABELS <- c(
+  "small AFR" = "Sm. Sim. AFR",
+  "small ADX" = "Sm. Sim. ADX",
+  "small EUR" = "Sm. Sim. EUR",
+  "small simDown AFR" = "Sm. D. Sim. AFR",
+  "small simDown ADX" = "Sm. D. Sim. ADX",
+  "small simDown EUR" = "Sm. D. Sim. EUR",
+  "large AFR" = "Lg. Sim. AFR",
+  "large ADX" = "Lg. Sim. ADX",
+  "large EUR" = "Lg. Sim. EUR",
+  "large simDown ADX" = "Lg. D. Sim. ADX",
+  "empirical YRI" = "Emp. YRI",
+  "empirical ASW" = "Emp. ASW",
+  "empirical CEU" = "Emp. CEU"
+)
 SFS.DODGE <- position_dodge(width = 0.9)
 PLOT.STYLES <- list(series.labels = c(
-  Simulation_small = "Simulation small",
-  Simulation_small_simDown = "Simulation small simDown",
-  Simulation_large = "Simulation large",
-  Simulation_large_simDown = "Simulation large simDown",
-  Empirical = "Empirical"
+  Simulation_small = "Sm. Sim.",
+  Simulation_small_simDown = "Sm. D. Sim.",
+  Simulation_large = "Lg. Sim.",
+  Simulation_large_simDown = "Lg. D. Sim.",
+  Empirical = "Emp."
 ))
-
-apply.sfs.source.contract <- function(data) {
-  data %>%
-    filter(
-      (data.type %in% SOURCE.LEVELS[1:2] & pop %in% c("AFR", "ADX", "EUR")) |
-        (data.type %in% SOURCE.LEVELS[3:4] & pop == "ADX") |
-        (data.type == "Empirical" & pop %in% c("AFR", "ADX", "EUR"))
-    ) %>%
-    mutate(data.type = factor(data.type, levels = SOURCE.LEVELS))
-}
 
 
 # internal functions ----
+
+
+# describe the shared projection and simulation uncertainty concisely
+sfs.plot.subtitle <- function() {
+  subtitle <- paste0(
+    "Projected to ", SFS.PROJECTION.ALLELE.COUNT,
+    " alleles · error bars show ±2 SD"
+  )
+  return(subtitle)
+}
+
+# retain source-specific populations before SFS normalization
+apply.sfs.source.contract <- function(data) {
+  retained <- data %>%
+    filter(
+      (data.type %in% SOURCE.LEVELS[1:2] & pop %in% c("AFR", "ADX", "EUR")) |
+        (data.type %in% SOURCE.LEVELS[3:4] & pop == "ADX") |
+        (data.type == "Empirical" & pop %in% c("YRI", "ASW", "CEU"))
+    ) %>%
+    mutate(data.type = factor(data.type, levels = SOURCE.LEVELS))
+  return(retained)
+}
 
 
 # require a table to contain its producer-owned SFS schema
@@ -145,7 +179,9 @@ prepare.sfs.analysis <- function(simulation, simDown = NULL, empirical = NULL) {
   }
   if (!"data.set" %in% names(simulation)) {
     simulation$data.set <- ifelse(
-      simulation$data.type %in% c("Simulation_large", "Simulation_large_simDown"),
+      simulation$data.type %in% c(
+        "Simulation_large", "Simulation_large_simDown"
+      ),
       "large", "small"
     )
   }
@@ -162,8 +198,24 @@ prepare.sfs.analysis <- function(simulation, simDown = NULL, empirical = NULL) {
     ),
     "Empirical SFS"
   )
-  if (any(empirical$projection_allele_count !=
-          SFS.PROJECTION.ALLELE.COUNT)) {
+  if (!is.null(simDown)) {
+    check.sfs.columns(
+      simDown,
+      c(
+        "data.type", "rep", "chrom", "pop", "minor_allele_count",
+        "count", "projection_allele_count"
+      ),
+      "simDown SFS"
+    )
+    invalid.projection <- is.na(simDown$projection_allele_count) |
+      simDown$projection_allele_count != SFS.PROJECTION.ALLELE.COUNT
+    if (any(invalid.projection)) {
+      stop("simDown SFS projection metadata do not match the analysis")
+    }
+  }
+  invalid.projection <- is.na(empirical$projection_allele_count) |
+    empirical$projection_allele_count != SFS.PROJECTION.ALLELE.COUNT
+  if (any(invalid.projection)) {
     stop("Empirical SFS projection metadata do not match the analysis")
   }
 
@@ -177,11 +229,20 @@ prepare.sfs.analysis <- function(simulation, simDown = NULL, empirical = NULL) {
     ) %>%
     fold.simulation.sfs()
   if (!is.null(simDown)) {
-    simDown <- simDown %>% mutate(
-      data.type = as.character(data.type),
-      data.set = ifelse(grepl("large", data.type), "large", "small")
-    )
-    simDown <- simDown %>% rename(minor.allele.count = minor_allele_count)
+    simDown <- simDown %>%
+      mutate(
+        data.type = as.character(data.type),
+        data.set = if_else(grepl("large", data.type), "large", "small"),
+        chrom = as.character(chrom)
+      ) %>%
+      validate.complete.sfs(
+        "minor_allele_count",
+        0:(SFS.PROJECTION.ALLELE.COUNT / 2)
+      ) %>%
+      rename(minor.allele.count = minor_allele_count) %>%
+      select(
+        data.set, data.type, rep, chrom, pop, minor.allele.count, count
+      )
   }
   empirical <- empirical %>%
     mutate(data.set = "empirical", data.type = "Empirical",
@@ -195,13 +256,24 @@ prepare.sfs.analysis <- function(simulation, simDown = NULL, empirical = NULL) {
     select(data.set, rep, chrom, pop, minor.allele.count, count)
 
   prepared <- bind_rows(simulation, simDown, empirical) %>%
+    apply.sfs.source.contract() %>%
     filter(chrom %in% SFS.FACET.LEVELS) %>%
     mutate(
-      series = paste(data.type, pop),
+      series = case_when(
+        data.type == "Simulation_small" ~ paste("small", pop),
+        data.type == "Simulation_small_simDown" ~
+          paste("small simDown", pop),
+        data.type == "Simulation_large" ~ paste("large", pop),
+        data.type == "Simulation_large_simDown" ~
+          paste("large simDown", pop),
+        data.type == "Empirical" ~ paste("empirical", pop)
+      ),
       chrom = factor(chrom, levels = SFS.FACET.LEVELS),
       series = factor(series, levels = SFS.SERIES.LEVELS)
     )
-  prepared$series <- forcats::fct_explicit_na(prepared$series, "Empirical ASW")
+  if (any(is.na(prepared$series))) {
+    stop("SFS series do not match the configured color keys")
+  }
 
   prepared <- prepared %>%
     group_by(data.set, rep, chrom, pop, series) %>%
@@ -278,10 +350,14 @@ make.sfs.plot <- function(data, value.column, y.label, pseudo.log) {
       breaks = seq_len(DISPLAY.BIN.MAX),
       limits = c(0.5, DISPLAY.BIN.MAX + 0.5)
     ) +
-    scale_fill_manual(values = SFS.COLORS, drop = FALSE) +
+    scale_fill_manual(
+      values = SFS.COLORS, labels = SFS.SERIES.LABELS,
+      drop = FALSE
+    ) +
     labs(
       x = "Minor allele count",
       y = y.label,
+      subtitle = sfs.plot.subtitle(),
       fill = NULL
     ) +
     theme_bw(base_size = 24) +
@@ -299,7 +375,10 @@ make.sfs.plot <- function(data, value.column, y.label, pseudo.log) {
 
 
 # read standardized projected chromosome producer outputs
-read.sfs.inputs <- function(sim.small.dir, sim.large.dir, empirical.dir) {
+read.sfs.inputs <- function(
+    sim.small.dir, simDown.small.dir, sim.large.dir,
+    simDown.large.dir, empirical.dir
+) {
   read.chromosomes <- function(directory) {
     previous.plan <- future::plan()
     on.exit(future::plan(previous.plan), add = TRUE)
@@ -320,8 +399,18 @@ read.sfs.inputs <- function(sim.small.dir, sim.large.dir, empirical.dir) {
     read.chromosomes(sim.small.dir) %>% mutate(data.set = "small"),
     read.chromosomes(sim.large.dir) %>% mutate(data.set = "large")
   )
+  simDown <- bind_rows(
+    read.chromosomes(simDown.small.dir) %>%
+      mutate(data.type = "Simulation_small_simDown"),
+    read.chromosomes(simDown.large.dir) %>%
+      mutate(data.type = "Simulation_large_simDown")
+  )
   empirical <- read.chromosomes(empirical.dir)
-  return(list(simulation = simulation, empirical = empirical))
+  return(list(
+    simulation = simulation,
+    simDown = simDown,
+    empirical = empirical
+  ))
 }
 
 
@@ -330,14 +419,16 @@ read.sfs.inputs <- function(sim.small.dir, sim.large.dir, empirical.dir) {
 
 sfs.inputs <- read.sfs.inputs(
   SIM.SMALL.DATA.DIR,
+  SIMDOWN.SMALL.DATA.DIR,
   SIM.LARGE.DATA.DIR,
+  SIMDOWN.LARGE.DATA.DIR,
   EMPIRICAL.DATA.DIR
 )
 sfs.data <- prepare.sfs.analysis(
   sfs.inputs$simulation,
+  sfs.inputs$simDown,
   sfs.inputs$empirical
-) %>%
-  filter(!(chrom == "all" & data.set != "empirical"))
+)
 sfs.summaries <- summarize.sfs.analysis(sfs.data)
 
 sfs.count.plot <- make.sfs.plot(
