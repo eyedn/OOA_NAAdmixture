@@ -9,6 +9,10 @@
 # ______________________________________________________________________________
 
 
+# pattern: Mixed (unavoidable)
+# reason: the required standalone workflow combines table reads and plotting logic
+
+
 # set up ----
 library(tidyverse)
 library(glue)
@@ -16,10 +20,16 @@ library(nanoparquet)
 
 
 SIM.SMALL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_small/stats"
+SIMDOWN.SMALL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_smallOnekgDownsample/stats"
 SIM.LARGE.DATA.DIR <- "~/scratch/OOA_NAAdmixture_large/stats"
+SIMDOWN.LARGE.DATA.DIR <- "~/scratch/OOA_NAAdmixture_largeOnekgDownsample/stats"
 EMPIRICAL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_1kG/stats"
 CHROMOSOMES <- as.character(1:22)
 SELECTED.CHROMOSOMES <- c("1", "18")
+SOURCE.LEVELS <- c(
+  "Simulation_small", "Simulation_small_simDown",
+  "Simulation_large", "Simulation_large_simDown", "Empirical"
+)
 LD.X.LOWER <- 0
 LD.X.UPPER <- 250000
 LD.X.BREAKS <- seq(LD.X.LOWER, LD.X.UPPER, by = 50000)
@@ -31,18 +41,37 @@ PLOT.STYLES <- list(
   ),
   series.linetypes = c(
     Simulation_small = "dashed",
+    Simulation_small_simDown = "longdash",
     Simulation_large = "dotdash",
+    Simulation_large_simDown = "twodash",
     Empirical = "solid"
   ),
   series.labels = c(
     Simulation_small = "Simulation small",
+    Simulation_small_simDown = "Simulation small simDown",
     Simulation_large = "Simulation large",
+    Simulation_large_simDown = "Simulation large simDown",
     Empirical = "Empirical"
   )
 )
 
 
 # internal functions ----
+
+
+# retain source-specific populations before pooling sufficient statistics
+apply.ld.source.contract <- function(data) {
+  retained <- data %>%
+    filter(
+      (data.type %in% SOURCE.LEVELS[1:2] & pop %in% c("AFR", "ADX", "EUR")) |
+        (data.type %in% SOURCE.LEVELS[3:4] & pop == "ADX") |
+        (data.type == "Empirical" & pop %in% c("AFR", "ADX", "EUR",
+                                                "YRI", "ASW", "CEU"))
+    ) %>%
+    mutate(data.type = factor(data.type, levels = SOURCE.LEVELS))
+
+  return(retained)
+}
 
 
 # map source population labels to shared population roles
@@ -75,6 +104,7 @@ normalize.ld.table <- function(data, data.type.input) {
       n_pairs = as.numeric(n_pairs),
       data.type = data.type.input
     ) %>%
+    apply.ld.source.contract() %>%
     add.population.roles()
 
   return(data)
@@ -173,9 +203,7 @@ summarize.ld.curves <- function(data) {
       ),
       data.type = factor(
         data.type,
-        levels = c(
-          "Simulation_small", "Simulation_large", "Empirical"
-        )
+        levels = SOURCE.LEVELS
       )
     ) %>%
     filter(!is.na(mean))
@@ -253,104 +281,62 @@ add.ld.geometries <- function(plot, data) {
 }
 
 
-# construct the three genome views and selected-chromosome view
-make.ld.plots <- function(data, styles) {
-  genome <- data %>% filter(chrom == "all")
-  selected <- data %>%
-    filter(chrom %in% SELECTED.CHROMOSOMES) %>%
-    mutate(
-      chrom = factor(
-        as.character(chrom), levels = SELECTED.CHROMOSOMES
-      )
-    )
+# construct the chromosome 1, chromosome 18, and empirical all view
+make.ld.plot <- function(data, styles) {
+  plot.data <- data %>%
+    mutate(chrom = factor(
+      as.character(chrom), levels = c(SELECTED.CHROMOSOMES, "all")
+    ))
   replicate.count <- max(
     data$replicate.count[data$data.type != "Empirical"]
   )
-  genome.subtitle <- glue(
+  subtitle <- glue(
     "Rogers–Huff r² · Full sample sets · Simulation replicates: ",
-    "{replicate.count} · Scope: pooled genome-wide"
+    "{replicate.count} · Chromosomes 1 and 18 plus empirical genome-wide"
   )
-  selected.scope <- selected$chrom %>%
-    as.character() %>%
-    unique() %>%
-    glue_collapse(sep = ", ")
-  selected.subtitle <- glue(
-    "Rogers–Huff r² · Full sample sets · Simulation replicates: ",
-    "{replicate.count} · Scope: selected chromosomes {selected.scope}"
-  )
-  genome.base <- ggplot(
-    genome,
+  plot <- ggplot(
+    plot.data,
     aes(
       x = distance_bin_bp, y = mean,
       color = pop, fill = pop
     )
   )
-  selected.base <- ggplot(
-    selected,
-    aes(
-      x = distance_bin_bp, y = mean,
-      color = pop, fill = pop
-    )
+  plot <- add.ld.geometries(plot, plot.data) +
+    facet_wrap(~chrom, nrow = 1, drop = FALSE)
+  plot <- style.ld.plot(
+    plot, "LD Decay Across Chromosomes", subtitle, styles
   )
 
-  genome.by.data.set <- add.ld.geometries(genome.base, genome) +
-    facet_wrap(~data.type)
-  genome.by.data.set <- style.ld.plot(
-    genome.by.data.set, "Genome-wide LD Decay by Data Set",
-    genome.subtitle, styles
-  )
-  genome.by.role <- add.ld.geometries(genome.base, genome) +
-    facet_wrap(~role)
-  genome.by.role <- style.ld.plot(
-    genome.by.role, "Genome-wide LD Decay by Population Role",
-    genome.subtitle, styles
-  )
-  genome.populations <- genome.base %>%
-    add.ld.geometries(genome) %>%
-    style.ld.plot(
-      "Genome-wide LD Decay Across Populations", genome.subtitle,
-      styles
-    )
-  selected.chromosomes <- add.ld.geometries(
-    selected.base, selected
-  ) +
-    facet_wrap(~chrom, ncol = 3, drop = FALSE)
-  selected.chromosomes <- style.ld.plot(
-    selected.chromosomes,
-    "LD Decay Across Selected Chromosomes", selected.subtitle,
-    styles
-  )
-  plots <- list(
-    genome.by.data.set = genome.by.data.set,
-    genome.by.role = genome.by.role,
-    genome.populations = genome.populations,
-    selected.chromosomes = selected.chromosomes
-  )
-
-  return(plots)
+  return(plot)
 }
 
 
 # analysis ----
 
 
-# read all autosomes for both simulation sizes
+# read chromosomes 1 and 18 for all four simulation sources
 sim.small.ld.chromosomes <- read.ld.chromosomes(
-  SIM.SMALL.DATA.DIR, CHROMOSOMES, "Simulation_small"
+  SIM.SMALL.DATA.DIR, SELECTED.CHROMOSOMES, "Simulation_small"
+)
+simDown.small.ld.chromosomes <- read.ld.chromosomes(
+  SIMDOWN.SMALL.DATA.DIR, SELECTED.CHROMOSOMES,
+  "Simulation_small_simDown"
 )
 sim.large.ld.chromosomes <- read.ld.chromosomes(
-  SIM.LARGE.DATA.DIR, CHROMOSOMES, "Simulation_large"
+  SIM.LARGE.DATA.DIR, SELECTED.CHROMOSOMES, "Simulation_large"
+)
+simDown.large.ld.chromosomes <- read.ld.chromosomes(
+  SIMDOWN.LARGE.DATA.DIR, SELECTED.CHROMOSOMES,
+  "Simulation_large_simDown"
 )
 simulation.ld.chromosomes <- bind_rows(
-  sim.small.ld.chromosomes, sim.large.ld.chromosomes
+  sim.small.ld.chromosomes, simDown.small.ld.chromosomes,
+  sim.large.ld.chromosomes, simDown.large.ld.chromosomes
 )
 
-# reconstruct chromosome and genome simulation curves from pooled values
+# pool every simulation chromosome curve from producer sufficient statistics
 simulation.ld.selected <- simulation.ld.chromosomes %>%
-  filter(chrom %in% SELECTED.CHROMOSOMES) %>%
   pool.ld.curves(include.chromosome = TRUE)
-simulation.ld.genome <- simulation.ld.chromosomes %>%
-  pool.ld.curves(include.chromosome = FALSE)
 
 # read and pool the empirical selected-chromosome and genome curves
 empirical.ld.selected <- read.ld.chromosomes(
@@ -362,11 +348,10 @@ empirical.ld.genome <- read.empirical.ld.genome(
 ) %>%
   pool.ld.curves(include.chromosome = TRUE)
 
-# summarize curves and construct all four retained LD views
+# summarize curves and construct the combined chromosome view
 ld.summary <- bind_rows(
-  simulation.ld.selected, simulation.ld.genome,
-  empirical.ld.selected, empirical.ld.genome
+  simulation.ld.selected, empirical.ld.selected, empirical.ld.genome
 ) %>%
   summarize.ld.curves()
-ld.plots <- make.ld.plots(ld.summary, PLOT.STYLES)
-walk(ld.plots, print)
+ld.plot <- make.ld.plot(ld.summary, PLOT.STYLES)
+print(ld.plot)

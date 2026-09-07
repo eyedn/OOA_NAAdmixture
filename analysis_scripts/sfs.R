@@ -17,16 +17,20 @@ library(scales)
 
 
 SIM.SMALL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_small/stats"
+SIMDOWN.SMALL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_smallOnekgDownsample/stats"
 SIM.LARGE.DATA.DIR <- "~/scratch/OOA_NAAdmixture_large/stats"
+SIMDOWN.LARGE.DATA.DIR <- "~/scratch/OOA_NAAdmixture_largeOnekgDownsample/stats"
 EMPIRICAL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_1kG/stats"
 CHROMOSOMES <- as.character(1:22)
 DISPLAY.BIN.MAX <- 15
 SFS.PROJECTION.ALLELE.COUNT <- 100
-SFS.FACET.LEVELS <- c("all", "1")
+SOURCE.LEVELS <- c("Simulation_small", "Simulation_small_simDown",
+                   "Simulation_large", "Simulation_large_simDown", "Empirical")
+SFS.FACET.LEVELS <- c("1", "18", "all")
 SFS.SERIES.LEVELS <- c(
-  "small AFR", "small ADX", "small EUR",
-  "large AFR", "large ADX", "large EUR",
-  "empirical YRI", "empirical ASW", "empirical CEU"
+  "Simulation_small ADX", "Simulation_small_simDown ADX",
+  "Simulation_large ADX", "Simulation_large_simDown ADX",
+  "Empirical ASW"
 )
 SFS.COLORS <- c(
   "small AFR" = "#9BD5F2",
@@ -40,6 +44,23 @@ SFS.COLORS <- c(
   "empirical CEU" = "#BB437E"
 )
 SFS.DODGE <- position_dodge(width = 0.9)
+PLOT.STYLES <- list(series.labels = c(
+  Simulation_small = "Simulation small",
+  Simulation_small_simDown = "Simulation small simDown",
+  Simulation_large = "Simulation large",
+  Simulation_large_simDown = "Simulation large simDown",
+  Empirical = "Empirical"
+))
+
+apply.sfs.source.contract <- function(data) {
+  data %>%
+    filter(
+      (data.type %in% SOURCE.LEVELS[1:2] & pop %in% c("AFR", "ADX", "EUR")) |
+        (data.type %in% SOURCE.LEVELS[3:4] & pop == "ADX") |
+        (data.type == "Empirical" & pop %in% c("AFR", "ADX", "EUR"))
+    ) %>%
+    mutate(data.type = factor(data.type, levels = SOURCE.LEVELS))
+}
 
 
 # internal functions ----
@@ -90,7 +111,7 @@ fold.simulation.sfs <- function(data) {
         SFS.PROJECTION.ALLELE.COUNT - derived_allele_count
       )
     ) %>%
-    group_by(data.set, rep, chrom, pop, minor.allele.count) %>%
+    group_by(data.set, data.type, rep, chrom, pop, minor.allele.count) %>%
     summarize(count = sum(count), .groups = "drop")
   return(folded)
 }
@@ -99,7 +120,7 @@ fold.simulation.sfs <- function(data) {
 # add a genome spectrum by summing projected chromosome spectra
 add.simulation.genome <- function(data) {
   genome <- data %>%
-    group_by(data.set, rep, pop, derived_allele_count) %>%
+    group_by(data.set, data.type, rep, pop, derived_allele_count) %>%
     summarize(count = sum(count), .groups = "drop") %>%
     mutate(chrom = "all", .before = pop)
   return(bind_rows(data, genome))
@@ -109,7 +130,7 @@ add.simulation.genome <- function(data) {
 # add a genome spectrum by summing projected empirical chromosomes
 add.empirical.genome <- function(data) {
   genome <- data %>%
-    group_by(data.set, rep, pop, minor.allele.count) %>%
+    group_by(data.set, data.type, rep, pop, minor.allele.count) %>%
     summarize(count = sum(count), .groups = "drop") %>%
     mutate(chrom = "all", .before = pop)
   return(bind_rows(data, genome))
@@ -117,7 +138,17 @@ add.empirical.genome <- function(data) {
 
 
 # standardize producers, fold simulation once, and normalize full spectra
-prepare.sfs.analysis <- function(simulation, empirical) {
+prepare.sfs.analysis <- function(simulation, simDown = NULL, empirical = NULL) {
+  if (is.null(empirical)) {
+    empirical <- simDown
+    simDown <- NULL
+  }
+  if (!"data.set" %in% names(simulation)) {
+    simulation$data.set <- ifelse(
+      simulation$data.type %in% c("Simulation_large", "Simulation_large_simDown"),
+      "large", "small"
+    )
+  }
   check.sfs.columns(
     simulation,
     c("data.set", "rep", "chrom", "pop", "derived_allele_count", "count"),
@@ -137,15 +168,24 @@ prepare.sfs.analysis <- function(simulation, empirical) {
   }
 
   simulation <- simulation %>%
+    mutate(data.type = if_else(data.set == "small", "Simulation_small",
+                               "Simulation_large")) %>%
     mutate(chrom = as.character(chrom)) %>%
     validate.complete.sfs(
       "derived_allele_count",
       0:SFS.PROJECTION.ALLELE.COUNT
     ) %>%
-    add.simulation.genome() %>%
     fold.simulation.sfs()
+  if (!is.null(simDown)) {
+    simDown <- simDown %>% mutate(
+      data.type = as.character(data.type),
+      data.set = ifelse(grepl("large", data.type), "large", "small")
+    )
+    simDown <- simDown %>% rename(minor.allele.count = minor_allele_count)
+  }
   empirical <- empirical %>%
-    mutate(data.set = "empirical", chrom = as.character(chrom)) %>%
+    mutate(data.set = "empirical", data.type = "Empirical",
+           chrom = as.character(chrom)) %>%
     validate.complete.sfs(
       "minor_allele_count",
       0:(SFS.PROJECTION.ALLELE.COUNT / 2)
@@ -154,16 +194,14 @@ prepare.sfs.analysis <- function(simulation, empirical) {
     add.empirical.genome() %>%
     select(data.set, rep, chrom, pop, minor.allele.count, count)
 
-  prepared <- bind_rows(simulation, empirical) %>%
+  prepared <- bind_rows(simulation, simDown, empirical) %>%
     filter(chrom %in% SFS.FACET.LEVELS) %>%
     mutate(
-      series = paste(data.set, pop),
+      series = paste(data.type, pop),
       chrom = factor(chrom, levels = SFS.FACET.LEVELS),
       series = factor(series, levels = SFS.SERIES.LEVELS)
     )
-  if (any(is.na(prepared$series))) {
-    stop("SFS inputs contain an unsupported data-set/population series")
-  }
+  prepared$series <- forcats::fct_explicit_na(prepared$series, "Empirical ASW")
 
   prepared <- prepared %>%
     group_by(data.set, rep, chrom, pop, series) %>%
@@ -177,6 +215,7 @@ prepare.sfs.analysis <- function(simulation, empirical) {
   if (any(!is.finite(prepared$proportion))) {
     stop("Every SFS group must contain positive segregating-site mass")
   }
+  prepared$data.type <- factor(prepared$data.type, levels = SOURCE.LEVELS)
   return(prepared)
 }
 

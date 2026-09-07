@@ -9,6 +9,10 @@
 # ______________________________________________________________________________
 
 
+# pattern: Mixed (unavoidable)
+# reason: the required standalone workflow combines table reads and plotting logic
+
+
 # set up ----
 library(tidyverse)
 library(glue)
@@ -16,29 +20,55 @@ library(nanoparquet)
 
 
 SIM.SMALL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_small/stats"
+SIMDOWN.SMALL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_smallOnekgDownsample/stats"
 SIM.LARGE.DATA.DIR <- "~/scratch/OOA_NAAdmixture_large/stats"
+SIMDOWN.LARGE.DATA.DIR <- "~/scratch/OOA_NAAdmixture_largeOnekgDownsample/stats"
 EMPIRICAL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_1kG/stats"
 CHROMOSOMES <- as.character(1:22)
-SELECTED.CHROMOSOMES <- c("1", "5", "10", "14", "18", "22")
+SELECTED.CHROMOSOMES <- c("1", "18")
+SOURCE.LEVELS <- c(
+  "Simulation_small", "Simulation_small_simDown",
+  "Simulation_large", "Simulation_large_simDown", "Empirical"
+)
 PLOT.BASE.SIZE <- 24
 PLOT.STYLES <- list(
   population.colors = c(
-    AFR = "#56B4E9", ADX = "#4B1FA8", EUR = "#fb8072"
+    AFR = "#56B4E9", ADX = "#4B1FA8", EUR = "#fb8072",
+    YRI = "#eec4dc", ASW = "#e44b8d", CEU = "#bb437e"
   ),
   series.shapes = c(
     Simulation_small = 21,
-    Simulation_large = 22,
-    Empirical = 24
+    Simulation_small_simDown = 22,
+    Simulation_large = 23,
+    Simulation_large_simDown = 24,
+    Empirical = 25
   ),
   series.labels = c(
     Simulation_small = "Simulation small",
+    Simulation_small_simDown = "Simulation small simDown",
     Simulation_large = "Simulation large",
+    Simulation_large_simDown = "Simulation large simDown",
     Empirical = "Empirical"
   )
 )
 
 
 # internal functions ----
+
+
+# retain source-specific populations before any replicate summaries
+apply.diversity.source.contract <- function(data) {
+  retained <- data %>%
+    filter(
+      (data.type %in% SOURCE.LEVELS[1:2] & pop %in% c("AFR", "ADX", "EUR")) |
+        (data.type %in% SOURCE.LEVELS[3:4] & pop == "ADX") |
+        (data.type == "Empirical" & pop %in% c("AFR", "ADX", "EUR",
+                                                "YRI", "ASW", "CEU"))
+    ) %>%
+    mutate(data.type = factor(data.type, levels = SOURCE.LEVELS))
+
+  return(retained)
+}
 
 
 # map source population labels to shared population roles
@@ -72,6 +102,7 @@ normalize.diversity.table <- function(
       data.type = data.type.input,
       mask = mask.input
     ) %>%
+    apply.diversity.source.contract() %>%
     add.population.roles()
 
   return(data)
@@ -120,7 +151,7 @@ summarize.simulation.diversity <- function(data) {
   if (!"role" %in% names(data)) data <- add.population.roles(data)
   summary <- data %>%
     filter(stat %in% c("pi", "theta")) %>%
-    group_by(data.type, role, stat, chrom) %>%
+    group_by(data.type, pop, role, stat, chrom, mask) %>%
     summarise(
       mean = mean(value, na.rm = TRUE),
       sd = sd(value, na.rm = TRUE),
@@ -134,10 +165,13 @@ summarize.simulation.diversity <- function(data) {
 
 # duplicate simulation summaries across empirical mask comparisons
 duplicate.simulation.masks <- function(data) {
-  duplicated <- crossing(
-    data,
-    mask = c("Intergenic", "Full callable")
-  )
+  original <- data %>%
+    filter(!str_detect(as.character(data.type), "simDown$")) %>%
+    select(-mask) %>%
+    crossing(mask = c("Intergenic", "Full callable"))
+  simDown <- data %>%
+    filter(str_detect(as.character(data.type), "simDown$"))
+  duplicated <- bind_rows(original, simDown)
 
   return(duplicated)
 }
@@ -161,33 +195,30 @@ build.diversity.plot.data <- function(
     filter(chrom %in% chromosomes) %>%
     duplicate.simulation.masks() %>%
     transmute(
-      data.type, role, stat, chrom, mask,
+      data.type, pop, role, stat, chrom, mask,
       estimate = mean, sd, replicate.count
     )
   empirical.points <- empirical.chromosome %>%
     filter(chrom %in% chromosomes, stat %in% c("pi", "theta")) %>%
     transmute(
-      data.type, role, stat, chrom, mask,
+      data.type, pop, role, stat, chrom, mask,
       estimate = value, sd = NA_real_, replicate.count = 1L
     )
   points <- bind_rows(simulation.points, empirical.points) %>%
     mutate(
       chrom = factor(chrom, levels = chromosomes),
-      role = factor(role, levels = c("AFR", "ADX", "EUR")),
+      pop = factor(pop, levels = c("AFR", "ADX", "EUR", "YRI", "ASW", "CEU")),
       data.type = factor(
-        data.type,
-        levels = c(
-          "Simulation_small", "Simulation_large", "Empirical"
-        )
+        data.type, levels = SOURCE.LEVELS
       ),
       mask = factor(mask, levels = c("Intergenic", "Full callable")),
       stat = factor(stat, levels = c("pi", "theta"))
     )
   genome.lines <- empirical.genome %>%
     filter(chrom == "all", stat %in% c("pi", "theta")) %>%
-    transmute(role, stat, mask, estimate = value) %>%
+    transmute(pop, role, stat, mask, estimate = value) %>%
     mutate(
-      role = factor(role, levels = c("AFR", "ADX", "EUR")),
+      pop = factor(pop, levels = c("AFR", "ADX", "EUR", "YRI", "ASW", "CEU")),
       mask = factor(mask, levels = c("Intergenic", "Full callable")),
       stat = factor(stat, levels = c("pi", "theta"))
     )
@@ -219,13 +250,13 @@ make.diversity.plot <- function(points, genome.lines, styles) {
   plot <- ggplot(
     points,
     aes(
-      x = chrom, y = estimate, color = role, fill = role,
-      shape = data.type, group = interaction(role, data.type)
+      x = chrom, y = estimate, color = pop, fill = pop,
+      shape = data.type, group = interaction(pop, data.type)
     )
   ) +
     geom_hline(
       data = genome.lines,
-      aes(yintercept = estimate, color = role),
+      aes(yintercept = estimate, color = pop),
       linetype = "dotted", linewidth = 0.9
     ) +
     geom_errorbar(
@@ -289,9 +320,29 @@ sim.small.diversity <- read.diversity.chromosomes(
   SIM.SMALL.DATA.DIR, "pi_theta_stats.chr{chrom}.parquet",
   SELECTED.CHROMOSOMES, "Simulation_small"
 )
+simDown.small.intergenic.diversity <- read.diversity.chromosomes(
+  SIMDOWN.SMALL.DATA.DIR,
+  "pi_theta_stats_intergenic.chr{chrom}.parquet",
+  SELECTED.CHROMOSOMES, "Simulation_small_simDown", "Intergenic"
+)
+simDown.small.full.callable.diversity <- read.diversity.chromosomes(
+  SIMDOWN.SMALL.DATA.DIR,
+  "pi_theta_stats_full_callable_chrom.chr{chrom}.parquet",
+  SELECTED.CHROMOSOMES, "Simulation_small_simDown", "Full callable"
+)
 sim.large.diversity <- read.diversity.chromosomes(
   SIM.LARGE.DATA.DIR, "pi_theta_stats.chr{chrom}.parquet",
   SELECTED.CHROMOSOMES, "Simulation_large"
+)
+simDown.large.intergenic.diversity <- read.diversity.chromosomes(
+  SIMDOWN.LARGE.DATA.DIR,
+  "pi_theta_stats_intergenic.chr{chrom}.parquet",
+  SELECTED.CHROMOSOMES, "Simulation_large_simDown", "Intergenic"
+)
+simDown.large.full.callable.diversity <- read.diversity.chromosomes(
+  SIMDOWN.LARGE.DATA.DIR,
+  "pi_theta_stats_full_callable_chrom.chr{chrom}.parquet",
+  SELECTED.CHROMOSOMES, "Simulation_large_simDown", "Full callable"
 )
 
 # read selected-chromosome empirical diversity estimates
@@ -318,7 +369,12 @@ emp.full.callable.genome <- read.diversity.genome(
 
 # summarize sources and construct the primary diversity plot
 simulation.diversity.summary <- bind_rows(
-  sim.small.diversity, sim.large.diversity
+  sim.small.diversity,
+  simDown.small.intergenic.diversity,
+  simDown.small.full.callable.diversity,
+  sim.large.diversity,
+  simDown.large.intergenic.diversity,
+  simDown.large.full.callable.diversity
 ) %>%
   summarize.simulation.diversity()
 diversity.plot.data <- build.diversity.plot.data(

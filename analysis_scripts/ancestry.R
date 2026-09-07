@@ -15,7 +15,9 @@ library(nanoparquet)
 
 
 SIM.SMALL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_small/stats"
+SIMDOWN.SMALL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_smallOnekgDownsample/stats"
 SIM.LARGE.DATA.DIR <- "~/scratch/OOA_NAAdmixture_large/stats"
+SIMDOWN.LARGE.DATA.DIR <- "~/scratch/OOA_NAAdmixture_largeOnekgDownsample/stats"
 EMPIRICAL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_1kG/stats"
 CHROMOSOME.LENGTHS.PATH <- paste0(
   "~/proj/1000GenomeNYGC_hg38_karatas/", "ONEKG_chr_lens.tsv"
@@ -26,6 +28,10 @@ SIMULATION.K <- 2
 EMPIRICAL.K <- 2
 RANDOM.SEED <- 123
 DOWNSAMPLE.SIZE <- 50
+SOURCE.LEVELS <- c(
+  "Simulation_small", "Simulation_small_simDown",
+  "Simulation_large", "Simulation_large_simDown", "Empirical"
+)
 BOOTSTRAP.REPLICATES <- 1000
 HISTOGRAM.BREAKS <- seq(0, 1, by = 0.05)
 ADMIXED.ROLES <- c("ADX", "ASW")
@@ -45,11 +51,18 @@ PLOT.STYLES <- list(
     Empirical.full = "#B83264"
   ),
   labels = c(
-    Simulation_small.full = "Simulation small",
-    Simulation_small.downsampled = "Downsampled small",
-    Simulation_large.full = "Simulation large",
-    Simulation_large.downsampled = "Downsampled large",
-    Empirical.full = "Empirical"
+    Simulation_small = "Simulation small",
+    Simulation_small_simDown = "Simulation small simDown",
+    Simulation_large = "Simulation large",
+    Simulation_large_simDown = "Simulation large simDown",
+    Empirical = "Empirical"
+  ),
+  series.labels = c(
+    Simulation_small = "Simulation small",
+    Simulation_small_simDown = "Simulation small simDown",
+    Simulation_large = "Simulation large",
+    Simulation_large_simDown = "Simulation large simDown",
+    Empirical = "Empirical"
   ),
   shapes = c(full = 21, downsampled = 24),
   linetypes = c(full = "solid", downsampled = "dashed"),
@@ -61,6 +74,18 @@ PLOT.STYLES <- list(
     ADMIXTURE = "#B83264", fastStructure = "#B9584A"
   )
 )
+
+
+# retain only ADX for simulations and ASW for empirical ancestry plots
+apply.ancestry.source.contract <- function(data) {
+  retained <- data %>%
+    filter(
+      (data.type %in% SOURCE.LEVELS[1:4] & pop == "ADX") |
+        (data.type == "Empirical" & pop == "ASW")
+    ) %>%
+    mutate(data.type = factor(data.type, levels = SOURCE.LEVELS))
+  return(retained)
+}
 
 
 # internal functions ----

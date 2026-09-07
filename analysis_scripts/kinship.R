@@ -9,6 +9,10 @@
 # ______________________________________________________________________________
 
 
+# pattern: Mixed (unavoidable)
+# reason: the required standalone workflow combines table reads and plotting logic
+
+
 # set up ----
 library(tidyverse)
 library(glue)
@@ -16,28 +20,49 @@ library(nanoparquet)
 
 
 SIM.SMALL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_small/stats"
+SIMDOWN.SMALL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_smallOnekgDownsample/stats"
 SIM.LARGE.DATA.DIR <- "~/scratch/OOA_NAAdmixture_large/stats"
+SIMDOWN.LARGE.DATA.DIR <- "~/scratch/OOA_NAAdmixture_largeOnekgDownsample/stats"
 EMPIRICAL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_1kG/stats"
 CHROMOSOMES <- as.character(1:22)
 SELECTED.CHROMOSOMES <- c("1", "18")
-DOWNSAMPLE.SIZE <- 50
-RANDOM.SEED <- 123
+SOURCE.LEVELS <- c(
+  "Simulation_small", "Simulation_small_simDown",
+  "Simulation_large", "Simulation_large_simDown", "Empirical"
+)
 KINSHIP.BIN.WIDTH <- 0.01
-PLOT.SAMPLE.SET <- "downsampled"
 PLOT.BASE.SIZE <- 24
 PLOT.STYLES <- list(
   population.colors = c(
-    AFR = "#56B4E9", ADX = "#4B1FA8", EUR = "#fb8072"
+    AFR = "#56B4E9", ADX = "#4B1FA8", EUR = "#fb8072",
+    YRI = "#eec4dc", ASW = "#e44b8d", CEU = "#bb437e"
   ),
   series.labels = c(
     Simulation_small = "Simulation small",
+    Simulation_small_simDown = "Simulation small simDown",
     Simulation_large = "Simulation large",
+    Simulation_large_simDown = "Simulation large simDown",
     Empirical = "Empirical"
   )
 )
 
 
 # internal functions ----
+
+
+# retain source-specific populations before any histogram calculations
+apply.kinship.source.contract <- function(data) {
+  retained <- data %>%
+    filter(
+      (data.type %in% SOURCE.LEVELS[1:2] & pop %in% c("AFR", "ADX", "EUR")) |
+        (data.type %in% SOURCE.LEVELS[3:4] & pop == "ADX") |
+        (data.type == "Empirical" & pop %in% c("AFR", "ADX", "EUR",
+                                                "YRI", "ASW", "CEU"))
+    ) %>%
+    mutate(data.type = factor(data.type, levels = SOURCE.LEVELS))
+
+  return(retained)
+}
 
 
 # map source population labels to shared population roles
@@ -79,6 +104,7 @@ normalize.kinship.table <- function(data, data.type.input) {
     select(
       rep, chrom, pop, endpoint.1, endpoint.2, kinship, data.type
     ) %>%
+    apply.kinship.source.contract() %>%
     add.population.roles()
 
   return(data)
@@ -217,7 +243,7 @@ make.kinship.breaks <- function(data, bin.width) {
 # calculate source-normalized histogram fractions for every analysis group
 build.kinship.histograms <- function(data, breaks) {
   histograms <- data %>%
-    group_by(data.type, rep, role, chrom, sample.set) %>%
+    group_by(data.type, rep, pop, role, chrom) %>%
     group_modify(function(group, key) {
       histogram <- hist(
         group$kinship, breaks = breaks, plot = FALSE,
@@ -244,7 +270,7 @@ summarize.kinship.histograms <- function(data) {
   simulation <- data %>%
     filter(data.type != "Empirical") %>%
     group_by(
-      data.type, role, chrom, sample.set, xmin, xmax, xmid
+      data.type, pop, role, chrom, xmin, xmax, xmid
     ) %>%
     summarise(
       mean.fraction = mean(fraction),
@@ -257,7 +283,7 @@ summarize.kinship.histograms <- function(data) {
   empirical <- data %>%
     filter(data.type == "Empirical") %>%
     transmute(
-      data.type, role, chrom, sample.set, xmin, xmax, xmid,
+      data.type, pop, role, chrom, xmin, xmax, xmid,
       mean.fraction = fraction,
       sample.size.min = sample.size,
       sample.size.max = sample.size
@@ -266,15 +292,13 @@ summarize.kinship.histograms <- function(data) {
     mutate(sd.fraction = NA_real_, replicate.count = 1L)
   summary <- bind_rows(simulation, empirical) %>%
     mutate(
-      role = factor(role, levels = c("AFR", "ADX", "EUR")),
+      pop = factor(pop, levels = c("AFR", "ADX", "EUR", "YRI", "ASW", "CEU")),
       chrom = factor(
         chrom, levels = c(SELECTED.CHROMOSOMES, "all")
       ),
       data.type = factor(
         data.type,
-        levels = c(
-          "Simulation_small", "Simulation_large", "Empirical"
-        )
+        levels = SOURCE.LEVELS
       )
     )
 
@@ -283,12 +307,8 @@ summarize.kinship.histograms <- function(data) {
 
 
 # construct the pairwise kinship distribution plot
-make.kinship.plot <- function(data, plot.sample.set, breaks, styles) {
-  plot.data <- data %>%
-    filter(
-      data.type == "Empirical" |
-        (data.type != "Empirical" & sample.set == plot.sample.set)
-    )
+make.kinship.plot <- function(data, breaks, styles) {
+  plot.data <- data
   simulation <- plot.data %>%
     filter(data.type != "Empirical")
   replicate.count <- max(simulation$replicate.count)
@@ -306,9 +326,9 @@ make.kinship.plot <- function(data, plot.sample.set, breaks, styles) {
     unique() %>%
     glue_collapse(sep = ", ")
   subtitle <- glue(
-    "KING estimator · Simulations: {plot.sample.set} ",
-    "({sample.description} per size × replicate × chromosome × ",
-    "population) · Empirical: full sample · Simulation replicates: ",
+    "KING unrelated estimates · All available unrelated individuals ",
+    "({sample.description} per source × replicate × chromosome × ",
+    "population) · Simulation replicates: ",
     "{replicate.count} · Scope: chromosomes {chromosome.scope} plus ",
     "empirical genome-wide"
   )
@@ -316,8 +336,8 @@ make.kinship.plot <- function(data, plot.sample.set, breaks, styles) {
   plot <- ggplot(
     plot.data,
     aes(
-      x = xmid, y = mean.fraction, fill = role,
-      group = role
+      x = xmid, y = mean.fraction, fill = pop,
+      group = pop
     )
   ) +
     geom_col(
@@ -334,7 +354,7 @@ make.kinship.plot <- function(data, plot.sample.set, breaks, styles) {
       color = "black", na.rm = TRUE
     ) +
     facet_grid(
-      chrom ~ data.type, drop = FALSE, scales = "free_y",
+      data.type ~ chrom, drop = FALSE, scales = "free_y",
       labeller = labeller(
         data.type = as_labeller(styles$series.labels)
       )
@@ -370,8 +390,16 @@ make.kinship.plot <- function(data, plot.sample.set, breaks, styles) {
 sim.small.kinship <- read.kinship.chromosomes(
   SIM.SMALL.DATA.DIR, SELECTED.CHROMOSOMES, "Simulation_small"
 )
+simDown.small.kinship <- read.kinship.chromosomes(
+  SIMDOWN.SMALL.DATA.DIR, SELECTED.CHROMOSOMES,
+  "Simulation_small_simDown"
+)
 sim.large.kinship <- read.kinship.chromosomes(
   SIM.LARGE.DATA.DIR, SELECTED.CHROMOSOMES, "Simulation_large"
+)
+simDown.large.kinship <- read.kinship.chromosomes(
+  SIMDOWN.LARGE.DATA.DIR, SELECTED.CHROMOSOMES,
+  "Simulation_large_simDown"
 )
 emp.chromosome.kinship <- read.kinship.chromosomes(
   EMPIRICAL.DATA.DIR, SELECTED.CHROMOSOMES, "Empirical"
@@ -380,20 +408,14 @@ emp.genome.kinship <- read.empirical.kinship.genome(
   EMPIRICAL.DATA.DIR
 )
 
-# build full and fixed-size downsampled simulation pair sets
+# combine all unrelated simulation and empirical pairs
 simulation.kinship <- bind_rows(
-  sim.small.kinship, sim.large.kinship
-)
-selected.kinship.ids <- select.kinship.ids(
-  simulation.kinship, DOWNSAMPLE.SIZE, RANDOM.SEED
-)
-simulation.kinship <- apply.kinship.selection(
-  simulation.kinship, selected.kinship.ids
+  sim.small.kinship, simDown.small.kinship,
+  sim.large.kinship, simDown.large.kinship
 )
 empirical.kinship <- bind_rows(
   emp.chromosome.kinship, emp.genome.kinship
-) %>%
-  mutate(sample.set = "full")
+)
 
 # summarize common-bin histograms and construct the primary plot
 kinship.data <- bind_rows(simulation.kinship, empirical.kinship)
@@ -407,6 +429,6 @@ kinship.summary <- summarize.kinship.histograms(
   kinship.histograms
 )
 kinship.plot <- make.kinship.plot(
-  kinship.summary, PLOT.SAMPLE.SET, kinship.breaks, PLOT.STYLES
+  kinship.summary, kinship.breaks, PLOT.STYLES
 )
 print(kinship.plot)
