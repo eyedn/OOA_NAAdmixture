@@ -8,8 +8,6 @@
 # sfs.R
 # ______________________________________________________________________________
 
-# pattern: Mixed (unavoidable)
-# Reason: This script combines transformations with local plot rendering.
 
 # set up ----
 library(tidyverse)
@@ -24,14 +22,14 @@ SIM.LARGE.DATA.DIR <- "~/scratch/OOA_NAAdmixture_large/stats"
 SIMDOWN.LARGE.DATA.DIR <- "~/scratch/OOA_NAAdmixture_largeOnekgDownsample/stats"
 EMPIRICAL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_1kG/stats"
 # CHROMOSOMES <- as.character(1:22)
-CHROMOSOMES <- c("1", "18")
+CHROMOSOMES <- c("1")
 DISPLAY.BIN.MAX <- 15
 SFS.PROJECTION.ALLELE.COUNT <- 100
 SOURCE.LEVELS <- c(
   "Simulation_small", "Simulation_large", "Simulation_small_simDown",
   "Simulation_large_simDown", "Empirical"
 )
-SFS.FACET.LEVELS <- c("1", "18", "all")
+SFS.FACET.LEVELS <- c("1", "all")
 SFS.SERIES.LEVELS <- c(
   "small AFR", "small ADX", "small EUR",
   "large ADX", "small simDown AFR", "small simDown ADX",
@@ -485,7 +483,7 @@ sfs.simulated.proportion.plot <- make.sfs.plot(
   FALSE, "simulated"
 )
 
-print(sfs.small.empirical.count.plot)
-print(sfs.simulated.count.plot)
+# print(sfs.small.empirical.count.plot)
+# print(sfs.simulated.count.plot)
 print(sfs.small.empirical.proportion.plot)
 print(sfs.simulated.proportion.plot)

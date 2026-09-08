@@ -8,8 +8,6 @@
 # kinship.R
 # ______________________________________________________________________________
 
-# pattern: Mixed (unavoidable)
-# Reason: This script combines transformations with local plot rendering.
 
 # set up ----
 library(tidyverse)
@@ -23,7 +21,7 @@ SIM.LARGE.DATA.DIR <- "~/scratch/OOA_NAAdmixture_large/stats"
 SIMDOWN.LARGE.DATA.DIR <- "~/scratch/OOA_NAAdmixture_largeOnekgDownsample/stats"
 EMPIRICAL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_1kG/stats"
 CHROMOSOMES <- as.character(1:22)
-SELECTED.CHROMOSOMES <- c("1", "18")
+SELECTED.CHROMOSOMES <- c("1")
 SOURCE.LEVELS <- c(
   "Simulation_small", "Simulation_large", "Simulation_small_simDown",
   "Simulation_large_simDown", "Empirical"
