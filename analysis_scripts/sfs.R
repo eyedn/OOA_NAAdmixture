@@ -8,6 +8,8 @@
 # sfs.R
 # ______________________________________________________________________________
 
+# pattern: Mixed (unavoidable)
+# Reason: This script combines transformations with local plot rendering.
 
 # set up ----
 library(tidyverse)
@@ -26,14 +28,14 @@ CHROMOSOMES <- c("1", "18")
 DISPLAY.BIN.MAX <- 15
 SFS.PROJECTION.ALLELE.COUNT <- 100
 SOURCE.LEVELS <- c(
-  "Simulation_small", "Simulation_small_simDown",
-  "Simulation_large", "Simulation_large_simDown", "Empirical"
+  "Simulation_small", "Simulation_large", "Simulation_small_simDown",
+  "Simulation_large_simDown", "Empirical"
 )
 SFS.FACET.LEVELS <- c("1", "18", "all")
 SFS.SERIES.LEVELS <- c(
   "small AFR", "small ADX", "small EUR",
-  "small simDown AFR", "small simDown ADX", "small simDown EUR", 
-  "large ADX", "large simDown ADX",
+  "large ADX", "small simDown AFR", "small simDown ADX",
+  "small simDown EUR", "large simDown ADX",
   "empirical YRI", "empirical ASW", "empirical CEU"
 )
 SFS.COLORS <- c(
@@ -88,8 +90,12 @@ sfs.plot.subtitle <- function() {
 apply.sfs.source.contract <- function(data) {
   retained <- data %>%
     filter(
-      (data.type %in% SOURCE.LEVELS[1:2] & pop %in% c("AFR", "ADX", "EUR")) |
-        (data.type %in% SOURCE.LEVELS[3:4] & pop == "ADX") |
+      (data.type %in% c(
+        "Simulation_small", "Simulation_small_simDown"
+      ) & pop %in% c("AFR", "ADX", "EUR")) |
+        (data.type %in% c(
+          "Simulation_large", "Simulation_large_simDown"
+        ) & pop == "ADX") |
         (data.type == "Empirical" & pop %in% c("YRI", "ASW", "CEU"))
     ) %>%
     mutate(data.type = factor(data.type, levels = SOURCE.LEVELS))
@@ -294,7 +300,7 @@ prepare.sfs.analysis <- function(simulation, simDown = NULL, empirical = NULL) {
 # summarize simulation replicates and retain empirical NA intervals
 summarize.one.sfs.value <- function(data, value.column) {
   summary <- data %>%
-    group_by(data.set, chrom, series, minor.allele.count) %>%
+    group_by(data.set, data.type, chrom, series, minor.allele.count) %>%
     summarize(
       mean = mean(.data[[value.column]]),
       sd = if_else(
@@ -325,8 +331,29 @@ summarize.sfs.analysis <- function(data) {
 
 
 # build one shared dodged-bar SFS plot
-make.sfs.plot <- function(data, value.column, y.label, pseudo.log) {
-  displayed <- data %>%
+filter.plot.view <- function(data, view) {
+  sources <- switch(
+    view,
+    small_empirical = c(
+      "Simulation_small", "Simulation_small_simDown", "Empirical"
+    ),
+    simulated = c(
+      "Simulation_small", "Simulation_large", "Simulation_small_simDown",
+      "Simulation_large_simDown"
+    ),
+    stop("Unsupported SFS plot view: ", view)
+  )
+  filtered <- data %>%
+    filter(as.character(data.type) %in% sources) %>%
+    mutate(data.type = factor(as.character(data.type), levels = sources)) %>%
+    arrange(data.type)
+  return(filtered)
+}
+
+
+# build one scoped shared dodged-bar SFS plot
+make.sfs.plot <- function(data, value.column, y.label, pseudo.log, view) {
+  displayed <- filter.plot.view(data, view) %>%
     filter(minor.allele.count <= DISPLAY.BIN.MAX)
   plot <- ggplot(
     displayed,
@@ -430,18 +457,32 @@ sfs.data <- prepare.sfs.analysis(
 )
 sfs.summaries <- summarize.sfs.analysis(sfs.data)
 
-sfs.count.plot <- make.sfs.plot(
+sfs.small.empirical.count.plot <- make.sfs.plot(
   sfs.summaries$count,
   "mean",
   "Projected site count",
-  TRUE
+  TRUE, "small_empirical"
 )
-sfs.proportion.plot <- make.sfs.plot(
+sfs.simulated.count.plot <- make.sfs.plot(
+  sfs.summaries$count,
+  "mean",
+  "Projected site count",
+  TRUE, "simulated"
+)
+sfs.small.empirical.proportion.plot <- make.sfs.plot(
   sfs.summaries$proportion,
   "mean",
   "Proportion of segregating sites",
-  FALSE
+  FALSE, "small_empirical"
+)
+sfs.simulated.proportion.plot <- make.sfs.plot(
+  sfs.summaries$proportion,
+  "mean",
+  "Proportion of segregating sites",
+  FALSE, "simulated"
 )
 
-print(sfs.count.plot)
-print(sfs.proportion.plot)
+print(sfs.small.empirical.count.plot)
+print(sfs.simulated.count.plot)
+print(sfs.small.empirical.proportion.plot)
+print(sfs.simulated.proportion.plot)

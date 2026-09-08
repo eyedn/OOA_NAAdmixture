@@ -8,6 +8,8 @@
 # ld_decay.R
 # ______________________________________________________________________________
 
+# pattern: Mixed (unavoidable)
+# Reason: This script combines transformations with local plot rendering.
 
 # set up ----
 library(tidyverse)
@@ -23,8 +25,8 @@ EMPIRICAL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_1kG/stats"
 CHROMOSOMES <- as.character(1:22)
 PLOT.CHROMOSOME <- "1"
 SOURCE.LEVELS <- c(
-  "Simulation_small", "Simulation_small_simDown",
-  "Simulation_large", "Simulation_large_simDown", "Empirical"
+  "Simulation_small", "Simulation_large", "Simulation_small_simDown",
+  "Simulation_large_simDown", "Empirical"
 )
 LD.X.LOWER <- 0
 LD.X.UPPER <- 250000
@@ -35,6 +37,11 @@ PLOT.STYLES <- list(
     AFR = "#56B4E9", ADX = "#4B1FA8", EUR = "#fb8072",
     YRI = "#eec4dc", ASW = "#e44b8d", CEU = "#bb437e"
   ),
+  source.colors = c(
+    Simulation_small = "#9A83CE", Simulation_large = "#32146F",
+    Simulation_small_simDown = "#6F55B5",
+    Simulation_large_simDown = "#4B1FA8"
+  ),
   series.linetypes = c(
     Simulation_small = "dashed",
     Simulation_small_simDown = "longdash",
@@ -44,8 +51,8 @@ PLOT.STYLES <- list(
   ),
   series.labels = c(
     Simulation_small = "Sm. Sim.",
-    Simulation_small_simDown = "Sm. D. Sim.",
     Simulation_large = "Lg. Sim.",
+    Simulation_small_simDown = "Sm. D. Sim.",
     Simulation_large_simDown = "Lg. D. Sim.",
     Empirical = "Emp."
   )
@@ -69,8 +76,12 @@ ld.plot.subtitle <- function(chromosome) {
 apply.ld.source.contract <- function(data) {
   retained <- data %>%
     filter(
-      (data.type %in% SOURCE.LEVELS[1:2] & pop %in% c("AFR", "ADX", "EUR")) |
-        (data.type %in% SOURCE.LEVELS[3:4] & pop == "ADX") |
+      (data.type %in% c(
+        "Simulation_small", "Simulation_small_simDown"
+      ) & pop %in% c("AFR", "ADX", "EUR")) |
+        (data.type %in% c(
+          "Simulation_large", "Simulation_large_simDown"
+        ) & pop == "ADX") |
         (data.type == "Empirical" & pop %in% c("AFR", "ADX", "EUR",
                                                 "YRI", "ASW", "CEU"))
     ) %>%
@@ -217,10 +228,18 @@ summarize.ld.curves <- function(data) {
 
 
 # add shared scales, labels, guides, and theme to one LD plot
-style.ld.plot <- function(plot, title, subtitle, styles) {
+style.ld.plot <- function(plot, title, subtitle, styles, view) {
   plot <- plot +
-    scale_color_manual(values = styles$population.colors) +
-    scale_fill_manual(values = styles$population.colors) +
+    scale_color_manual(values = if (view == "simulated") {
+      styles$source.colors
+    } else {
+      styles$population.colors
+    }) +
+    scale_fill_manual(values = if (view == "simulated") {
+      styles$source.colors
+    } else {
+      styles$population.colors
+    }) +
     scale_linetype_manual(
       values = styles$series.linetypes,
       labels = styles$series.labels
@@ -286,7 +305,28 @@ add.ld.geometries <- function(plot, data) {
 
 
 # construct the source-group view for exactly one chromosome
-make.ld.plot <- function(data, chromosome, styles) {
+filter.plot.view <- function(data, view) {
+  sources <- switch(
+    view,
+    small_empirical = c(
+      "Simulation_small", "Simulation_small_simDown", "Empirical"
+    ),
+    simulated = c(
+      "Simulation_small", "Simulation_large", "Simulation_small_simDown",
+      "Simulation_large_simDown"
+    ),
+    stop("Unsupported LD plot view: ", view)
+  )
+  filtered <- data %>%
+    filter(as.character(data.type) %in% sources) %>%
+    mutate(data.type = factor(as.character(data.type), levels = sources)) %>%
+    arrange(data.type)
+  return(filtered)
+}
+
+
+# construct one scoped LD view for exactly one chromosome
+make.ld.plot <- function(data, chromosome, styles, view) {
   if (length(chromosome) != 1L) {
     stop("LD plotting requires exactly one chromosome")
   }
@@ -294,22 +334,13 @@ make.ld.plot <- function(data, chromosome, styles) {
   if (!chromosome %in% CHROMOSOMES) {
     stop("LD plotting requires exactly one autosomal chromosome")
   }
-  plot.data <- data %>%
+  plot.data <- filter.plot.view(data, view) %>%
     filter(as.character(chrom) == chromosome) %>%
-    mutate(
-      source.group = case_when(
-        data.type %in% c(
-          "Simulation_small", "Simulation_large"
-        ) ~ "Sim.",
-        data.type %in% c(
-          "Simulation_small_simDown", "Simulation_large_simDown"
-        ) ~ "D. Sim.",
-        data.type == "Empirical" ~ "Emp."
-      ),
-      source.group = factor(
-        source.group, levels = c("Sim.", "D. Sim.", "Emp.")
-      )
-    )
+    mutate(plot.key = if (view == "simulated") {
+      as.character(data.type)
+    } else {
+      as.character(pop)
+    })
   if (!nrow(plot.data)) {
     stop("LD data do not contain the selected chromosome")
   }
@@ -317,14 +348,18 @@ make.ld.plot <- function(data, chromosome, styles) {
     plot.data,
     aes(
       x = distance_bin_bp, y = mean,
-      color = pop, fill = pop
+      color = plot.key, fill = plot.key
     )
   )
   plot <- add.ld.geometries(plot, plot.data) +
-    facet_wrap(~source.group, nrow = 1, drop = FALSE)
+    facet_wrap(~data.type, nrow = 1, drop = FALSE,
+               labeller = labeller(data.type = styles$series.labels))
   plot <- style.ld.plot(
-    plot, "LD Decay by Source Group",
-    ld.plot.subtitle(chromosome), styles
+    plot, if (view == "simulated") {
+      "LD Decay: Simulated ADX"
+    } else {
+      "LD Decay: Small Simulation and Empirical"
+    }, ld.plot.subtitle(chromosome), styles, view
   )
 
   return(plot)
@@ -369,5 +404,11 @@ ld.summary <- bind_rows(
   simulation.ld.selected, empirical.ld.selected
 ) %>%
   summarize.ld.curves()
-ld.plot <- make.ld.plot(ld.summary, PLOT.CHROMOSOME, PLOT.STYLES)
-print(ld.plot)
+ld.small.empirical.plot <- make.ld.plot(
+  ld.summary, PLOT.CHROMOSOME, PLOT.STYLES, "small_empirical"
+)
+ld.simulated.plot <- make.ld.plot(
+  ld.summary, PLOT.CHROMOSOME, PLOT.STYLES, "simulated"
+)
+print(ld.small.empirical.plot)
+print(ld.simulated.plot)

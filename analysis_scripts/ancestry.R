@@ -8,6 +8,8 @@
 # ancestry.R
 # ______________________________________________________________________________
 
+# pattern: Mixed (unavoidable)
+# Reason: This script combines transformations with local plot rendering.
 
 # set up ----
 library(tidyverse)
@@ -28,8 +30,8 @@ EMPIRICAL.K <- 2
 RANDOM.SEED <- 123
 DOWNSAMPLE.SIZE <- 50
 SOURCE.LEVELS <- c(
-  "Simulation_small", "Simulation_small_simDown",
-  "Simulation_large", "Simulation_large_simDown", "Empirical"
+  "Simulation_small", "Simulation_large", "Simulation_small_simDown",
+  "Simulation_large_simDown", "Empirical"
 )
 BOOTSTRAP.REPLICATES <- 1000
 HISTOGRAM.BREAKS <- seq(0, 1, by = 0.05)
@@ -42,23 +44,23 @@ ANCESTRY.COMPONENT.COLORS <- c(
 )
 PLOT.STYLES <- list(
   colors = c(
-    Simulation_small = "#00AEDB",
-    Simulation_small_simDown = "#75D5F0",
-    Simulation_large = "#007E9F",
-    Simulation_large_simDown = "#6BAFC1",
+    Simulation_small = "#9A83CE",
+    Simulation_large = "#32146F",
+    Simulation_small_simDown = "#6F55B5",
+    Simulation_large_simDown = "#4B1FA8",
     Empirical = "#B83264"
   ),
   labels = c(
     Simulation_small = "Sm. Sim.",
-    Simulation_small_simDown = "Sm. D. Sim.",
     Simulation_large = "Lg. Sim.",
+    Simulation_small_simDown = "Sm. D. Sim.",
     Simulation_large_simDown = "Lg. D. Sim.",
     Empirical = "Emp."
   ),
   series.labels = c(
     Simulation_small = "Sm. Sim.",
-    Simulation_small_simDown = "Sm. D. Sim.",
     Simulation_large = "Lg. Sim.",
+    Simulation_small_simDown = "Sm. D. Sim.",
     Simulation_large_simDown = "Lg. D. Sim.",
     Empirical = "Emp."
   ),
@@ -103,7 +105,10 @@ ancestry.plot.subtitle <- function(empirical.method) {
 apply.ancestry.source.contract <- function(data) {
   retained <- data %>%
     filter(
-      (data.type %in% SOURCE.LEVELS[1:4] & pop == "ADX") |
+      (data.type %in% c(
+        "Simulation_small", "Simulation_large",
+        "Simulation_small_simDown", "Simulation_large_simDown"
+      ) & pop == "ADX") |
         (data.type == "Empirical" & pop == "ASW")
     ) %>%
     mutate(data.type = factor(data.type, levels = SOURCE.LEVELS))
@@ -248,7 +253,7 @@ select.downsample.ids <- function(
     filter(data.type != "Empirical") %>%
     distinct(across(all_of(setdiff(grouping.columns, "data.type"))))
   expected.groups <- crossing(
-    tibble(data.type = SOURCE.LEVELS[1:4]), group.values
+    tibble(data.type = setdiff(SOURCE.LEVELS, "Empirical")), group.values
   ) %>%
     select(all_of(grouping.columns))
   sizes <- candidates %>%

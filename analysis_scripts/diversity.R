@@ -8,6 +8,8 @@
 # diversity.R
 # ______________________________________________________________________________
 
+# pattern: Mixed (unavoidable)
+# Reason: This script combines transformations with local plot rendering.
 
 # set up ----
 library(tidyverse)
@@ -22,8 +24,8 @@ EMPIRICAL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_1kG/stats"
 CHROMOSOMES <- as.character(1:22)
 SELECTED.CHROMOSOMES <- c("1", "18")
 SOURCE.LEVELS <- c(
-  "Simulation_small", "Simulation_small_simDown",
-  "Simulation_large", "Simulation_large_simDown", "Empirical"
+  "Simulation_small", "Simulation_large", "Simulation_small_simDown",
+  "Simulation_large_simDown", "Empirical"
 )
 PLOT.BASE.SIZE <- 24
 PLOT.STYLES <- list(
@@ -31,19 +33,18 @@ PLOT.STYLES <- list(
     AFR = "#56B4E9", ADX = "#4B1FA8", EUR = "#fb8072",
     YRI = "#eec4dc", ASW = "#e44b8d", CEU = "#bb437e"
   ),
-  series.shapes = c(
-    Simulation_small = 21,
-    Simulation_small_simDown = 22,
-    Simulation_large = 23,
-    Simulation_large_simDown = 24,
-    Empirical = 25
+  fill.colors = c(
+    "small AFR" = "#9BD5F2", "small ADX" = "#9A83CE",
+    "small EUR" = "#FBB4AE", "large ADX" = "#32146F",
+    "small simDown AFR" = "#56B4E9",
+    "small simDown ADX" = "#6F55B5",
+    "small simDown EUR" = "#FB8072",
+    "large simDown ADX" = "#4B1FA8",
+    "empirical YRI" = "#EEC4DC", "empirical ASW" = "#E44B8D",
+    "empirical CEU" = "#BB437E"
   ),
-  series.labels = c(
-    Simulation_small = "Sm. Sim.",
-    Simulation_small_simDown = "Sm. D. Sim.",
-    Simulation_large = "Lg. Sim.",
-    Simulation_large_simDown = "Lg. D. Sim.",
-    Empirical = "Emp."
+  empirical.colors = c(
+    YRI = "#EEC4DC", ASW = "#E44B8D", CEU = "#BB437E"
   )
 )
 
@@ -65,8 +66,12 @@ diversity.plot.subtitle <- function(chromosomes) {
 apply.diversity.source.contract <- function(data) {
   retained <- data %>%
     filter(
-      (data.type %in% SOURCE.LEVELS[1:2] & pop %in% c("AFR", "ADX", "EUR")) |
-        (data.type %in% SOURCE.LEVELS[3:4] & pop == "ADX") |
+      (data.type %in% c(
+        "Simulation_small", "Simulation_small_simDown"
+      ) & pop %in% c("AFR", "ADX", "EUR")) |
+        (data.type %in% c(
+          "Simulation_large", "Simulation_large_simDown"
+        ) & pop == "ADX") |
         (data.type == "Empirical" & pop %in% c("AFR", "ADX", "EUR",
                                                 "YRI", "ASW", "CEU"))
     ) %>%
@@ -217,7 +222,15 @@ build.diversity.plot.data <- function(
         data.type, levels = SOURCE.LEVELS
       ),
       mask = factor(mask, levels = c("Intergenic", "Full callable")),
-      stat = factor(stat, levels = c("pi", "theta"))
+      stat = factor(stat, levels = c("pi", "theta")),
+      fill.key = factor(case_when(
+        data.type == "Simulation_small" ~ paste("small", pop),
+        data.type == "Simulation_large" ~ "large ADX",
+        data.type == "Simulation_small_simDown" ~
+          paste("small simDown", pop),
+        data.type == "Simulation_large_simDown" ~ "large simDown ADX",
+        data.type == "Empirical" ~ paste("empirical", pop)
+      ), levels = names(PLOT.STYLES$fill.colors))
     )
   genome.lines <- empirical.genome %>%
     filter(chrom == "all", stat %in% c("pi", "theta")) %>%
@@ -242,8 +255,8 @@ make.diversity.plot <- function(points, genome.lines, styles) {
   plot <- ggplot(
     points,
     aes(
-      x = chrom, y = estimate, color = pop, fill = pop,
-      shape = data.type, group = interaction(pop, data.type)
+      x = chrom, y = estimate, fill = fill.key,
+      group = interaction(pop, data.type)
     )
   ) +
     geom_hline(
@@ -251,15 +264,15 @@ make.diversity.plot <- function(points, genome.lines, styles) {
       aes(yintercept = estimate, color = pop),
       linetype = "dotted", linewidth = 0.9
     ) +
+    geom_col(
+      position = dodge, width = 0.7,
+      color = "black", linewidth = 0.15
+    ) +
     geom_errorbar(
       data = points,
       aes(ymin = estimate - 2 * sd, ymax = estimate + 2 * sd),
       position = dodge, width = 0.15, linewidth = 0.8,
       na.rm = TRUE
-    ) +
-    geom_point(
-      position = dodge, color = "black", stroke = 1, size = 3.5,
-      aes(fill = role)
     ) +
     facet_grid(
       stat ~ mask, scales = "free_y",
@@ -267,12 +280,8 @@ make.diversity.plot <- function(points, genome.lines, styles) {
         stat = c(pi = "π", theta = "θ[w]")
       )
     ) +
-    scale_color_manual(values = styles$population.colors) +
-    scale_fill_manual(values = styles$population.colors) +
-    scale_shape_manual(
-      values = styles$series.shapes,
-      labels = styles$series.labels
-    ) +
+    scale_color_manual(values = styles$empirical.colors) +
+    scale_fill_manual(values = styles$fill.colors) +
     scale_y_continuous(
       labels = scales::label_number(accuracy = 0.00001)
     ) +
@@ -283,14 +292,8 @@ make.diversity.plot <- function(points, genome.lines, styles) {
       color = NULL, fill = NULL, shape = NULL
     ) +
     guides(
-      color = guide_legend(
-        order = 1, override.aes = list(shape = 21, size = 3.5)
-      ),
-      fill = "none",
-      shape = guide_legend(
-        order = 2,
-        override.aes = list(fill = "white", color = "black")
-      )
+      color = "none",
+      fill = guide_legend(order = 1)
     ) +
     theme_bw(base_size = PLOT.BASE.SIZE) +
     theme(

@@ -8,6 +8,8 @@
 # kinship.R
 # ______________________________________________________________________________
 
+# pattern: Mixed (unavoidable)
+# Reason: This script combines transformations with local plot rendering.
 
 # set up ----
 library(tidyverse)
@@ -23,8 +25,8 @@ EMPIRICAL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_1kG/stats"
 CHROMOSOMES <- as.character(1:22)
 SELECTED.CHROMOSOMES <- c("1", "18")
 SOURCE.LEVELS <- c(
-  "Simulation_small", "Simulation_small_simDown",
-  "Simulation_large", "Simulation_large_simDown", "Empirical"
+  "Simulation_small", "Simulation_large", "Simulation_small_simDown",
+  "Simulation_large_simDown", "Empirical"
 )
 KINSHIP.BIN.WIDTH <- 0.01
 PLOT.BASE.SIZE <- 24
@@ -32,6 +34,11 @@ PLOT.STYLES <- list(
   population.colors = c(
     AFR = "#56B4E9", ADX = "#4B1FA8", EUR = "#fb8072",
     YRI = "#eec4dc", ASW = "#e44b8d", CEU = "#bb437e"
+  ),
+  source.colors = c(
+    Simulation_small = "#9A83CE", Simulation_large = "#32146F",
+    Simulation_small_simDown = "#6F55B5",
+    Simulation_large_simDown = "#4B1FA8"
   ),
   series.labels = c(
     Simulation_small = "Sm. Sim.",
@@ -60,8 +67,12 @@ kinship.plot.subtitle <- function(chromosomes) {
 apply.kinship.source.contract <- function(data) {
   retained <- data %>%
     filter(
-      (data.type %in% SOURCE.LEVELS[1:2] & pop %in% c("AFR", "ADX", "EUR")) |
-        (data.type %in% SOURCE.LEVELS[3:4] & pop == "ADX") |
+      (data.type %in% c(
+        "Simulation_small", "Simulation_small_simDown"
+      ) & pop %in% c("AFR", "ADX", "EUR")) |
+        (data.type %in% c(
+          "Simulation_large", "Simulation_large_simDown"
+        ) & pop == "ADX") |
         (data.type == "Empirical" & pop %in% c("AFR", "ADX", "EUR",
                                                 "YRI", "ASW", "CEU"))
     ) %>%
@@ -313,8 +324,34 @@ summarize.kinship.histograms <- function(data) {
 
 
 # construct the pairwise kinship distribution plot
-make.kinship.plot <- function(data, breaks, styles) {
-  plot.data <- data
+filter.plot.view <- function(data, view) {
+  sources <- switch(
+    view,
+    small_empirical = c(
+      "Simulation_small", "Simulation_small_simDown", "Empirical"
+    ),
+    simulated = c(
+      "Simulation_small", "Simulation_large", "Simulation_small_simDown",
+      "Simulation_large_simDown"
+    ),
+    stop("Unsupported kinship plot view: ", view)
+  )
+  filtered <- data %>%
+    filter(as.character(data.type) %in% sources) %>%
+    mutate(data.type = factor(as.character(data.type), levels = sources)) %>%
+    arrange(data.type)
+  return(filtered)
+}
+
+
+# construct one scoped pairwise kinship distribution plot
+make.kinship.plot <- function(data, breaks, styles, view) {
+  plot.data <- filter.plot.view(data, view) %>%
+    mutate(plot.key = if (view == "simulated") {
+      as.character(data.type)
+    } else {
+      as.character(pop)
+    })
   chromosome.scope <- plot.data %>%
     filter(data.type != "Empirical") %>%
     pull(chrom) %>%
@@ -325,8 +362,8 @@ make.kinship.plot <- function(data, breaks, styles) {
   plot <- ggplot(
     plot.data,
     aes(
-      x = xmid, y = mean.fraction, fill = pop,
-      group = pop
+      x = xmid, y = mean.fraction, fill = plot.key,
+      group = plot.key
     )
   ) +
     geom_col(
@@ -348,10 +385,18 @@ make.kinship.plot <- function(data, breaks, styles) {
         data.type = as_labeller(styles$series.labels)
       )
     ) +
-    scale_fill_manual(values = styles$population.colors) +
+    scale_fill_manual(values = if (view == "simulated") {
+      styles$source.colors
+    } else {
+      styles$population.colors
+    }, labels = if (view == "simulated") styles$series.labels else waiver()) +
     labs(
       x = "Pairwise Kinship", y = "Fraction of pairs",
-      title = "Pairwise Kinship Distributions Across Chromosomes",
+      title = if (view == "simulated") {
+        "Pairwise Kinship Distributions: Simulated ADX"
+      } else {
+        "Pairwise Kinship Distributions: Small Simulation and Empirical"
+      },
       subtitle = subtitle,
       fill = NULL
     ) +
@@ -417,7 +462,11 @@ kinship.histograms <- build.kinship.histograms(
 kinship.summary <- summarize.kinship.histograms(
   kinship.histograms
 )
-kinship.plot <- make.kinship.plot(
-  kinship.summary, kinship.breaks, PLOT.STYLES
+kinship.small.empirical.plot <- make.kinship.plot(
+  kinship.summary, kinship.breaks, PLOT.STYLES, "small_empirical"
 )
-print(kinship.plot)
+kinship.simulated.plot <- make.kinship.plot(
+  kinship.summary, kinship.breaks, PLOT.STYLES, "simulated"
+)
+print(kinship.small.empirical.plot)
+print(kinship.simulated.plot)
