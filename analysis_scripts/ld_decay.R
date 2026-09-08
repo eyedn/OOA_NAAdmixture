@@ -55,8 +55,7 @@ PLOT.STYLES <- list(
 # describe the selected LD estimator, chromosome, and uncertainty
 ld.plot.subtitle <- function(chromosome) {
   subtitle <- paste0(
-    "Rogers–Huff r² · chromosome ", chromosome,
-    " · ribbons show ±2 SD"
+    "Rogers–Huff r²; chrom.", chromosome
   )
   return(subtitle)
 }

@@ -49,14 +49,14 @@ SFS.COLORS <- c(
   "empirical CEU" = "#BB437E"
 )
 SFS.SERIES.LABELS <- c(
-  "small AFR" = "Sm. Sim. AFR",
-  "small ADX" = "Sm. Sim. ADX",
-  "small EUR" = "Sm. Sim. EUR",
-  "small simDown AFR" = "Sm. D. Sim. AFR",
-  "small simDown ADX" = "Sm. D. Sim. ADX",
-  "small simDown EUR" = "Sm. D. Sim. EUR",
-  "large ADX" = "Lg. Sim. ADX",
-  "large simDown ADX" = "Lg. D. Sim. ADX",
+  "small AFR" = "Sm. AFR",
+  "small ADX" = "Sm. ADX",
+  "small EUR" = "Sm. EUR",
+  "small simDown AFR" = "Sm. D. AFR",
+  "small simDown ADX" = "Sm. D. ADX",
+  "small simDown EUR" = "Sm. D. EUR",
+  "large ADX" = "Lg. ADX",
+  "large simDown ADX" = "Lg. D. ADX",
   "empirical YRI" = "Emp. YRI",
   "empirical ASW" = "Emp. ASW",
   "empirical CEU" = "Emp. CEU"
@@ -78,7 +78,7 @@ PLOT.STYLES <- list(series.labels = c(
 sfs.plot.subtitle <- function() {
   subtitle <- paste0(
     "Projected to ", SFS.PROJECTION.ALLELE.COUNT,
-    " alleles · error bars show ±2 SD"
+    " alleles"
   )
   return(subtitle)
 }

@@ -41,14 +41,14 @@ PLOT.STYLES <- list(
     "empirical CEU" = "#BB437E"
   ),
   fill.labels = c(
-    "small AFR" = "Sm. Sim. AFR",
-    "small ADX" = "Sm. Sim. ADX",
-    "small EUR" = "Sm. Sim. EUR",
-    "large ADX" = "Lg. Sim. ADX",
-    "small simDown AFR" = "Sm. D. Sim. AFR",
-    "small simDown ADX" = "Sm. D. Sim. ADX",
-    "small simDown EUR" = "Sm. D. Sim. EUR",
-    "large simDown ADX" = "Lg. D. Sim. ADX",
+    "small AFR" = "Sm. AFR",
+    "small ADX" = "Sm. ADX",
+    "small EUR" = "Sm. EUR",
+    "large ADX" = "Lg. ADX",
+    "small simDown AFR" = "Sm. D. AFR",
+    "small simDown ADX" = "Sm. D. ADX",
+    "small simDown EUR" = "Sm. D. EUR",
+    "large simDown ADX" = "Lg. D. ADX",
     "empirical YRI" = "Emp. YRI",
     "empirical ASW" = "Emp. ASW",
     "empirical CEU" = "Emp. CEU"
@@ -60,16 +60,6 @@ PLOT.STYLES <- list(
 
 
 # internal functions ----
-
-
-# describe the diversity estimators, scope, and uncertainty concisely
-diversity.plot.subtitle <- function(chromosomes) {
-  subtitle <- paste0(
-    "π and Watterson’s θ · chromosomes ",
-    paste(chromosomes, collapse = ", "), " · ±2 SD simulations"
-  )
-  return(subtitle)
-}
 
 
 # retain source-specific populations before any replicate summaries
@@ -291,10 +281,6 @@ filter.diversity.plot.view <- function(points, genome.lines, view) {
 
 # construct the selected-chromosome diversity plot
 make.diversity.plot <- function(points, genome.lines, styles) {
-  chromosome.scope <- points$chrom %>%
-    as.character() %>%
-    unique()
-  subtitle <- diversity.plot.subtitle(chromosome.scope)
   dodge <- position_dodge(width = 0.75)
   fill.keys <- names(styles$fill.colors)[
     names(styles$fill.colors) %in% as.character(points$fill.key)
@@ -341,7 +327,6 @@ make.diversity.plot <- function(points, genome.lines, styles) {
     labs(
       x = "Chromosome", y = NULL,
       title = "Genetic Diversity Across Selected Chromosomes",
-      subtitle = subtitle,
       color = NULL, fill = NULL, shape = NULL
     ) +
     guides(

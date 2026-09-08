@@ -91,7 +91,7 @@ ancestry.inference.file.family <- function(method) {
 # describe the mixed ancestry measurement basis concisely
 ancestry.plot.subtitle <- function(empirical.method) {
   subtitle <- paste0(
-    "Original simulations: tspop · downsampled simulations and empirical: ",
+    "Orig. sim.: tspop; D. Sim. and Emp.: ",
     empirical.method
   )
   return(subtitle)

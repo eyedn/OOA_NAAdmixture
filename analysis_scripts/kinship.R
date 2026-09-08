@@ -50,16 +50,6 @@ PLOT.STYLES <- list(
 # internal functions ----
 
 
-# describe the kinship estimator, scope, and uncertainty concisely
-kinship.plot.subtitle <- function(chromosomes) {
-  subtitle <- paste0(
-    "KING estimator · chromosomes ", paste(chromosomes, collapse = ", "),
-    " and empirical genome-wide · ±2 SD simulations"
-  )
-  return(subtitle)
-}
-
-
 # retain source-specific populations before any histogram calculations
 apply.kinship.source.contract <- function(data) {
   retained <- data %>%
@@ -358,12 +348,6 @@ make.kinship.plot <- function(data, breaks, styles, view) {
         ))
       }
     )
-  chromosome.scope <- plot.data %>%
-    filter(data.type != "Empirical") %>%
-    pull(chrom) %>%
-    as.character() %>%
-    unique()
-  subtitle <- kinship.plot.subtitle(chromosome.scope)
   dodge <- position_dodge(width = diff(breaks)[1] * 0.9)
   plot <- ggplot(
     plot.data,
@@ -397,13 +381,12 @@ make.kinship.plot <- function(data, breaks, styles, view) {
       styles$population.colors
     }, labels = if (view == "simulated") styles$series.labels else waiver()) +
     labs(
-      x = "Pairwise Kinship", y = "Fraction of pairs",
+      x = "Pairwise KING Kinship", y = "Fraction of pairs",
       title = if (view == "simulated") {
-        "Pairwise Kinship Distributions: Simulated ADX"
+        "Pairwise KING Kinship Distributions: Simulated ADX"
       } else {
-        "Pairwise Kinship Distributions: Small Simulation and Empirical"
+        "Pairwise KING Kinship Distributions: Small Simulation and Empirical"
       },
-      subtitle = subtitle,
       fill = NULL
     ) +
     xlim(-0.2, 0.0442) +
