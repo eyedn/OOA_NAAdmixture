@@ -322,18 +322,29 @@ prepare.sfs.analysis <- function(simulation, simDown = NULL, empirical = NULL) {
 }
 
 
-# prepare AFR/EUR singleton denominators for small simulation diagnostics
+# return source-specific population pairs used in SFS diagnostics
+population.pair.config <- function() {
+  config <- tribble(
+    ~data.type, ~comparison, ~pair.left, ~pair.right,
+    "Simulation_small", "AFR - EUR", "AFR", "EUR",
+    "Simulation_small_simDown", "AFR - EUR", "AFR", "EUR",
+    "Empirical", "YRI - CEU", "YRI", "CEU"
+  )
+  return(config)
+}
+
+
+# prepare singleton denominators for simulation and empirical population pairs
 prepare.singleton.diagnostics <- function(data) {
+  pair.config <- population.pair.config()
   diagnostic.data <- data %>%
-    filter(
-      as.character(data.type) %in% c(
-        "Simulation_small", "Simulation_small_simDown"
-      ),
-      pop %in% c("AFR", "EUR")
-    ) %>%
     mutate(
       data.type = as.character(data.type),
-      chrom = as.character(chrom),
+      chrom = as.character(chrom)
+    ) %>%
+    inner_join(pair.config, by = "data.type") %>%
+    filter(pop %in% c(pair.left, pair.right)) %>%
+    mutate(
       bin.range = case_when(
         minor.allele.count == 1L ~ "Singletons (bin 1)",
         minor.allele.count <= DISPLAY.BIN.MAX ~ "Bins 2-15",
@@ -344,8 +355,10 @@ prepare.singleton.diagnostics <- function(data) {
         levels = c("Singletons (bin 1)", "Bins 2-15", "Bins 16-50")
       )
     )
-  group.columns <- c("data.set", "data.type", "rep", "chrom", "pop",
-                     "series")
+  group.columns <- c(
+    "data.set", "data.type", "rep", "chrom", "comparison", "pair.left",
+    "pair.right", "pop", "series"
+  )
   composition <- diagnostic.data %>%
     group_by(across(all_of(c(group.columns, "bin.range")))) %>%
     summarize(count = sum(count), .groups = "drop")
@@ -391,15 +404,78 @@ prepare.singleton.diagnostics <- function(data) {
     stop("Singleton diagnostic proportions do not match the primary SFS")
   }
   paired.populations <- paired %>%
-    group_by(data.type, rep, chrom) %>%
-    summarize(populations = list(sort(pop)), .groups = "drop")
-  if (!all(map_lgl(
-    paired.populations$populations,
-    ~ identical(.x, c("AFR", "EUR"))
-  ))) {
-    stop("Every paired singleton diagnostic needs AFR and EUR")
+    group_by(data.type, rep, chrom, comparison, pair.left, pair.right) %>%
+    summarize(
+      valid = identical(
+        sort(pop),
+        sort(c(first(pair.left), first(pair.right)))
+      ),
+      .groups = "drop"
+    )
+  if (!all(paired.populations$valid)) {
+    stop("Every singleton diagnostic needs its configured population pair")
   }
   return(list(composition = composition, paired = paired))
+}
+
+
+# calculate per-replicate population differences over displayed SFS bins
+prepare.population.differences <- function(data) {
+  pair.config <- population.pair.config()
+  pair.columns <- c(
+    "data.set", "data.type", "rep", "chrom", "comparison", "pair.left",
+    "pair.right", "minor.allele.count"
+  )
+  paired.data <- data %>%
+    mutate(
+      data.type = as.character(data.type),
+      chrom = as.character(chrom)
+    ) %>%
+    inner_join(pair.config, by = "data.type") %>%
+    filter(
+      pop %in% c(pair.left, pair.right),
+      minor.allele.count <= DISPLAY.BIN.MAX
+    ) %>%
+    mutate(pair.member = if_else(pop == pair.left, "left", "right"))
+  pair.check <- paired.data %>%
+    group_by(across(all_of(pair.columns))) %>%
+    summarize(n.populations = n_distinct(pair.member), .groups = "drop")
+  if (any(pair.check$n.populations != 2L)) {
+    stop("Every population difference needs both configured populations")
+  }
+  differences <- paired.data %>%
+    select(all_of(pair.columns), pair.member, count, proportion) %>%
+    pivot_wider(
+      names_from = pair.member,
+      values_from = c(count, proportion)
+    ) %>%
+    transmute(
+      across(all_of(pair.columns)),
+      count.difference = count_left - count_right,
+      proportion.difference = proportion_left - proportion_right
+    ) %>%
+    pivot_longer(
+      cols = c(count.difference, proportion.difference),
+      names_to = "measure",
+      values_to = "difference"
+    ) %>%
+    mutate(
+      comparison = factor(
+        comparison,
+        levels = c("AFR - EUR", "YRI - CEU")
+      ),
+      measure = recode(
+        measure,
+        count.difference = "Count difference",
+        proportion.difference = "Proportion difference"
+      ),
+      measure = factor(
+        measure,
+        levels = c("Count difference", "Proportion difference")
+      ),
+      data.type = factor(data.type, levels = SOURCE.LEVELS)
+    )
+  return(differences)
 }
 
 
@@ -538,7 +614,7 @@ make.singleton.composition.plot <- function(data) {
   plot <- ggplot(
     data,
     aes(
-      x = pop,
+      x = interaction(rep, pop, sep = "\n"),
       y = count,
       fill = pop
     )
@@ -550,12 +626,17 @@ make.singleton.composition.plot <- function(data) {
       labeller = labeller(data.type = source.labels),
       drop = FALSE
     ) +
-    scale_fill_manual(values = c(AFR = "#56B4E9", EUR = "#FB8072")) +
+    scale_fill_manual(values = c(
+      AFR = "#56B4E9",
+      EUR = "#FB8072",
+      YRI = "#EEC4DC",
+      CEU = "#BB437E"
+    )) +
     labs(
       x = "Replicate and population",
       y = "Segregating-site count",
-      fill = "Minor allele count range",
-      title = "Singleton denominator composition from chrom. 1",
+      fill = "Population",
+      title = "Singleton denominator composition",
     ) +
     theme_bw(base_size = 18) +
     theme(
@@ -567,7 +648,7 @@ make.singleton.composition.plot <- function(data) {
 }
 
 
-# build paired AFR/EUR singleton proportions from the primary denominator
+# build paired singleton proportions from the primary denominator
 make.singleton.paired.plot <- function(data) {
   source.labels <- PLOT.STYLES$series.labels
   plot <- ggplot(
@@ -581,13 +662,66 @@ make.singleton.paired.plot <- function(data) {
       labeller = labeller(data.type = source.labels),
       drop = FALSE
     ) +
-    scale_color_manual(values = c(AFR = "#56B4E9", EUR = "#FB8072")) +
+    scale_color_manual(values = c(
+      AFR = "#56B4E9",
+      EUR = "#FB8072",
+      YRI = "#EEC4DC",
+      CEU = "#BB437E"
+    )) +
     labs(
       x = NULL,
       y = "Singleton proportion of segregating sites",
       color = "Population",
-      title = "Paired singleton proportions from chrom. 1",
-      subtitle = "AFR and EUR are connected within each replicate"
+      title = "Paired singleton proportions",
+      subtitle = "Configured populations are connected within each replicate"
+    ) +
+    theme_bw(base_size = 18) +
+    theme(
+      legend.position = "top",
+      panel.grid.minor = element_blank()
+    )
+  return(plot)
+}
+
+
+# build a four-panel SFS difference plot for population pairs and measures
+make.population.difference.plot <- function(data) {
+  source.labels <- PLOT.STYLES$series.labels
+  source.colors <- c(
+    Simulation_small = "#56B4E9",
+    Simulation_small_simDown = "#6F55B5",
+    Empirical = "#E44B8D"
+  )
+  plot <- ggplot(
+    data,
+    aes(
+      x = minor.allele.count,
+      y = difference,
+      color = data.type,
+      group = interaction(data.type, rep, chrom)
+    )
+  ) +
+    geom_hline(yintercept = 0, color = "grey60", linewidth = 0.5) +
+    geom_line(alpha = 0.35) +
+    stat_summary(
+      aes(group = data.type),
+      fun = mean,
+      geom = "line",
+      linewidth = 1
+    ) +
+    facet_grid(comparison ~ measure, scales = "free_y", drop = FALSE) +
+    scale_x_continuous(breaks = seq_len(DISPLAY.BIN.MAX)) +
+    scale_color_manual(
+      values = source.colors,
+      breaks = names(source.colors),
+      labels = source.labels[names(source.colors)]
+    ) +
+    labs(
+      x = "Minor allele count",
+      y = "Left population minus right population",
+      color = NULL,
+      title = "Population differences across shown SFS bins",
+      subtitle = "Thin lines are replicates; thick lines are source means"
     ) +
     theme_bw(base_size = 18) +
     theme(
@@ -655,6 +789,7 @@ sfs.data <- prepare.sfs.analysis(
 )
 sfs.summaries <- summarize.sfs.analysis(sfs.data)
 singleton.diagnostics <- prepare.singleton.diagnostics(sfs.data)
+population.differences <- prepare.population.differences(sfs.data)
 
 sfs.small.empirical.count.plot <- make.sfs.plot(
   sfs.summaries$count,
@@ -686,6 +821,9 @@ singleton.composition.plot <- make.singleton.composition.plot(
 singleton.paired.plot <- make.singleton.paired.plot(
   singleton.diagnostics$paired
 )
+population.difference.plot <- make.population.difference.plot(
+  population.differences
+)
 
 print(sfs.small.empirical.count.plot)
 print(sfs.simulated.count.plot)
@@ -693,3 +831,4 @@ print(sfs.small.empirical.proportion.plot)
 print(sfs.simulated.proportion.plot)
 print(singleton.composition.plot)
 print(singleton.paired.plot)
+print(population.difference.plot)
