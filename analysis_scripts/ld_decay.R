@@ -189,8 +189,19 @@ pool.ld.curves <- function(data, include.chromosome) {
 
 
 # summarize replicate simulation curves and fixed empirical curves
-summarize.ld.curves <- function(data) {
-  simulation <- data %>%
+summarize.ld.curves <- function(data, chromosome) {
+  chromosome <- as.character(chromosome)
+  if (length(chromosome) != 1L) {
+    stop("LD summarization requires exactly one chromosome")
+  }
+  scoped <- data %>% filter(as.character(chrom) == chromosome)
+  if (!nrow(scoped)) {
+    stop("LD data do not contain the requested chromosome")
+  }
+  if (!identical(unique(as.character(scoped$chrom)), chromosome)) {
+    stop("LD summary contains data outside the requested chromosome")
+  }
+  simulation <- scoped %>%
     filter(data.type != "Empirical") %>%
     group_by(data.type, pop, role, chrom, distance_bin_bp) %>%
     summarise(
@@ -204,7 +215,7 @@ summarize.ld.curves <- function(data) {
       },
       .groups = "drop"
     )
-  empirical <- data %>%
+  empirical <- scoped %>%
     filter(data.type == "Empirical") %>%
     transmute(
       data.type, pop, role, chrom, distance_bin_bp,
@@ -319,6 +330,7 @@ filter.plot.view <- function(data, view) {
   )
   filtered <- data %>%
     filter(as.character(data.type) %in% sources) %>%
+    filter(view != "simulated" | pop == "ADX") %>%
     mutate(data.type = factor(as.character(data.type), levels = sources)) %>%
     arrange(data.type)
   return(filtered)
@@ -403,7 +415,7 @@ empirical.ld.selected <- read.ld.chromosomes(
 ld.summary <- bind_rows(
   simulation.ld.selected, empirical.ld.selected
 ) %>%
-  summarize.ld.curves()
+  summarize.ld.curves(PLOT.CHROMOSOME)
 ld.small.empirical.plot <- make.ld.plot(
   ld.summary, PLOT.CHROMOSOME, PLOT.STYLES, "small_empirical"
 )

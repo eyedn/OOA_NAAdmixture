@@ -338,6 +338,7 @@ filter.plot.view <- function(data, view) {
   )
   filtered <- data %>%
     filter(as.character(data.type) %in% sources) %>%
+    filter(view != "simulated" | pop == "ADX") %>%
     mutate(data.type = factor(as.character(data.type), levels = sources)) %>%
     arrange(data.type)
   return(filtered)
@@ -347,6 +348,7 @@ filter.plot.view <- function(data, view) {
 # construct one scoped pairwise kinship distribution plot
 make.kinship.plot <- function(data, breaks, styles, view) {
   plot.data <- filter.plot.view(data, view) %>%
+    mutate(chrom = forcats::fct_drop(as.factor(chrom))) %>%
     mutate(plot.key = if (view == "simulated") {
       as.character(data.type)
     } else {
@@ -380,7 +382,7 @@ make.kinship.plot <- function(data, breaks, styles, view) {
       color = "black", na.rm = TRUE
     ) +
     facet_grid(
-      chrom ~ data.type, drop = FALSE, scales = "free_y",
+      chrom ~ data.type, drop = TRUE, scales = "free_y",
       labeller = labeller(
         data.type = as_labeller(styles$series.labels)
       )

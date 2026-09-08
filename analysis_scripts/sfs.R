@@ -300,7 +300,9 @@ prepare.sfs.analysis <- function(simulation, simDown = NULL, empirical = NULL) {
 # summarize simulation replicates and retain empirical NA intervals
 summarize.one.sfs.value <- function(data, value.column) {
   summary <- data %>%
-    group_by(data.set, data.type, chrom, series, minor.allele.count) %>%
+    group_by(
+      data.set, data.type, chrom, pop, series, minor.allele.count
+    ) %>%
     summarize(
       mean = mean(.data[[value.column]]),
       sd = if_else(
@@ -345,6 +347,7 @@ filter.plot.view <- function(data, view) {
   )
   filtered <- data %>%
     filter(as.character(data.type) %in% sources) %>%
+    filter(view != "simulated" | pop == "ADX") %>%
     mutate(data.type = factor(as.character(data.type), levels = sources)) %>%
     arrange(data.type)
   return(filtered)
