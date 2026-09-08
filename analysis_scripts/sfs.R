@@ -8,6 +8,7 @@
 # sfs.R
 # ______________________________________________________________________________
 
+
 # set up ----
 library(tidyverse)
 library(furrr)
@@ -49,14 +50,14 @@ SFS.COLORS <- c(
   "empirical CEU" = "#BB437E"
 )
 SFS.SERIES.LABELS <- c(
-  "small AFR" = "Sm. AFR",
-  "small ADX" = "Sm. ADX",
-  "small EUR" = "Sm. EUR",
-  "small simDown AFR" = "Sm. D. AFR",
-  "small simDown ADX" = "Sm. D. ADX",
-  "small simDown EUR" = "Sm. D. EUR",
-  "large ADX" = "Lg. ADX",
-  "large simDown ADX" = "Lg. D. ADX",
+  "small AFR" = "Sm. Sim. AFR",
+  "small ADX" = "Sm. Sim. ADX",
+  "small EUR" = "Sm. Sim. EUR",
+  "small simDown AFR" = "Sm. D. Sim. AFR",
+  "small simDown ADX" = "Sm. D. Sim. ADX",
+  "small simDown EUR" = "Sm. D. Sim. EUR",
+  "large ADX" = "Lg. Sim. ADX",
+  "large simDown ADX" = "Lg. D. Sim. ADX",
   "empirical YRI" = "Emp. YRI",
   "empirical ASW" = "Emp. ASW",
   "empirical CEU" = "Emp. CEU"
@@ -82,6 +83,21 @@ sfs.plot.subtitle <- function() {
   )
   return(subtitle)
 }
+
+
+# return a view-specific title only for proportion SFS plots
+sfs.plot.title <- function(y.label, view) {
+  if (y.label != "Proportion of segregating sites") {
+    return(NULL)
+  }
+  title <- switch(
+    view,
+    small_empirical = "SFS: Small Simulation and Empirical",
+    simulated = "SFS: Simulated ADX"
+  )
+  return(title)
+}
+
 
 # retain source-specific populations before SFS normalization
 apply.sfs.source.contract <- function(data) {
@@ -398,9 +414,11 @@ make.sfs.plot <- function(data, value.column, y.label, pseudo.log, view) {
     labs(
       x = "Minor allele count",
       y = y.label,
+      title = sfs.plot.title(y.label, view),
       subtitle = sfs.plot.subtitle(),
       fill = NULL
     ) +
+    guides(fill = guide_legend(order = 1, nrow = 2, byrow = TRUE)) +
     theme_bw(base_size = 24) +
     theme(
       legend.position = "top", legend.direction = "horizontal", 

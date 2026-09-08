@@ -8,6 +8,7 @@
 # kinship.R
 # ______________________________________________________________________________
 
+
 # set up ----
 library(tidyverse)
 library(glue)
@@ -379,7 +380,15 @@ make.kinship.plot <- function(data, breaks, styles, view) {
       styles$source.colors
     } else {
       styles$population.colors
-    }, labels = if (view == "simulated") styles$series.labels else waiver()) +
+    }, breaks = if (view == "simulated") {
+      names(styles$source.colors)
+    } else {
+      names(styles$population.colors)
+    }, labels = if (view == "simulated") {
+      styles$series.labels[names(styles$source.colors)]
+    } else {
+      waiver()
+    }) +
     labs(
       x = "Pairwise KING Kinship", y = "Fraction of pairs",
       title = if (view == "simulated") {
@@ -390,7 +399,7 @@ make.kinship.plot <- function(data, breaks, styles, view) {
       fill = NULL
     ) +
     xlim(-0.2, 0.0442) +
-    guides(fill = guide_legend(order = 1)) +
+    guides(fill = guide_legend(order = 1, nrow = 1, byrow = TRUE)) +
     theme_bw(base_size = PLOT.BASE.SIZE) +
     theme(
       legend.position = "top",

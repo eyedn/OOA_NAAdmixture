@@ -8,6 +8,7 @@
 # ld_decay.R
 # ______________________________________________________________________________
 
+
 # set up ----
 library(tidyverse)
 library(glue)
@@ -230,11 +231,23 @@ summarize.ld.curves <- function(data, chromosome) {
 # add shared scales, labels, guides, and theme to one LD plot
 style.ld.plot <- function(plot, title, subtitle, styles, view) {
   plot <- plot +
-    scale_color_manual(values = if (view == "simulated") {
-      styles$source.colors
-    } else {
-      styles$population.colors
-    }) +
+    scale_color_manual(
+      values = if (view == "simulated") {
+        styles$source.colors
+      } else {
+        styles$population.colors
+      },
+      breaks = if (view == "simulated") {
+        names(styles$source.colors)
+      } else {
+        names(styles$population.colors)
+      },
+      labels = if (view == "simulated") {
+        styles$series.labels[names(styles$source.colors)]
+      } else {
+        waiver()
+      }
+    ) +
     scale_fill_manual(values = if (view == "simulated") {
       styles$source.colors
     } else {
@@ -250,7 +263,7 @@ style.ld.plot <- function(plot, title, subtitle, styles, view) {
       color = NULL, fill = NULL
     ) +
     guides(
-      color = guide_legend(order = 1),
+      color = guide_legend(order = 1, nrow = 1, byrow = TRUE),
       fill = "none"
     ) +
     theme_bw(base_size = PLOT.BASE.SIZE) +

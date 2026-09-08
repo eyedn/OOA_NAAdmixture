@@ -8,6 +8,7 @@
 # diversity.R
 # ______________________________________________________________________________
 
+
 # set up ----
 library(tidyverse)
 library(nanoparquet)
@@ -41,14 +42,14 @@ PLOT.STYLES <- list(
     "empirical CEU" = "#BB437E"
   ),
   fill.labels = c(
-    "small AFR" = "Sm. AFR",
-    "small ADX" = "Sm. ADX",
-    "small EUR" = "Sm. EUR",
-    "large ADX" = "Lg. ADX",
-    "small simDown AFR" = "Sm. D. AFR",
-    "small simDown ADX" = "Sm. D. ADX",
-    "small simDown EUR" = "Sm. D. EUR",
-    "large simDown ADX" = "Lg. D. ADX",
+    "small AFR" = "Sm. Sim. AFR",
+    "small ADX" = "Sm. Sim. ADX",
+    "small EUR" = "Sm. Sim. EUR",
+    "large ADX" = "Lg. Sim. ADX",
+    "small simDown AFR" = "Sm. D. Sim. AFR",
+    "small simDown ADX" = "Sm. D. Sim. ADX",
+    "small simDown EUR" = "Sm. D. Sim. EUR",
+    "large simDown ADX" = "Lg. D. Sim. ADX",
     "empirical YRI" = "Emp. YRI",
     "empirical ASW" = "Emp. ASW",
     "empirical CEU" = "Emp. CEU"
@@ -331,7 +332,7 @@ make.diversity.plot <- function(points, genome.lines, styles) {
     ) +
     guides(
       color = "none",
-      fill = guide_legend(order = 1)
+      fill = guide_legend(order = 1, nrow = 2, byrow = TRUE)
     ) +
     theme_bw(base_size = PLOT.BASE.SIZE) +
     theme(
