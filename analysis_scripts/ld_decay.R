@@ -8,7 +8,6 @@
 # ld_decay.R
 # ______________________________________________________________________________
 
-
 # set up ----
 library(tidyverse)
 library(glue)
@@ -39,13 +38,6 @@ PLOT.STYLES <- list(
     Simulation_small = "#9A83CE", Simulation_large = "#32146F",
     Simulation_small_simDown = "#6F55B5",
     Simulation_large_simDown = "#4B1FA8"
-  ),
-  series.linetypes = c(
-    Simulation_small = "dashed",
-    Simulation_small_simDown = "longdash",
-    Simulation_large = "dotdash",
-    Simulation_large_simDown = "twodash",
-    Empirical = "solid"
   ),
   series.labels = c(
     Simulation_small = "Sm. Sim.",
@@ -249,10 +241,6 @@ style.ld.plot <- function(plot, title, subtitle, styles, view) {
     } else {
       styles$population.colors
     }) +
-    scale_linetype_manual(
-      values = styles$series.linetypes,
-      labels = styles$series.labels
-    ) +
     scale_x_continuous(
       limits = c(LD.X.LOWER, LD.X.UPPER), breaks = LD.X.BREAKS
     ) +
@@ -260,16 +248,11 @@ style.ld.plot <- function(plot, title, subtitle, styles, view) {
       x = "Distance Between SNPs (bp)",
       y = expression("Mean " * r^2),
       title = title, subtitle = subtitle,
-      color = NULL, fill = NULL, linetype = NULL
+      color = NULL, fill = NULL
     ) +
     guides(
-      color = guide_legend(
-        order = 1, override.aes = list(linetype = "solid")
-      ),
-      fill = "none",
-      linetype = guide_legend(
-        order = 2, override.aes = list(color = "black")
-      )
+      color = guide_legend(order = 1),
+      fill = "none"
     ) +
     theme_bw(base_size = PLOT.BASE.SIZE) +
     theme(
@@ -303,7 +286,6 @@ add.ld.geometries <- function(plot, data) {
     geom_line(
       data = data,
       aes(
-        linetype = data.type,
         group = interaction(data.type, pop)
       ),
       linewidth = 1.25
@@ -346,11 +328,18 @@ make.ld.plot <- function(data, chromosome, styles, view) {
   }
   plot.data <- filter.plot.view(data, view) %>%
     filter(as.character(chrom) == chromosome) %>%
-    mutate(plot.key = if (view == "simulated") {
-      as.character(data.type)
-    } else {
-      as.character(pop)
-    })
+    mutate(
+      plot.key = if (view == "simulated") {
+        factor(as.character(data.type), levels = c(
+          "Simulation_small", "Simulation_large",
+          "Simulation_small_simDown", "Simulation_large_simDown"
+        ))
+      } else {
+        factor(as.character(pop), levels = c(
+          "AFR", "ADX", "EUR", "YRI", "ASW", "CEU"
+        ))
+      }
+    )
   if (!nrow(plot.data)) {
     stop("LD data do not contain the selected chromosome")
   }

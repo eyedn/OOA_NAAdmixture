@@ -8,9 +8,6 @@
 # ancestry.R
 # ______________________________________________________________________________
 
-# pattern: Mixed (unavoidable)
-# Reason: This script combines transformations with local plot rendering.
-
 # set up ----
 library(tidyverse)
 library(nanoparquet)

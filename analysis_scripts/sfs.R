@@ -8,7 +8,6 @@
 # sfs.R
 # ______________________________________________________________________________
 
-
 # set up ----
 library(tidyverse)
 library(furrr)
@@ -65,8 +64,8 @@ SFS.SERIES.LABELS <- c(
 SFS.DODGE <- position_dodge(width = 0.9)
 PLOT.STYLES <- list(series.labels = c(
   Simulation_small = "Sm. Sim.",
-  Simulation_small_simDown = "Sm. D. Sim.",
   Simulation_large = "Lg. Sim.",
+  Simulation_small_simDown = "Sm. D. Sim.",
   Simulation_large_simDown = "Lg. D. Sim.",
   Empirical = "Emp."
 ))
@@ -346,8 +345,19 @@ filter.plot.view <- function(data, view) {
   filtered <- data %>%
     filter(as.character(data.type) %in% sources) %>%
     filter(view != "simulated" | pop == "ADX") %>%
-    mutate(data.type = factor(as.character(data.type), levels = sources)) %>%
-    arrange(data.type)
+    mutate(
+      data.type = factor(as.character(data.type), levels = sources),
+      series = factor(
+        as.character(series),
+        levels = SFS.SERIES.LEVELS[SFS.SERIES.LEVELS %in% series]
+      ),
+      chrom = factor(
+        as.character(chrom),
+        levels = SFS.FACET.LEVELS[SFS.FACET.LEVELS %in% chrom]
+      )
+    ) %>%
+    arrange(data.type, series) %>%
+    droplevels()
   return(filtered)
 }
 
@@ -356,6 +366,7 @@ filter.plot.view <- function(data, view) {
 make.sfs.plot <- function(data, value.column, y.label, pseudo.log, view) {
   displayed <- filter.plot.view(data, view) %>%
     filter(minor.allele.count <= DISPLAY.BIN.MAX)
+  series.keys <- levels(displayed$series)
   plot <- ggplot(
     displayed,
     aes(
@@ -378,7 +389,10 @@ make.sfs.plot <- function(data, value.column, y.label, pseudo.log, view) {
       limits = c(0.5, DISPLAY.BIN.MAX + 0.5)
     ) +
     scale_fill_manual(
-      values = SFS.COLORS, labels = SFS.SERIES.LABELS,
+      values = SFS.COLORS[series.keys],
+      breaks = series.keys,
+      labels = SFS.SERIES.LABELS[series.keys],
+      limits = series.keys,
       drop = FALSE
     ) +
     labs(

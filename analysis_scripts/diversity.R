@@ -8,7 +8,6 @@
 # diversity.R
 # ______________________________________________________________________________
 
-
 # set up ----
 library(tidyverse)
 library(nanoparquet)
@@ -40,6 +39,19 @@ PLOT.STYLES <- list(
     "large simDown ADX" = "#4B1FA8",
     "empirical YRI" = "#EEC4DC", "empirical ASW" = "#E44B8D",
     "empirical CEU" = "#BB437E"
+  ),
+  fill.labels = c(
+    "small AFR" = "Sm. Sim. AFR",
+    "small ADX" = "Sm. Sim. ADX",
+    "small EUR" = "Sm. Sim. EUR",
+    "large ADX" = "Lg. Sim. ADX",
+    "small simDown AFR" = "Sm. D. Sim. AFR",
+    "small simDown ADX" = "Sm. D. Sim. ADX",
+    "small simDown EUR" = "Sm. D. Sim. EUR",
+    "large simDown ADX" = "Lg. D. Sim. ADX",
+    "empirical YRI" = "Emp. YRI",
+    "empirical ASW" = "Emp. ASW",
+    "empirical CEU" = "Emp. CEU"
   ),
   empirical.colors = c(
     YRI = "#EEC4DC", ASW = "#E44B8D", CEU = "#BB437E"
@@ -243,6 +255,40 @@ build.diversity.plot.data <- function(
 }
 
 
+# retain one diversity view and its eligible empirical references
+filter.diversity.plot.view <- function(points, genome.lines, view) {
+  sources <- switch(
+    view,
+    small_empirical = c(
+      "Simulation_small", "Simulation_small_simDown", "Empirical"
+    ),
+    simulated = c(
+      "Simulation_small", "Simulation_large", "Simulation_small_simDown",
+      "Simulation_large_simDown"
+    ),
+    stop("Unsupported diversity plot view: ", view)
+  )
+  view.points <- points %>%
+    filter(as.character(data.type) %in% sources) %>%
+    filter(view != "simulated" | pop == "ADX") %>%
+    mutate(
+      data.type = factor(as.character(data.type), levels = sources),
+      fill.key = factor(
+        as.character(fill.key),
+        levels = names(PLOT.STYLES$fill.colors)[
+          names(PLOT.STYLES$fill.colors) %in% fill.key
+        ]
+      )
+    ) %>%
+    arrange(data.type, fill.key) %>%
+    droplevels()
+  view.lines <- if (view == "small_empirical") genome.lines else {
+    genome.lines[0, , drop = FALSE]
+  }
+  return(list(points = view.points, genome.lines = view.lines))
+}
+
+
 # construct the selected-chromosome diversity plot
 make.diversity.plot <- function(points, genome.lines, styles) {
   chromosome.scope <- points$chrom %>%
@@ -250,6 +296,9 @@ make.diversity.plot <- function(points, genome.lines, styles) {
     unique()
   subtitle <- diversity.plot.subtitle(chromosome.scope)
   dodge <- position_dodge(width = 0.75)
+  fill.keys <- names(styles$fill.colors)[
+    names(styles$fill.colors) %in% as.character(points$fill.key)
+  ]
   plot <- ggplot(
     points,
     aes(
@@ -279,7 +328,13 @@ make.diversity.plot <- function(points, genome.lines, styles) {
       )
     ) +
     scale_color_manual(values = styles$empirical.colors) +
-    scale_fill_manual(values = styles$fill.colors) +
+    scale_fill_manual(
+      values = styles$fill.colors[fill.keys],
+      breaks = fill.keys,
+      labels = styles$fill.labels[fill.keys],
+      limits = fill.keys,
+      drop = FALSE
+    ) +
     scale_y_continuous(
       labels = scales::label_number(accuracy = 0.00001)
     ) +
@@ -363,7 +418,7 @@ emp.full.callable.genome <- read.diversity.genome(
   "pi_theta_stats_full_callable_chrom.parquet", "Full callable"
 )
 
-# summarize sources and construct the primary diversity plot
+# summarize sources and construct the two diversity views
 simulation.diversity.summary <- bind_rows(
   sim.small.diversity,
   simDown.small.intergenic.diversity,
@@ -381,9 +436,22 @@ diversity.plot.data <- build.diversity.plot.data(
   bind_rows(emp.intergenic.genome, emp.full.callable.genome),
   SELECTED.CHROMOSOMES
 )
-diversity.plot <- make.diversity.plot(
-  diversity.plot.data$points,
-  diversity.plot.data$genome.lines,
+diversity.small.empirical.data <- filter.diversity.plot.view(
+  diversity.plot.data$points, diversity.plot.data$genome.lines,
+  "small_empirical"
+)
+diversity.simulated.data <- filter.diversity.plot.view(
+  diversity.plot.data$points, diversity.plot.data$genome.lines, "simulated"
+)
+diversity.small.empirical.plot <- make.diversity.plot(
+  diversity.small.empirical.data$points,
+  diversity.small.empirical.data$genome.lines,
   PLOT.STYLES
 )
-print(diversity.plot)
+diversity.simulated.plot <- make.diversity.plot(
+  diversity.simulated.data$points,
+  diversity.simulated.data$genome.lines,
+  PLOT.STYLES
+)
+print(diversity.small.empirical.plot)
+print(diversity.simulated.plot)

@@ -8,7 +8,6 @@
 # kinship.R
 # ______________________________________________________________________________
 
-
 # set up ----
 library(tidyverse)
 library(glue)
@@ -40,8 +39,8 @@ PLOT.STYLES <- list(
   ),
   series.labels = c(
     Simulation_small = "Sm. Sim.",
-    Simulation_small_simDown = "Sm. D. Sim.",
     Simulation_large = "Lg. Sim.",
+    Simulation_small_simDown = "Sm. D. Sim.",
     Simulation_large_simDown = "Lg. D. Sim.",
     Empirical = "Emp."
   )
@@ -347,11 +346,18 @@ filter.plot.view <- function(data, view) {
 make.kinship.plot <- function(data, breaks, styles, view) {
   plot.data <- filter.plot.view(data, view) %>%
     mutate(chrom = forcats::fct_drop(as.factor(chrom))) %>%
-    mutate(plot.key = if (view == "simulated") {
-      as.character(data.type)
-    } else {
-      as.character(pop)
-    })
+    mutate(
+      plot.key = if (view == "simulated") {
+        factor(as.character(data.type), levels = c(
+          "Simulation_small", "Simulation_large",
+          "Simulation_small_simDown", "Simulation_large_simDown"
+        ))
+      } else {
+        factor(as.character(pop), levels = c(
+          "AFR", "ADX", "EUR", "YRI", "ASW", "CEU"
+        ))
+      }
+    )
   chromosome.scope <- plot.data %>%
     filter(data.type != "Empirical") %>%
     pull(chrom) %>%
