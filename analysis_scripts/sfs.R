@@ -33,7 +33,8 @@ SOURCE.LEVELS <- c(
   "Simulation_small", "Simulation_large", "Simulation_small_simDown",
   "Simulation_large_simDown", "Empirical"
 )
-SFS.FACET.LEVELS <- c("1", "all")
+# SFS.FACET.LEVELS <- c("1", "all")
+SFS.FACET.LEVELS <- c("1")
 SFS.SERIES.LEVELS <- c(
   "small AFR", "small ADX", "small EUR",
   "large ADX", "small simDown AFR", "small simDown ADX",
@@ -537,31 +538,24 @@ make.singleton.composition.plot <- function(data) {
   plot <- ggplot(
     data,
     aes(
-      x = interaction(rep, pop, sep = "\n"),
+      x = pop,
       y = count,
-      fill = bin.range
+      fill = pop
     )
   ) +
     geom_col(width = 0.8) +
     facet_grid(
       rows = vars(data.type),
-      cols = vars(chrom),
+      cols = vars(bin.range),
       labeller = labeller(data.type = source.labels),
       drop = FALSE
     ) +
-    scale_fill_manual(
-      values = c(
-        "Singletons (bin 1)" = "#E44B8D",
-        "Bins 2-15" = "#9A83CE",
-        "Bins 16-50" = "#9BD5F2"
-      )
-    ) +
+    scale_fill_manual(values = c(AFR = "#56B4E9", EUR = "#FB8072")) +
     labs(
       x = "Replicate and population",
       y = "Segregating-site count",
       fill = "Minor allele count range",
-      title = "Singleton denominator composition",
-      subtitle = "Each bar is one population within one replicate"
+      title = "Singleton denominator composition from chrom. 1",
     ) +
     theme_bw(base_size = 18) +
     theme(
@@ -584,7 +578,6 @@ make.singleton.paired.plot <- function(data) {
     geom_point(aes(color = pop), size = 2.5) +
     facet_grid(
       rows = vars(data.type),
-      cols = vars(chrom),
       labeller = labeller(data.type = source.labels),
       drop = FALSE
     ) +
@@ -593,7 +586,7 @@ make.singleton.paired.plot <- function(data) {
       x = NULL,
       y = "Singleton proportion of segregating sites",
       color = "Population",
-      title = "Paired singleton proportions",
+      title = "Paired singleton proportions from chrom. 1",
       subtitle = "AFR and EUR are connected within each replicate"
     ) +
     theme_bw(base_size = 18) +
