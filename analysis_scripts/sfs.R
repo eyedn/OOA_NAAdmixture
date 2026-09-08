@@ -9,6 +9,10 @@
 # ______________________________________________________________________________
 
 
+# pattern: Mixed (unavoidable)
+# Reason: This executable analysis script combines pure SFS transformations with
+# producer reads and plot rendering.
+
 # set up ----
 library(tidyverse)
 library(furrr)
@@ -85,16 +89,23 @@ sfs.plot.subtitle <- function() {
 }
 
 
-# return a view-specific title only for proportion SFS plots
+# return a view-specific title for count and proportion SFS plots
 sfs.plot.title <- function(y.label, view) {
-  if (y.label != "Proportion of segregating sites") {
+  title.prefix <- switch(
+    y.label,
+    "Projected site count" = "SFS counts",
+    "Proportion of segregating sites" = "SFS",
+    NULL
+  )
+  if (is.null(title.prefix)) {
     return(NULL)
   }
-  title <- switch(
+  view.title <- switch(
     view,
-    small_empirical = "SFS: Small Simulation and Empirical",
-    simulated = "SFS: Simulated ADX"
+    small_empirical = "Small Simulation and Empirical",
+    simulated = "Simulated ADX"
   )
+  title <- paste(title.prefix, view.title, sep = ": ")
   return(title)
 }
 
@@ -310,6 +321,87 @@ prepare.sfs.analysis <- function(simulation, simDown = NULL, empirical = NULL) {
 }
 
 
+# prepare AFR/EUR singleton denominators for small simulation diagnostics
+prepare.singleton.diagnostics <- function(data) {
+  diagnostic.data <- data %>%
+    filter(
+      as.character(data.type) %in% c(
+        "Simulation_small", "Simulation_small_simDown"
+      ),
+      pop %in% c("AFR", "EUR")
+    ) %>%
+    mutate(
+      data.type = as.character(data.type),
+      chrom = as.character(chrom),
+      bin.range = case_when(
+        minor.allele.count == 1L ~ "Singletons (bin 1)",
+        minor.allele.count <= DISPLAY.BIN.MAX ~ "Bins 2-15",
+        TRUE ~ "Bins 16-50"
+      ),
+      bin.range = factor(
+        bin.range,
+        levels = c("Singletons (bin 1)", "Bins 2-15", "Bins 16-50")
+      )
+    )
+  group.columns <- c("data.set", "data.type", "rep", "chrom", "pop",
+                     "series")
+  composition <- diagnostic.data %>%
+    group_by(across(all_of(c(group.columns, "bin.range")))) %>%
+    summarize(count = sum(count), .groups = "drop")
+  partition.check <- composition %>%
+    group_by(across(all_of(group.columns))) %>%
+    summarize(
+      n.partitions = n(),
+      partition.total = sum(count),
+      .groups = "drop"
+    )
+  segregating.totals <- diagnostic.data %>%
+    group_by(across(all_of(group.columns))) %>%
+    summarize(segregating.total = sum(count), .groups = "drop")
+  if (any(partition.check$n.partitions != 3L)) {
+    stop("Every singleton diagnostic spectrum must have three partitions")
+  }
+  if (!isTRUE(all.equal(
+    partition.check$partition.total,
+    segregating.totals$segregating.total
+  ))) {
+    stop("Singleton diagnostic partitions do not sum to bins 1-50")
+  }
+  composition <- composition %>%
+    left_join(partition.check, by = group.columns) %>%
+    left_join(segregating.totals, by = group.columns)
+  primary.singletons <- diagnostic.data %>%
+    filter(minor.allele.count == 1L) %>%
+    select(
+      all_of(group.columns),
+      primary.singleton.proportion = proportion
+    )
+  paired <- composition %>%
+    filter(bin.range == "Singletons (bin 1)") %>%
+    transmute(
+      across(all_of(group.columns)),
+      singleton.proportion = count / segregating.total
+    ) %>%
+    left_join(primary.singletons, by = group.columns)
+  if (!isTRUE(all.equal(
+    paired$singleton.proportion,
+    paired$primary.singleton.proportion
+  ))) {
+    stop("Singleton diagnostic proportions do not match the primary SFS")
+  }
+  paired.populations <- paired %>%
+    group_by(data.type, rep, chrom) %>%
+    summarize(populations = list(sort(pop)), .groups = "drop")
+  if (!all(map_lgl(
+    paired.populations$populations,
+    ~ identical(.x, c("AFR", "EUR"))
+  ))) {
+    stop("Every paired singleton diagnostic needs AFR and EUR")
+  }
+  return(list(composition = composition, paired = paired))
+}
+
+
 # summarize simulation replicates and retain empirical NA intervals
 summarize.one.sfs.value <- function(data, value.column) {
   summary <- data %>%
@@ -423,12 +515,92 @@ make.sfs.plot <- function(data, value.column, y.label, pseudo.log, view) {
     theme(
       legend.position = "top", legend.direction = "horizontal", 
       legend.box = "horizontal", panel.grid.minor = element_blank()
-    )
+  )
   if (pseudo.log) {
-    plot <- plot + scale_y_continuous(trans = pseudo_log_trans())
+    plot <- plot +
+      scale_y_log10(
+        breaks = c(1e4, 2.5e4, 5e4, 1e5, 2.5e5, 5e5, 1e6),
+        labels = label_number(
+          scale_cut = cut_short_scale()
+        )
+      )
   } else {
     plot <- plot + scale_y_continuous()
   }
+  return(plot)
+}
+
+
+# build stacked count compositions for singleton-denominator diagnostics
+make.singleton.composition.plot <- function(data) {
+  source.labels <- PLOT.STYLES$series.labels
+  plot <- ggplot(
+    data,
+    aes(
+      x = interaction(rep, pop, sep = "\n"),
+      y = count,
+      fill = bin.range
+    )
+  ) +
+    geom_col(width = 0.8) +
+    facet_grid(
+      rows = vars(data.type),
+      cols = vars(chrom),
+      labeller = labeller(data.type = source.labels),
+      drop = FALSE
+    ) +
+    scale_fill_manual(
+      values = c(
+        "Singletons (bin 1)" = "#E44B8D",
+        "Bins 2-15" = "#9A83CE",
+        "Bins 16-50" = "#9BD5F2"
+      )
+    ) +
+    labs(
+      x = "Replicate and population",
+      y = "Segregating-site count",
+      fill = "Minor allele count range",
+      title = "Singleton denominator composition",
+      subtitle = "Each bar is one population within one replicate"
+    ) +
+    theme_bw(base_size = 18) +
+    theme(
+      legend.position = "top",
+      panel.grid.minor = element_blank(),
+      axis.text.x = element_text(angle = 45, hjust = 1)
+    )
+  return(plot)
+}
+
+
+# build paired AFR/EUR singleton proportions from the primary denominator
+make.singleton.paired.plot <- function(data) {
+  source.labels <- PLOT.STYLES$series.labels
+  plot <- ggplot(
+    data,
+    aes(x = pop, y = singleton.proportion, group = rep)
+  ) +
+    geom_line(color = "grey40", alpha = 0.7) +
+    geom_point(aes(color = pop), size = 2.5) +
+    facet_grid(
+      rows = vars(data.type),
+      cols = vars(chrom),
+      labeller = labeller(data.type = source.labels),
+      drop = FALSE
+    ) +
+    scale_color_manual(values = c(AFR = "#56B4E9", EUR = "#FB8072")) +
+    labs(
+      x = NULL,
+      y = "Singleton proportion of segregating sites",
+      color = "Population",
+      title = "Paired singleton proportions",
+      subtitle = "AFR and EUR are connected within each replicate"
+    ) +
+    theme_bw(base_size = 18) +
+    theme(
+      legend.position = "top",
+      panel.grid.minor = element_blank()
+    )
   return(plot)
 }
 
@@ -489,6 +661,7 @@ sfs.data <- prepare.sfs.analysis(
   sfs.inputs$empirical
 )
 sfs.summaries <- summarize.sfs.analysis(sfs.data)
+singleton.diagnostics <- prepare.singleton.diagnostics(sfs.data)
 
 sfs.small.empirical.count.plot <- make.sfs.plot(
   sfs.summaries$count,
@@ -514,8 +687,16 @@ sfs.simulated.proportion.plot <- make.sfs.plot(
   "Proportion of segregating sites",
   FALSE, "simulated"
 )
+singleton.composition.plot <- make.singleton.composition.plot(
+  singleton.diagnostics$composition
+)
+singleton.paired.plot <- make.singleton.paired.plot(
+  singleton.diagnostics$paired
+)
 
 print(sfs.small.empirical.count.plot)
 print(sfs.simulated.count.plot)
 print(sfs.small.empirical.proportion.plot)
 print(sfs.simulated.proportion.plot)
+print(singleton.composition.plot)
+print(singleton.paired.plot)
