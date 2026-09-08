@@ -515,7 +515,7 @@ sfs.simulated.proportion.plot <- make.sfs.plot(
   FALSE, "simulated"
 )
 
-# print(sfs.small.empirical.count.plot)
-# print(sfs.simulated.count.plot)
+print(sfs.small.empirical.count.plot)
+print(sfs.simulated.count.plot)
 print(sfs.small.empirical.proportion.plot)
 print(sfs.simulated.proportion.plot)
