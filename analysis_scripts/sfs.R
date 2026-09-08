@@ -415,7 +415,18 @@ prepare.singleton.diagnostics <- function(data) {
   if (!all(paired.populations$valid)) {
     stop("Every singleton diagnostic needs its configured population pair")
   }
-  return(list(composition = composition, paired = paired))
+  simulation.sources <- c("Simulation_small", "Simulation_small_simDown")
+  diagnostics <- list(
+    simulation = list(
+      composition = composition %>% filter(data.type %in% simulation.sources),
+      paired = paired %>% filter(data.type %in% simulation.sources)
+    ),
+    empirical = list(
+      composition = composition %>% filter(data.type == "Empirical"),
+      paired = paired %>% filter(data.type == "Empirical")
+    )
+  )
+  return(diagnostics)
 }
 
 
@@ -608,18 +619,24 @@ make.sfs.plot <- function(data, value.column, y.label, pseudo.log, view) {
 }
 
 
-# build stacked count compositions for singleton-denominator diagnostics
-make.singleton.composition.plot <- function(data) {
+# build simulation count compositions with empirical population references
+make.singleton.composition.plot <- function(data, empirical) {
   source.labels <- PLOT.STYLES$series.labels
   plot <- ggplot(
     data,
     aes(
-      x = interaction(rep, pop, sep = "\n"),
+      x = factor(rep),
       y = count,
-      fill = pop
+      fill = pop,
+      group = pop
     )
   ) +
-    geom_col(width = 0.8) +
+    geom_col(position = SFS.DODGE, width = 0.8) +
+    geom_hline(
+      data = empirical %>% select(bin.range, pop, count),
+      aes(yintercept = count, color = pop),
+      linewidth = 0.8
+    ) +
     facet_grid(
       rows = vars(data.type),
       cols = vars(bin.range),
@@ -628,15 +645,18 @@ make.singleton.composition.plot <- function(data) {
     ) +
     scale_fill_manual(values = c(
       AFR = "#56B4E9",
-      EUR = "#FB8072",
+      EUR = "#FB8072"
+    )) +
+    scale_color_manual(values = c(
       YRI = "#EEC4DC",
       CEU = "#BB437E"
     )) +
     labs(
-      x = "Replicate and population",
+      x = "Replicate",
       y = "Segregating-site count",
-      fill = "Population",
-      title = "Singleton denominator composition",
+      fill = "Simulation population",
+      color = "Empirical reference",
+      title = "Singleton denominator composition"
     ) +
     theme_bw(base_size = 18) +
     theme(
@@ -648,15 +668,20 @@ make.singleton.composition.plot <- function(data) {
 }
 
 
-# build paired singleton proportions from the primary denominator
-make.singleton.paired.plot <- function(data) {
+# build paired simulation singleton proportions with empirical references
+make.singleton.paired.plot <- function(data, empirical) {
   source.labels <- PLOT.STYLES$series.labels
   plot <- ggplot(
-    data,
+    data %>% mutate(pop = factor(pop, levels = c("AFR", "EUR"))),
     aes(x = pop, y = singleton.proportion, group = rep)
   ) +
     geom_line(color = "grey40", alpha = 0.7) +
     geom_point(aes(color = pop), size = 2.5) +
+    geom_hline(
+      data = empirical %>% select(pop, singleton.proportion),
+      aes(yintercept = singleton.proportion, color = pop),
+      linewidth = 0.8
+    ) +
     facet_grid(
       rows = vars(data.type),
       labeller = labeller(data.type = source.labels),
@@ -671,7 +696,7 @@ make.singleton.paired.plot <- function(data) {
     labs(
       x = NULL,
       y = "Singleton proportion of segregating sites",
-      color = "Population",
+      color = "Population and empirical reference",
       title = "Paired singleton proportions",
       subtitle = "Configured populations are connected within each replicate"
     ) +
@@ -684,7 +709,7 @@ make.singleton.paired.plot <- function(data) {
 }
 
 
-# build a four-panel SFS difference plot for population pairs and measures
+# build a two-row SFS difference plot with all source pairs overlaid
 make.population.difference.plot <- function(data) {
   source.labels <- PLOT.STYLES$series.labels
   source.colors <- c(
@@ -709,7 +734,7 @@ make.population.difference.plot <- function(data) {
       geom = "line",
       linewidth = 1
     ) +
-    facet_grid(comparison ~ measure, scales = "free_y", drop = FALSE) +
+    facet_grid(measure ~ ., scales = "free_y", drop = FALSE) +
     scale_x_continuous(breaks = seq_len(DISPLAY.BIN.MAX)) +
     scale_color_manual(
       values = source.colors,
@@ -721,7 +746,10 @@ make.population.difference.plot <- function(data) {
       y = "Left population minus right population",
       color = NULL,
       title = "Population differences across shown SFS bins",
-      subtitle = "Thin lines are replicates; thick lines are source means"
+      subtitle = paste(
+        "Thin lines are replicates; thick lines are source means.",
+        "Simulations: AFR - EUR. Empirical: YRI - CEU."
+      )
     ) +
     theme_bw(base_size = 18) +
     theme(
@@ -816,10 +844,12 @@ sfs.simulated.proportion.plot <- make.sfs.plot(
   FALSE, "simulated"
 )
 singleton.composition.plot <- make.singleton.composition.plot(
-  singleton.diagnostics$composition
+  singleton.diagnostics$simulation$composition,
+  singleton.diagnostics$empirical$composition
 )
 singleton.paired.plot <- make.singleton.paired.plot(
-  singleton.diagnostics$paired
+  singleton.diagnostics$simulation$paired,
+  singleton.diagnostics$empirical$paired
 )
 population.difference.plot <- make.population.difference.plot(
   population.differences
