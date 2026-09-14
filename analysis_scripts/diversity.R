@@ -8,22 +8,40 @@
 # diversity.R
 # ______________________________________________________________________________
 
+# pattern: Mixed (unavoidable)
+# Reason: Plot preparation and HPC file orchestration intentionally share one
+# analysis script.
+
 
 # set up ----
 library(tidyverse)
 library(nanoparquet)
 
 
-SIM.SMALL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_small/stats"
-SIMDOWN.SMALL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_smallOnekgDownsample/stats"
-SIM.LARGE.DATA.DIR <- "~/scratch/OOA_NAAdmixture_large/stats"
-SIMDOWN.LARGE.DATA.DIR <- "~/scratch/OOA_NAAdmixture_largeOnekgDownsample/stats"
+SIM.TC.DATA.DIR <- "~/scratch/OOA_NAAdmixture_small/stats"
+SIMDOWN.TC.DATA.DIR <- file.path(
+  "~/scratch/OOA_NAAdmixture_smallOnekgDownsample", "stats"
+)
+SIM.LG.DATA.DIR <- "~/scratch/OOA_NAAdmixture_large/stats"
+SIMDOWN.LG.DATA.DIR <- file.path(
+  "~/scratch/OOA_NAAdmixture_largeOnekgDownsample", "stats"
+)
 EMPIRICAL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_1kG/stats"
+OUTPUT.DIR <- "/home1/karatas/proj/OOA_NAAdmixture_data"
 CHROMOSOMES <- as.character(1:22)
-SELECTED.CHROMOSOMES <- c("1")
+SELECTED.CHROMOSOMES <- c("1", "18")
 SOURCE.LEVELS <- c(
-  "Simulation_small", "Simulation_large", "Simulation_small_simDown",
-  "Simulation_large_simDown", "Empirical"
+  "Simulation_2T12Consistent",
+  "Simulation_2T12Consistent_simDown",
+  "Simulation_largeGrowth",
+  "Simulation_largeGrowth_simDown",
+  "Empirical"
+)
+PLOT.CONFIGS <- list(
+  TC.1kG = SOURCE.LEVELS[c(1, 5)],
+  TC.TCD = SOURCE.LEVELS[c(1, 2)],
+  TCD.1kG = SOURCE.LEVELS[c(2, 5)],
+  onlyADX = SOURCE.LEVELS[1:4]
 )
 PLOT.BASE.SIZE <- 24
 PLOT.STYLES <- list(
@@ -32,24 +50,25 @@ PLOT.STYLES <- list(
     YRI = "#eec4dc", ASW = "#e44b8d", CEU = "#bb437e"
   ),
   fill.colors = c(
-    "small AFR" = "#9BD5F2", "small ADX" = "#9A83CE",
-    "small EUR" = "#FBB4AE", "large ADX" = "#32146F",
-    "small simDown AFR" = "#56B4E9",
-    "small simDown ADX" = "#6F55B5",
-    "small simDown EUR" = "#FB8072",
-    "large simDown ADX" = "#4B1FA8",
+    "TC AFR" = "#9BD5F2", "TC ADX" = "#9A83CE",
+    "TC EUR" = "#FBB4AE",
+    "TC D. AFR" = "#56B4E9",
+    "TC D. ADX" = "#6F55B5",
+    "TC D. EUR" = "#FB8072",
+    "LG ADX" = "#32146F",
+    "LG D. ADX" = "#4B1FA8",
     "empirical YRI" = "#EEC4DC", "empirical ASW" = "#E44B8D",
     "empirical CEU" = "#BB437E"
   ),
   fill.labels = c(
-    "small AFR" = "Sm. Sim. AFR",
-    "small ADX" = "Sm. Sim. ADX",
-    "small EUR" = "Sm. Sim. EUR",
-    "large ADX" = "Lg. Sim. ADX",
-    "small simDown AFR" = "Sm. D. Sim. AFR",
-    "small simDown ADX" = "Sm. D. Sim. ADX",
-    "small simDown EUR" = "Sm. D. Sim. EUR",
-    "large simDown ADX" = "Lg. D. Sim. ADX",
+    "TC AFR" = "TC AFR",
+    "TC ADX" = "TC ADX",
+    "TC EUR" = "TC EUR",
+    "TC D. AFR" = "TC D. AFR",
+    "TC D. ADX" = "TC D. ADX",
+    "TC D. EUR" = "TC D. EUR",
+    "LG ADX" = "LG ADX",
+    "LG D. ADX" = "LG D. ADX",
     "empirical YRI" = "Emp. YRI",
     "empirical ASW" = "Emp. ASW",
     "empirical CEU" = "Emp. CEU"
@@ -68,10 +87,10 @@ apply.diversity.source.contract <- function(data) {
   retained <- data %>%
     filter(
       (data.type %in% c(
-        "Simulation_small", "Simulation_small_simDown"
+        "Simulation_2T12Consistent", "Simulation_2T12Consistent_simDown"
       ) & pop %in% c("AFR", "ADX", "EUR")) |
         (data.type %in% c(
-          "Simulation_large", "Simulation_large_simDown"
+          "Simulation_largeGrowth", "Simulation_largeGrowth_simDown"
         ) & pop == "ADX") |
         (data.type == "Empirical" & pop %in% c("AFR", "ADX", "EUR",
                                                 "YRI", "ASW", "CEU"))
@@ -129,6 +148,19 @@ read.diversity.chromosomes <- function(
     path.expand(data.directory),
     str_replace(file.family, fixed("{chrom}"), chromosomes)
   )
+  missing <- !file.exists(paths)
+  if (any(missing)) {
+    warning(
+      paste0(
+        data.type.input, " ", file.family,
+        " is unavailable for chromosomes: ",
+        paste(chromosomes[missing], collapse = ", ")
+      ),
+      call. = FALSE
+    )
+  }
+  paths <- paths[!missing]
+  chromosomes <- chromosomes[!missing]
   data <- map2_dfr(paths, chromosomes, function(path, chrom) {
     table <- read_parquet(path)
     table$chrom <- chrom
@@ -225,11 +257,11 @@ build.diversity.plot.data <- function(
       mask = factor(mask, levels = c("Intergenic", "Full callable")),
       stat = factor(stat, levels = c("pi", "theta")),
       fill.key = factor(case_when(
-        data.type == "Simulation_small" ~ paste("small", pop),
-        data.type == "Simulation_large" ~ "large ADX",
-        data.type == "Simulation_small_simDown" ~
-          paste("small simDown", pop),
-        data.type == "Simulation_large_simDown" ~ "large simDown ADX",
+        data.type == "Simulation_2T12Consistent" ~ paste("TC", pop),
+        data.type == "Simulation_largeGrowth" ~ "LG ADX",
+        data.type == "Simulation_2T12Consistent_simDown" ~
+          paste("TC D.", pop),
+        data.type == "Simulation_largeGrowth_simDown" ~ "LG D. ADX",
         data.type == "Empirical" ~ paste("empirical", pop)
       ), levels = names(PLOT.STYLES$fill.colors))
     )
@@ -246,24 +278,21 @@ build.diversity.plot.data <- function(
 }
 
 
-# retain one diversity view and its eligible empirical references
-filter.diversity.plot.view <- function(points, genome.lines, view) {
-  sources <- switch(
-    view,
-    small_empirical = c(
-      "Simulation_small", "Simulation_small_simDown", "Empirical"
-    ),
-    simulated = c(
-      "Simulation_small", "Simulation_large", "Simulation_small_simDown",
-      "Simulation_large_simDown"
-    ),
-    stop("Unsupported diversity plot view: ", view)
-  )
+# retain one configured diversity view and its eligible empirical references
+filter.diversity.plot.view <- function(
+    points, genome.lines, data.types, tag
+) {
+  if (!tag %in% names(PLOT.CONFIGS)) {
+    stop("Unsupported diversity plot tag: ", tag)
+  }
+  if (!identical(data.types, PLOT.CONFIGS[[tag]])) {
+    stop("Diversity data types do not match the configured tag")
+  }
   view.points <- points %>%
-    filter(as.character(data.type) %in% sources) %>%
-    filter(view != "simulated" | pop == "ADX") %>%
+    filter(as.character(data.type) %in% data.types) %>%
+    filter(tag != "onlyADX" | pop == "ADX") %>%
     mutate(
-      data.type = factor(as.character(data.type), levels = sources),
+      data.type = factor(as.character(data.type), levels = data.types),
       fill.key = factor(
         as.character(fill.key),
         levels = names(PLOT.STYLES$fill.colors)[
@@ -273,15 +302,22 @@ filter.diversity.plot.view <- function(points, genome.lines, view) {
     ) %>%
     arrange(data.type, fill.key) %>%
     droplevels()
-  view.lines <- if (view == "small_empirical") genome.lines else {
+  view.lines <- if ("Empirical" %in% data.types) genome.lines else {
     genome.lines[0, , drop = FALSE]
   }
   return(list(points = view.points, genome.lines = view.lines))
 }
 
 
-# construct the selected-chromosome diversity plot
-make.diversity.plot <- function(points, genome.lines, styles) {
+# construct one configured selected-chromosome diversity plot
+make.diversity.plot <- function(
+    points, genome.lines, styles, data.types, tag
+) {
+  view <- filter.diversity.plot.view(
+    points, genome.lines, data.types, tag
+  )
+  points <- view$points
+  genome.lines <- view$genome.lines
   dodge <- position_dodge(width = 0.75)
   fill.keys <- names(styles$fill.colors)[
     names(styles$fill.colors) %in% as.character(points$fill.key)
@@ -320,7 +356,7 @@ make.diversity.plot <- function(points, genome.lines, styles) {
       breaks = fill.keys,
       labels = styles$fill.labels[fill.keys],
       limits = fill.keys,
-      drop = FALSE
+      drop = TRUE
     ) +
     scale_y_continuous(
       labels = scales::label_number(accuracy = 0.00001)
@@ -352,46 +388,46 @@ make.diversity.plot <- function(points, genome.lines, styles) {
 # analysis ----
 
 
-# read selected-chromosome simulation diversity estimates
-sim.small.diversity <- read.diversity.chromosomes(
-  SIM.SMALL.DATA.DIR, "pi_theta_stats.chr{chrom}.parquet",
-  SELECTED.CHROMOSOMES, "Simulation_small"
+# read all available chromosome-level simulation diversity estimates
+sim.tc.diversity <- read.diversity.chromosomes(
+  SIM.TC.DATA.DIR, "pi_theta_stats.chr{chrom}.parquet",
+  CHROMOSOMES, "Simulation_2T12Consistent"
 )
-simDown.small.intergenic.diversity <- read.diversity.chromosomes(
-  SIMDOWN.SMALL.DATA.DIR,
+simDown.tc.intergenic.diversity <- read.diversity.chromosomes(
+  SIMDOWN.TC.DATA.DIR,
   "pi_theta_stats_intergenic.chr{chrom}.parquet",
-  SELECTED.CHROMOSOMES, "Simulation_small_simDown", "Intergenic"
+  CHROMOSOMES, "Simulation_2T12Consistent_simDown", "Intergenic"
 )
-simDown.small.full.callable.diversity <- read.diversity.chromosomes(
-  SIMDOWN.SMALL.DATA.DIR,
+simDown.tc.full.callable.diversity <- read.diversity.chromosomes(
+  SIMDOWN.TC.DATA.DIR,
   "pi_theta_stats_full_callable_chrom.chr{chrom}.parquet",
-  SELECTED.CHROMOSOMES, "Simulation_small_simDown", "Full callable"
+  CHROMOSOMES, "Simulation_2T12Consistent_simDown", "Full callable"
 )
-sim.large.diversity <- read.diversity.chromosomes(
-  SIM.LARGE.DATA.DIR, "pi_theta_stats.chr{chrom}.parquet",
-  SELECTED.CHROMOSOMES, "Simulation_large"
+sim.lg.diversity <- read.diversity.chromosomes(
+  SIM.LG.DATA.DIR, "pi_theta_stats.chr{chrom}.parquet",
+  CHROMOSOMES, "Simulation_largeGrowth"
 )
-simDown.large.intergenic.diversity <- read.diversity.chromosomes(
-  SIMDOWN.LARGE.DATA.DIR,
+simDown.lg.intergenic.diversity <- read.diversity.chromosomes(
+  SIMDOWN.LG.DATA.DIR,
   "pi_theta_stats_intergenic.chr{chrom}.parquet",
-  SELECTED.CHROMOSOMES, "Simulation_large_simDown", "Intergenic"
+  CHROMOSOMES, "Simulation_largeGrowth_simDown", "Intergenic"
 )
-simDown.large.full.callable.diversity <- read.diversity.chromosomes(
-  SIMDOWN.LARGE.DATA.DIR,
+simDown.lg.full.callable.diversity <- read.diversity.chromosomes(
+  SIMDOWN.LG.DATA.DIR,
   "pi_theta_stats_full_callable_chrom.chr{chrom}.parquet",
-  SELECTED.CHROMOSOMES, "Simulation_large_simDown", "Full callable"
+  CHROMOSOMES, "Simulation_largeGrowth_simDown", "Full callable"
 )
 
-# read selected-chromosome empirical diversity estimates
+# read all available chromosome-level empirical diversity estimates
 emp.intergenic.chromosome <- read.diversity.chromosomes(
   EMPIRICAL.DATA.DIR,
   "pi_theta_stats_intergenic.chr{chrom}.parquet",
-  SELECTED.CHROMOSOMES, "Empirical", "Intergenic"
+  CHROMOSOMES, "Empirical", "Intergenic"
 )
 emp.full.callable.chromosome <- read.diversity.chromosomes(
   EMPIRICAL.DATA.DIR,
   "pi_theta_stats_full_callable_chrom.chr{chrom}.parquet",
-  SELECTED.CHROMOSOMES, "Empirical", "Full callable"
+  CHROMOSOMES, "Empirical", "Full callable"
 )
 
 # read genome-wide empirical diversity references
@@ -404,14 +440,14 @@ emp.full.callable.genome <- read.diversity.genome(
   "pi_theta_stats_full_callable_chrom.parquet", "Full callable"
 )
 
-# summarize sources and construct the two diversity views
+# summarize sources and construct all configured diversity views
 simulation.diversity.summary <- bind_rows(
-  sim.small.diversity,
-  simDown.small.intergenic.diversity,
-  simDown.small.full.callable.diversity,
-  sim.large.diversity,
-  simDown.large.intergenic.diversity,
-  simDown.large.full.callable.diversity
+  sim.tc.diversity,
+  simDown.tc.intergenic.diversity,
+  simDown.tc.full.callable.diversity,
+  sim.lg.diversity,
+  simDown.lg.intergenic.diversity,
+  simDown.lg.full.callable.diversity
 ) %>%
   summarize.simulation.diversity()
 diversity.plot.data <- build.diversity.plot.data(
@@ -422,22 +458,21 @@ diversity.plot.data <- build.diversity.plot.data(
   bind_rows(emp.intergenic.genome, emp.full.callable.genome),
   SELECTED.CHROMOSOMES
 )
-diversity.small.empirical.data <- filter.diversity.plot.view(
-  diversity.plot.data$points, diversity.plot.data$genome.lines,
-  "small_empirical"
-)
-diversity.simulated.data <- filter.diversity.plot.view(
-  diversity.plot.data$points, diversity.plot.data$genome.lines, "simulated"
-)
-diversity.small.empirical.plot <- make.diversity.plot(
-  diversity.small.empirical.data$points,
-  diversity.small.empirical.data$genome.lines,
-  PLOT.STYLES
-)
-diversity.simulated.plot <- make.diversity.plot(
-  diversity.simulated.data$points,
-  diversity.simulated.data$genome.lines,
-  PLOT.STYLES
-)
-print(diversity.small.empirical.plot)
-print(diversity.simulated.plot)
+diversity.plots <- imap(PLOT.CONFIGS, function(data.types, tag) {
+  return(make.diversity.plot(
+    diversity.plot.data$points,
+    diversity.plot.data$genome.lines,
+    PLOT.STYLES, data.types, tag
+  ))
+})
+
+# persist every plot before printing figures at the end of the script
+dir.create(OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
+iwalk(diversity.plots, function(plot, tag) {
+  saveRDS(plot, file.path(
+    OUTPUT.DIR,
+    str_replace("diversity.{tag}.rds", fixed("{tag}"), tag)
+  ))
+})
+
+walk(diversity.plots, print)

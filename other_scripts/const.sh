@@ -71,9 +71,8 @@ NUM_REPS="2"
 SAMPLE_SIZE="500"
 MSPRIME_MODEL="dtwf"
 
-# outputs directory for simulations; note OUT_DIR should either ends in a
-# "_small" or "_large" to differentiate between the 2 admixed Ne trajectories
-OUT_DIR="/home1/karatas/scratch/OOA_NAAdmixture_small"
+# outputs directory for simulations; the suffix selects the admixed Ne path
+OUT_DIR="/home1/karatas/scratch/OOA_NAAdmixture_2T12Consistent"
 TREE_DIR="${OUT_DIR}/trees"
 PICKLED_DEMO_META="${OUT_DIR}/pickled_demo_meta"
 VCF_DIR="${OUT_DIR}/vcfs"
@@ -122,9 +121,10 @@ ADMIX_FOUNDER_AFR_COUNT=183
 ADMIX_FOUNDER_EUR_COUNT=25
 ADMIX_MODERN_GROWTH_RATE="0.023175"
 
-if [[ "${OUT_DIR}" == *small ]]; then
-    # ADMIX_NE_BY_GENERATION following Tennessen consistency
-    ADMIX_NE_BY_GENERATION=(
+case "${OUT_DIR}" in
+    *_2T12Consistent)
+        # ADMIX_NE_BY_GENERATION following Tennessen consistency
+        ADMIX_NE_BY_GENERATION=(
         493.7874
         5755.8703
         15296.0328
@@ -140,10 +140,11 @@ if [[ "${OUT_DIR}" == *small ]]; then
         502101.5888
         513873.6753
         525921.7657
-    )
-else
-    # ADMIX_NE_BY_GENERATION following Hacker/Mooney/Schraiber consistency
-    ADMIX_NE_BY_GENERATION=(
+        )
+        ;;
+    *_largeGrowth)
+        # ADMIX_NE_BY_GENERATION following Hacker/Mooney/Schraiber consistency
+        ADMIX_NE_BY_GENERATION=(
         493.7874
         5755.8703
         15296.0328
@@ -159,8 +160,13 @@ else
         3562033.8225
         3645547.9384
         3731020.0950
-    )
-fi
+        )
+        ;;
+    *)
+        echo "ERROR: unsupported simulation OUT_DIR suffix: ${OUT_DIR}" >&2
+        exit 1
+        ;;
+esac
 
 ADMIX_AFR_PROPS_BY_GENERATION=(
     0.850000

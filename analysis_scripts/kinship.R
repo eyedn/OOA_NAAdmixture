@@ -8,6 +8,10 @@
 # kinship.R
 # ______________________________________________________________________________
 
+# pattern: Mixed (unavoidable)
+# Reason: Plot preparation and HPC file orchestration intentionally share one
+# analysis script.
+
 
 # set up ----
 library(tidyverse)
@@ -15,16 +19,30 @@ library(glue)
 library(nanoparquet)
 
 
-SIM.SMALL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_small/stats"
-SIMDOWN.SMALL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_smallOnekgDownsample/stats"
-SIM.LARGE.DATA.DIR <- "~/scratch/OOA_NAAdmixture_large/stats"
-SIMDOWN.LARGE.DATA.DIR <- "~/scratch/OOA_NAAdmixture_largeOnekgDownsample/stats"
+SIM.TC.DATA.DIR <- "~/scratch/OOA_NAAdmixture_small/stats"
+SIMDOWN.TC.DATA.DIR <- file.path(
+  "~/scratch/OOA_NAAdmixture_smallOnekgDownsample", "stats"
+)
+SIM.LG.DATA.DIR <- "~/scratch/OOA_NAAdmixture_large/stats"
+SIMDOWN.LG.DATA.DIR <- file.path(
+  "~/scratch/OOA_NAAdmixture_largeOnekgDownsample", "stats"
+)
 EMPIRICAL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_1kG/stats"
+OUTPUT.DIR <- "/home1/karatas/proj/OOA_NAAdmixture_data"
 CHROMOSOMES <- as.character(1:22)
-SELECTED.CHROMOSOMES <- c("1")
+SELECTED.CHROMOSOMES <- c("1", "18")
 SOURCE.LEVELS <- c(
-  "Simulation_small", "Simulation_large", "Simulation_small_simDown",
-  "Simulation_large_simDown", "Empirical"
+  "Simulation_2T12Consistent",
+  "Simulation_2T12Consistent_simDown",
+  "Simulation_largeGrowth",
+  "Simulation_largeGrowth_simDown",
+  "Empirical"
+)
+PLOT.CONFIGS <- list(
+  TC.1kG = SOURCE.LEVELS[c(1, 5)],
+  TC.TCD = SOURCE.LEVELS[c(1, 2)],
+  TCD.1kG = SOURCE.LEVELS[c(2, 5)],
+  onlyADX = SOURCE.LEVELS[1:4]
 )
 KINSHIP.BIN.WIDTH <- 0.01
 PLOT.BASE.SIZE <- 24
@@ -34,15 +52,16 @@ PLOT.STYLES <- list(
     YRI = "#eec4dc", ASW = "#e44b8d", CEU = "#bb437e"
   ),
   source.colors = c(
-    Simulation_small = "#9A83CE", Simulation_large = "#32146F",
-    Simulation_small_simDown = "#6F55B5",
-    Simulation_large_simDown = "#4B1FA8"
+    Simulation_2T12Consistent = "#9A83CE",
+    Simulation_2T12Consistent_simDown = "#6F55B5",
+    Simulation_largeGrowth = "#32146F",
+    Simulation_largeGrowth_simDown = "#4B1FA8"
   ),
   series.labels = c(
-    Simulation_small = "Sm. Sim.",
-    Simulation_large = "Lg. Sim.",
-    Simulation_small_simDown = "Sm. D. Sim.",
-    Simulation_large_simDown = "Lg. D. Sim.",
+    Simulation_2T12Consistent = "TC",
+    Simulation_2T12Consistent_simDown = "TC D.",
+    Simulation_largeGrowth = "LG",
+    Simulation_largeGrowth_simDown = "LG D.",
     Empirical = "Emp."
   )
 )
@@ -56,10 +75,10 @@ apply.kinship.source.contract <- function(data) {
   retained <- data %>%
     filter(
       (data.type %in% c(
-        "Simulation_small", "Simulation_small_simDown"
+        "Simulation_2T12Consistent", "Simulation_2T12Consistent_simDown"
       ) & pop %in% c("AFR", "ADX", "EUR")) |
         (data.type %in% c(
-          "Simulation_large", "Simulation_large_simDown"
+          "Simulation_largeGrowth", "Simulation_largeGrowth_simDown"
         ) & pop == "ADX") |
         (data.type == "Empirical" & pop %in% c("AFR", "ADX", "EUR",
                                                 "YRI", "ASW", "CEU"))
@@ -122,8 +141,21 @@ read.kinship.chromosomes <- function(
 ) {
   paths <- file.path(
     path.expand(data.directory),
-    glue("kinship_unrelated.chr{chromosomes}.parquet")
+    glue::glue("kinship_unrelated.chr{chromosomes}.parquet")
   )
+  missing <- !file.exists(paths)
+  if (any(missing)) {
+    warning(
+      paste0(
+        data.type.input,
+        " kinship files are unavailable for chromosomes: ",
+        paste(chromosomes[missing], collapse = ", ")
+      ),
+      call. = FALSE
+    )
+  }
+  paths <- paths[!missing]
+  chromosomes <- chromosomes[!missing]
   data <- map2_dfr(paths, chromosomes, function(path, chrom) {
     table <- read_parquet(path)
     table$chrom <- chrom
@@ -311,38 +343,35 @@ summarize.kinship.histograms <- function(data) {
 }
 
 
-# construct the pairwise kinship distribution plot
-filter.plot.view <- function(data, view) {
-  sources <- switch(
-    view,
-    small_empirical = c(
-      "Simulation_small", "Simulation_small_simDown", "Empirical"
-    ),
-    simulated = c(
-      "Simulation_small", "Simulation_large", "Simulation_small_simDown",
-      "Simulation_large_simDown"
-    ),
-    stop("Unsupported kinship plot view: ", view)
-  )
+# retain one configured pairwise kinship view
+filter.plot.view <- function(data, data.types, tag) {
+  if (!tag %in% names(PLOT.CONFIGS)) {
+    stop("Unsupported kinship plot tag: ", tag)
+  }
+  if (!identical(data.types, PLOT.CONFIGS[[tag]])) {
+    stop("Kinship data types do not match the configured tag")
+  }
   filtered <- data %>%
-    filter(as.character(data.type) %in% sources) %>%
-    filter(view != "simulated" | pop == "ADX") %>%
-    mutate(data.type = factor(as.character(data.type), levels = sources)) %>%
-    arrange(data.type)
+    filter(as.character(data.type) %in% data.types) %>%
+    filter(tag != "onlyADX" | pop == "ADX") %>%
+    mutate(data.type = factor(as.character(data.type), levels = data.types)) %>%
+    arrange(data.type) %>%
+    droplevels()
   return(filtered)
 }
 
 
 # construct one scoped pairwise kinship distribution plot
-make.kinship.plot <- function(data, breaks, styles, view) {
-  plot.data <- filter.plot.view(data, view) %>%
+make.kinship.plot <- function(
+    data, breaks, styles, data.types, tag
+) {
+  source.view <- tag == "onlyADX"
+  plot.data <- filter.plot.view(data, data.types, tag) %>%
+    filter(as.character(chrom) %in% SELECTED.CHROMOSOMES) %>%
     mutate(chrom = forcats::fct_drop(as.factor(chrom))) %>%
     mutate(
-      plot.key = if (view == "simulated") {
-        factor(as.character(data.type), levels = c(
-          "Simulation_small", "Simulation_large",
-          "Simulation_small_simDown", "Simulation_large_simDown"
-        ))
+      plot.key = if (source.view) {
+        factor(as.character(data.type), levels = data.types)
       } else {
         factor(as.character(pop), levels = c(
           "AFR", "ADX", "EUR", "YRI", "ASW", "CEU"
@@ -376,26 +405,22 @@ make.kinship.plot <- function(data, breaks, styles, view) {
         data.type = as_labeller(styles$series.labels)
       )
     ) +
-    scale_fill_manual(values = if (view == "simulated") {
+    scale_fill_manual(values = if (source.view) {
       styles$source.colors
     } else {
       styles$population.colors
-    }, breaks = if (view == "simulated") {
-      names(styles$source.colors)
+    }, breaks = if (source.view) {
+      data.types
     } else {
       names(styles$population.colors)
-    }, labels = if (view == "simulated") {
-      styles$series.labels[names(styles$source.colors)]
+    }, labels = if (source.view) {
+      styles$series.labels[data.types]
     } else {
       waiver()
     }) +
     labs(
       x = "Pairwise KING Kinship", y = "Fraction of pairs",
-      title = if (view == "simulated") {
-        "Pairwise KING Kinship Distributions: Simulated ADX"
-      } else {
-        "Pairwise KING Kinship Distributions: Small Simulation and Empirical"
-      },
+      title = paste("Pairwise KING Kinship Distributions:", tag),
       fill = NULL
     ) +
     xlim(-0.2, 0.0442) +
@@ -418,23 +443,23 @@ make.kinship.plot <- function(data, breaks, styles, view) {
 # analysis ----
 
 
-# read selected-chromosome simulation and empirical kinship estimates
-sim.small.kinship <- read.kinship.chromosomes(
-  SIM.SMALL.DATA.DIR, SELECTED.CHROMOSOMES, "Simulation_small"
+# read all available chromosome-level simulation and empirical estimates
+sim.tc.kinship <- read.kinship.chromosomes(
+  SIM.TC.DATA.DIR, CHROMOSOMES, "Simulation_2T12Consistent"
 )
-simDown.small.kinship <- read.kinship.chromosomes(
-  SIMDOWN.SMALL.DATA.DIR, SELECTED.CHROMOSOMES,
-  "Simulation_small_simDown"
+simDown.tc.kinship <- read.kinship.chromosomes(
+  SIMDOWN.TC.DATA.DIR, CHROMOSOMES,
+  "Simulation_2T12Consistent_simDown"
 )
-sim.large.kinship <- read.kinship.chromosomes(
-  SIM.LARGE.DATA.DIR, SELECTED.CHROMOSOMES, "Simulation_large"
+sim.lg.kinship <- read.kinship.chromosomes(
+  SIM.LG.DATA.DIR, CHROMOSOMES, "Simulation_largeGrowth"
 )
-simDown.large.kinship <- read.kinship.chromosomes(
-  SIMDOWN.LARGE.DATA.DIR, SELECTED.CHROMOSOMES,
-  "Simulation_large_simDown"
+simDown.lg.kinship <- read.kinship.chromosomes(
+  SIMDOWN.LG.DATA.DIR, CHROMOSOMES,
+  "Simulation_largeGrowth_simDown"
 )
 emp.chromosome.kinship <- read.kinship.chromosomes(
-  EMPIRICAL.DATA.DIR, SELECTED.CHROMOSOMES, "Empirical"
+  EMPIRICAL.DATA.DIR, CHROMOSOMES, "Empirical"
 )
 emp.genome.kinship <- read.empirical.kinship.genome(
   EMPIRICAL.DATA.DIR
@@ -442,14 +467,14 @@ emp.genome.kinship <- read.empirical.kinship.genome(
 
 # combine all unrelated simulation and empirical pairs
 simulation.kinship <- bind_rows(
-  sim.small.kinship, simDown.small.kinship,
-  sim.large.kinship, simDown.large.kinship
+  sim.tc.kinship, simDown.tc.kinship,
+  sim.lg.kinship, simDown.lg.kinship
 )
 empirical.kinship <- bind_rows(
   emp.chromosome.kinship, emp.genome.kinship
 )
 
-# summarize common-bin histograms and construct the primary plot
+# summarize common-bin histograms and construct all configured plots
 kinship.data <- bind_rows(simulation.kinship, empirical.kinship)
 kinship.breaks <- make.kinship.breaks(
   kinship.data, KINSHIP.BIN.WIDTH
@@ -460,11 +485,19 @@ kinship.histograms <- build.kinship.histograms(
 kinship.summary <- summarize.kinship.histograms(
   kinship.histograms
 )
-kinship.small.empirical.plot <- make.kinship.plot(
-  kinship.summary, kinship.breaks, PLOT.STYLES, "small_empirical"
-)
-kinship.simulated.plot <- make.kinship.plot(
-  kinship.summary, kinship.breaks, PLOT.STYLES, "simulated"
-)
-print(kinship.small.empirical.plot)
-print(kinship.simulated.plot)
+kinship.plots <- imap(PLOT.CONFIGS, function(data.types, tag) {
+  return(make.kinship.plot(
+    kinship.summary, kinship.breaks, PLOT.STYLES, data.types, tag
+  ))
+})
+
+# persist every plot before printing figures at the end of the script
+dir.create(OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
+iwalk(kinship.plots, function(plot, tag) {
+  saveRDS(plot, file.path(
+    OUTPUT.DIR,
+    str_replace("kinship.{tag}.rds", fixed("{tag}"), tag)
+  ))
+})
+
+walk(kinship.plots, print)

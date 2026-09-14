@@ -20,10 +20,14 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${script_dir}/other_scripts/const.sh"
 source "${script_dir}/other_scripts/log_msg.sh"
 
-if [[ ! "${OUT_DIR}" =~ _(small|large)$ ]]; then
-    echo "ERROR: OUT_DIR must end in _small or _large: ${OUT_DIR}" >&2
-    exit 1
-fi
+case "${OUT_DIR}" in
+    *_2T12Consistent|*_largeGrowth)
+        ;;
+    *)
+        echo "ERROR: unsupported simulation OUT_DIR suffix: ${OUT_DIR}" >&2
+        exit 1
+        ;;
+esac
 if [[ -z ${OOA_NAADMIXTURE_CONDA} \
     || -z ${FASTSTRUCTURE_CONDA_ENV} \
     || -z ${FASTSTRUCTURE_PRIOR} \

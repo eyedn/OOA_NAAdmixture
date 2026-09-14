@@ -8,71 +8,82 @@
 # sfs.R
 # ______________________________________________________________________________
 
-
 # pattern: Mixed (unavoidable)
-# Reason: This executable analysis script combines pure SFS transformations with
-# producer reads and plot rendering.
+# Reason: Plot preparation and HPC file orchestration intentionally share one
+# analysis script.
 
 # set up ----
 library(tidyverse)
-library(furrr)
 library(nanoparquet)
 library(scales)
 
 
-SIM.SMALL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_small/stats"
-SIMDOWN.SMALL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_smallOnekgDownsample/stats"
-SIM.LARGE.DATA.DIR <- "~/scratch/OOA_NAAdmixture_large/stats"
-SIMDOWN.LARGE.DATA.DIR <- "~/scratch/OOA_NAAdmixture_largeOnekgDownsample/stats"
+SIM.TC.DATA.DIR <- "~/scratch/OOA_NAAdmixture_small/stats"
+SIMDOWN.TC.DATA.DIR <- file.path(
+  "~/scratch/OOA_NAAdmixture_smallOnekgDownsample", "stats"
+)
+SIM.LG.DATA.DIR <- "~/scratch/OOA_NAAdmixture_large/stats"
+SIMDOWN.LG.DATA.DIR <- file.path(
+  "~/scratch/OOA_NAAdmixture_largeOnekgDownsample", "stats"
+)
 EMPIRICAL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_1kG/stats"
-# CHROMOSOMES <- as.character(1:22)
-CHROMOSOMES <- c("1")
+OUTPUT.DIR <- "/home1/karatas/proj/OOA_NAAdmixture_data"
+CHROMOSOMES <- as.character(1:22)
+SELECTED.CHROMOSOMES <- c("1", "18")
 DISPLAY.BIN.MAX <- 15
 SFS.PROJECTION.ALLELE.COUNT <- 100
 SOURCE.LEVELS <- c(
-  "Simulation_small", "Simulation_large", "Simulation_small_simDown",
-  "Simulation_large_simDown", "Empirical"
+  "Simulation_2T12Consistent",
+  "Simulation_2T12Consistent_simDown",
+  "Simulation_largeGrowth",
+  "Simulation_largeGrowth_simDown",
+  "Empirical"
 )
-# SFS.FACET.LEVELS <- c("1", "all")
-SFS.FACET.LEVELS <- c("1")
+PLOT.CONFIGS <- list(
+  TC.1kG = SOURCE.LEVELS[c(1, 5)],
+  TC.TCD = SOURCE.LEVELS[c(1, 2)],
+  TCD.1kG = SOURCE.LEVELS[c(2, 5)],
+  onlyADX = SOURCE.LEVELS[1:4]
+)
+SFS.FACET.LEVELS <- SELECTED.CHROMOSOMES
 SFS.SERIES.LEVELS <- c(
-  "small AFR", "small ADX", "small EUR",
-  "large ADX", "small simDown AFR", "small simDown ADX",
-  "small simDown EUR", "large simDown ADX",
+  "TC AFR", "TC ADX", "TC EUR",
+  "TC D. AFR", "TC D. ADX", "TC D. EUR",
+  "LG ADX", "LG D. ADX",
   "empirical YRI", "empirical ASW", "empirical CEU"
 )
 SFS.COLORS <- c(
-  "small AFR" = "#9BD5F2",
-  "small ADX" = "#9A83CE",
-  "small EUR" = "#FBB4AE",
-  "small simDown AFR" = "#56B4E9",
-  "small simDown ADX" = "#6F55B5",
-  "small simDown EUR" = "#FB8072",
-  "large ADX" = "#32146F",
-  "large simDown ADX" = "#4B1FA8",
+  "TC AFR" = "#9BD5F2",
+  "TC ADX" = "#9A83CE",
+  "TC EUR" = "#FBB4AE",
+  "TC D. AFR" = "#56B4E9",
+  "TC D. ADX" = "#6F55B5",
+  "TC D. EUR" = "#FB8072",
+  "LG ADX" = "#32146F",
+  "LG D. ADX" = "#4B1FA8",
   "empirical YRI" = "#EEC4DC",
   "empirical ASW" = "#E44B8D",
   "empirical CEU" = "#BB437E"
 )
 SFS.SERIES.LABELS <- c(
-  "small AFR" = "Sm. Sim. AFR",
-  "small ADX" = "Sm. Sim. ADX",
-  "small EUR" = "Sm. Sim. EUR",
-  "small simDown AFR" = "Sm. D. Sim. AFR",
-  "small simDown ADX" = "Sm. D. Sim. ADX",
-  "small simDown EUR" = "Sm. D. Sim. EUR",
-  "large ADX" = "Lg. Sim. ADX",
-  "large simDown ADX" = "Lg. D. Sim. ADX",
+  "TC AFR" = "TC AFR",
+  "TC ADX" = "TC ADX",
+  "TC EUR" = "TC EUR",
+  "TC D. AFR" = "TC D. AFR",
+  "TC D. ADX" = "TC D. ADX",
+  "TC D. EUR" = "TC D. EUR",
+  "LG ADX" = "LG ADX",
+  "LG D. ADX" = "LG D. ADX",
   "empirical YRI" = "Emp. YRI",
   "empirical ASW" = "Emp. ASW",
   "empirical CEU" = "Emp. CEU"
 )
 SFS.DODGE <- position_dodge(width = 0.9)
 PLOT.STYLES <- list(series.labels = c(
-  Simulation_small = "Sm. Sim.",
-  Simulation_large = "Lg. Sim.",
-  Simulation_small_simDown = "Sm. D. Sim.",
-  Simulation_large_simDown = "Lg. D. Sim.",
+  Simulation_2T12Consistent = "TC",
+  Simulation_2T12Consistent_simDown = "TC D.",
+  Simulation_largeGrowth = "LG",
+  Simulation_largeGrowth_simDown = "LG D.",
   Empirical = "Emp."
 ))
 
@@ -80,46 +91,15 @@ PLOT.STYLES <- list(series.labels = c(
 # internal functions ----
 
 
-# describe the shared projection and simulation uncertainty concisely
-sfs.plot.subtitle <- function() {
-  subtitle <- paste0(
-    "Projected to ", SFS.PROJECTION.ALLELE.COUNT,
-    " alleles"
-  )
-  return(subtitle)
-}
-
-
-# return a view-specific title for count and proportion SFS plots
-sfs.plot.title <- function(y.label, view) {
-  title.prefix <- switch(
-    y.label,
-    "Projected site count" = "SFS counts",
-    "Proportion of segregating sites" = "SFS",
-    NULL
-  )
-  if (is.null(title.prefix)) {
-    return(NULL)
-  }
-  view.title <- switch(
-    view,
-    small_empirical = "Small Simulation and Empirical",
-    simulated = "Simulated ADX"
-  )
-  title <- paste(title.prefix, view.title, sep = ": ")
-  return(title)
-}
-
-
 # retain source-specific populations before SFS normalization
 apply.sfs.source.contract <- function(data) {
   retained <- data %>%
     filter(
       (data.type %in% c(
-        "Simulation_small", "Simulation_small_simDown"
+        "Simulation_2T12Consistent", "Simulation_2T12Consistent_simDown"
       ) & pop %in% c("AFR", "ADX", "EUR")) |
         (data.type %in% c(
-          "Simulation_large", "Simulation_large_simDown"
+          "Simulation_largeGrowth", "Simulation_largeGrowth_simDown"
         ) & pop == "ADX") |
         (data.type == "Empirical" & pop %in% c("YRI", "ASW", "CEU"))
     ) %>%
@@ -208,9 +188,9 @@ prepare.sfs.analysis <- function(simulation, simDown = NULL, empirical = NULL) {
   if (!"data.set" %in% names(simulation)) {
     simulation$data.set <- ifelse(
       simulation$data.type %in% c(
-        "Simulation_large", "Simulation_large_simDown"
+        "Simulation_largeGrowth", "Simulation_largeGrowth_simDown"
       ),
-      "large", "small"
+      "largeGrowth", "2T12Consistent"
     )
   }
   check.sfs.columns(
@@ -248,8 +228,10 @@ prepare.sfs.analysis <- function(simulation, simDown = NULL, empirical = NULL) {
   }
 
   simulation <- simulation %>%
-    mutate(data.type = if_else(data.set == "small", "Simulation_small",
-                               "Simulation_large")) %>%
+    mutate(data.type = if_else(
+      data.set == "2T12Consistent",
+      "Simulation_2T12Consistent", "Simulation_largeGrowth"
+    )) %>%
     mutate(chrom = as.character(chrom)) %>%
     validate.complete.sfs(
       "derived_allele_count",
@@ -260,7 +242,10 @@ prepare.sfs.analysis <- function(simulation, simDown = NULL, empirical = NULL) {
     simDown <- simDown %>%
       mutate(
         data.type = as.character(data.type),
-        data.set = if_else(grepl("large", data.type), "large", "small"),
+        data.set = if_else(
+          grepl("largeGrowth", data.type),
+          "largeGrowth", "2T12Consistent"
+        ),
         chrom = as.character(chrom)
       ) %>%
       validate.complete.sfs(
@@ -290,12 +275,12 @@ prepare.sfs.analysis <- function(simulation, simDown = NULL, empirical = NULL) {
     filter(chrom %in% SFS.FACET.LEVELS) %>%
     mutate(
       series = case_when(
-        data.type == "Simulation_small" ~ paste("small", pop),
-        data.type == "Simulation_small_simDown" ~
-          paste("small simDown", pop),
-        data.type == "Simulation_large" ~ paste("large", pop),
-        data.type == "Simulation_large_simDown" ~
-          paste("large simDown", pop),
+        data.type == "Simulation_2T12Consistent" ~ paste("TC", pop),
+        data.type == "Simulation_2T12Consistent_simDown" ~
+          paste("TC D.", pop),
+        data.type == "Simulation_largeGrowth" ~ paste("LG", pop),
+        data.type == "Simulation_largeGrowth_simDown" ~
+          paste("LG D.", pop),
         data.type == "Empirical" ~ paste("empirical", pop)
       ),
       chrom = factor(chrom, levels = SFS.FACET.LEVELS),
@@ -326,8 +311,8 @@ prepare.sfs.analysis <- function(simulation, simDown = NULL, empirical = NULL) {
 population.pair.config <- function() {
   config <- tribble(
     ~data.type, ~comparison, ~pair.left, ~pair.right,
-    "Simulation_small", "AFR - EUR", "AFR", "EUR",
-    "Simulation_small_simDown", "AFR - EUR", "AFR", "EUR",
+    "Simulation_2T12Consistent", "AFR - EUR", "AFR", "EUR",
+    "Simulation_2T12Consistent_simDown", "AFR - EUR", "AFR", "EUR",
     "Empirical", "YRI - CEU", "YRI", "CEU"
   )
   return(config)
@@ -415,7 +400,10 @@ prepare.singleton.diagnostics <- function(data) {
   if (!all(paired.populations$valid)) {
     stop("Every singleton diagnostic needs its configured population pair")
   }
-  simulation.sources <- c("Simulation_small", "Simulation_small_simDown")
+  simulation.sources <- c(
+    "Simulation_2T12Consistent",
+    "Simulation_2T12Consistent_simDown"
+  )
   diagnostics <- list(
     simulation = list(
       composition = composition %>% filter(data.type %in% simulation.sources),
@@ -525,24 +513,20 @@ summarize.sfs.analysis <- function(data) {
 }
 
 
-# build one shared dodged-bar SFS plot
-filter.plot.view <- function(data, view) {
-  sources <- switch(
-    view,
-    small_empirical = c(
-      "Simulation_small", "Simulation_small_simDown", "Empirical"
-    ),
-    simulated = c(
-      "Simulation_small", "Simulation_large", "Simulation_small_simDown",
-      "Simulation_large_simDown"
-    ),
-    stop("Unsupported SFS plot view: ", view)
-  )
+# retain one configured SFS view
+filter.plot.view <- function(data, data.types, tag) {
+  if (!tag %in% names(PLOT.CONFIGS)) {
+    stop("Unsupported SFS plot tag: ", tag)
+  }
+  if (!identical(data.types, PLOT.CONFIGS[[tag]])) {
+    stop("SFS data types do not match the configured tag")
+  }
   filtered <- data %>%
-    filter(as.character(data.type) %in% sources) %>%
-    filter(view != "simulated" | pop == "ADX") %>%
+    filter(as.character(data.type) %in% data.types) %>%
+    filter(tag != "onlyADX" | pop == "ADX") %>%
+    filter(as.character(chrom) %in% SELECTED.CHROMOSOMES) %>%
     mutate(
-      data.type = factor(as.character(data.type), levels = sources),
+      data.type = factor(as.character(data.type), levels = data.types),
       series = factor(
         as.character(series),
         levels = SFS.SERIES.LEVELS[SFS.SERIES.LEVELS %in% series]
@@ -559,8 +543,10 @@ filter.plot.view <- function(data, view) {
 
 
 # build one scoped shared dodged-bar SFS plot
-make.sfs.plot <- function(data, value.column, y.label, pseudo.log, view) {
-  displayed <- filter.plot.view(data, view) %>%
+make.sfs.plot <- function(
+    data, value.column, y.label, pseudo.log, data.types, tag
+) {
+  displayed <- filter.plot.view(data, data.types, tag) %>%
     filter(minor.allele.count <= DISPLAY.BIN.MAX)
   series.keys <- levels(displayed$series)
   plot <- ggplot(
@@ -579,7 +565,7 @@ make.sfs.plot <- function(data, value.column, y.label, pseudo.log, view) {
       width = 0.25, linewidth = 0.5,
       na.rm = TRUE
     ) +
-    facet_wrap(~chrom, nrow = 1, drop = FALSE) +
+    facet_wrap(~chrom, nrow = 1, drop = TRUE) +
     scale_x_continuous(
       breaks = seq_len(DISPLAY.BIN.MAX),
       limits = c(0.5, DISPLAY.BIN.MAX + 0.5)
@@ -589,13 +575,18 @@ make.sfs.plot <- function(data, value.column, y.label, pseudo.log, view) {
       breaks = series.keys,
       labels = SFS.SERIES.LABELS[series.keys],
       limits = series.keys,
-      drop = FALSE
+      drop = TRUE
     ) +
     labs(
       x = "Minor allele count",
       y = y.label,
-      title = sfs.plot.title(y.label, view),
-      subtitle = sfs.plot.subtitle(),
+      title = paste(
+        if (y.label == "Projected site count") "SFS counts" else "SFS",
+        tag, sep = ": "
+      ),
+      subtitle = paste0(
+        "Projected to ", SFS.PROJECTION.ALLELE.COUNT, " alleles"
+      ),
       fill = NULL
     ) +
     guides(fill = guide_legend(order = 1, nrow = 2, byrow = TRUE)) +
@@ -713,8 +704,8 @@ make.singleton.paired.plot <- function(data, empirical) {
 make.population.difference.plot <- function(data) {
   source.labels <- PLOT.STYLES$series.labels
   source.colors <- c(
-    Simulation_small = "#56B4E9",
-    Simulation_small_simDown = "#6F55B5",
+    Simulation_2T12Consistent = "#56B4E9",
+    Simulation_2T12Consistent_simDown = "#6F55B5",
     Empirical = "#E44B8D"
   )
   plot <- ggplot(
@@ -760,38 +751,72 @@ make.population.difference.plot <- function(data) {
 }
 
 
-# read standardized projected chromosome producer outputs
-read.sfs.inputs <- function(
-    sim.small.dir, simDown.small.dir, sim.large.dir,
-    simDown.large.dir, empirical.dir
-) {
-  read.chromosomes <- function(directory) {
+# read every available projected chromosome file from one source
+read.sfs.chromosomes <- function(directory, chromosomes, file.family.label) {
+  paths <- file.path(
+    path.expand(directory),
+    paste0("sfs.chr", chromosomes, ".parquet")
+  )
+  missing <- !file.exists(paths)
+  if (any(missing)) {
+    warning(
+      paste0(
+        file.family.label, " is unavailable for chromosomes: ",
+        paste(chromosomes[missing], collapse = ", ")
+      ),
+      call. = FALSE
+    )
+  }
+  paths <- paths[!missing]
+  chromosomes <- chromosomes[!missing]
+  read.one <- function(path, chrom) {
+    table <- read_parquet(path)
+    table$chrom <- chrom
+    return(table)
+  }
+  if (requireNamespace("furrr", quietly = TRUE)) {
     previous.plan <- future::plan()
     on.exit(future::plan(previous.plan), add = TRUE)
     future::plan(future::multisession)
-    tables <- future_map_dfr(CHROMOSOMES, function(chrom) {
-      table <- read_parquet(
-        file.path(
-          path.expand(directory),
-          paste0("sfs.chr", chrom, ".parquet")
-        )
-      )
-      table$chrom <- chrom
-      return(table)
-    }, .options = furrr_options(seed = TRUE))
-    return(tables)
+    tables <- furrr::future_map2_dfr(
+      paths, chromosomes, read.one,
+      .options = furrr::furrr_options(seed = TRUE)
+    )
+  } else {
+    tables <- purrr::map2_dfr(paths, chromosomes, read.one)
   }
+  return(tables)
+}
+
+
+# read standardized projected chromosome producer outputs
+read.sfs.inputs <- function(
+    sim.tc.dir, simDown.tc.dir, sim.lg.dir,
+    simDown.lg.dir, empirical.dir, chromosomes
+) {
   simulation <- bind_rows(
-    read.chromosomes(sim.small.dir) %>% mutate(data.set = "small"),
-    read.chromosomes(sim.large.dir) %>% mutate(data.set = "large")
+    read.sfs.chromosomes(
+      sim.tc.dir, chromosomes, "TC SFS files"
+    ) %>%
+      mutate(data.set = "2T12Consistent"),
+    read.sfs.chromosomes(
+      sim.lg.dir, chromosomes, "LG SFS files"
+    ) %>%
+      mutate(data.set = "largeGrowth")
   )
   simDown <- bind_rows(
-    read.chromosomes(simDown.small.dir) %>%
-      mutate(data.type = "Simulation_small_simDown"),
-    read.chromosomes(simDown.large.dir) %>%
-      mutate(data.type = "Simulation_large_simDown")
+    read.sfs.chromosomes(
+      simDown.tc.dir, chromosomes, "TC D. SFS files"
+    ) %>%
+      mutate(data.type = "Simulation_2T12Consistent_simDown"),
+    read.sfs.chromosomes(
+      simDown.lg.dir, chromosomes, "LG D. SFS files"
+    ) %>%
+      mutate(data.type = "Simulation_largeGrowth_simDown")
   )
-  empirical <- read.chromosomes(empirical.dir)
+  empirical <- read.sfs.chromosomes(
+    empirical.dir, chromosomes, "Empirical SFS files"
+  )
   return(list(
     simulation = simulation,
     simDown = simDown,
@@ -804,11 +829,12 @@ read.sfs.inputs <- function(
 
 
 sfs.inputs <- read.sfs.inputs(
-  SIM.SMALL.DATA.DIR,
-  SIMDOWN.SMALL.DATA.DIR,
-  SIM.LARGE.DATA.DIR,
-  SIMDOWN.LARGE.DATA.DIR,
-  EMPIRICAL.DATA.DIR
+  SIM.TC.DATA.DIR,
+  SIMDOWN.TC.DATA.DIR,
+  SIM.LG.DATA.DIR,
+  SIMDOWN.LG.DATA.DIR,
+  EMPIRICAL.DATA.DIR,
+  CHROMOSOMES
 )
 sfs.data <- prepare.sfs.analysis(
   sfs.inputs$simulation,
@@ -819,30 +845,18 @@ sfs.summaries <- summarize.sfs.analysis(sfs.data)
 singleton.diagnostics <- prepare.singleton.diagnostics(sfs.data)
 population.differences <- prepare.population.differences(sfs.data)
 
-sfs.small.empirical.count.plot <- make.sfs.plot(
-  sfs.summaries$count,
-  "mean",
-  "Projected site count",
-  TRUE, "small_empirical"
-)
-sfs.simulated.count.plot <- make.sfs.plot(
-  sfs.summaries$count,
-  "mean",
-  "Projected site count",
-  TRUE, "simulated"
-)
-sfs.small.empirical.proportion.plot <- make.sfs.plot(
-  sfs.summaries$proportion,
-  "mean",
-  "Proportion of segregating sites",
-  FALSE, "small_empirical"
-)
-sfs.simulated.proportion.plot <- make.sfs.plot(
-  sfs.summaries$proportion,
-  "mean",
-  "Proportion of segregating sites",
-  FALSE, "simulated"
-)
+sfs.count.plots <- imap(PLOT.CONFIGS, function(data.types, tag) {
+  return(make.sfs.plot(
+    sfs.summaries$count, "mean", "Projected site count", TRUE,
+    data.types, tag
+  ))
+})
+sfs.proportion.plots <- imap(PLOT.CONFIGS, function(data.types, tag) {
+  return(make.sfs.plot(
+    sfs.summaries$proportion, "mean",
+    "Proportion of segregating sites", FALSE, data.types, tag
+  ))
+})
 singleton.composition.plot <- make.singleton.composition.plot(
   singleton.diagnostics$simulation$composition,
   singleton.diagnostics$empirical$composition
@@ -855,10 +869,27 @@ population.difference.plot <- make.population.difference.plot(
   population.differences
 )
 
-print(sfs.small.empirical.count.plot)
-print(sfs.simulated.count.plot)
-print(sfs.small.empirical.proportion.plot)
-print(sfs.simulated.proportion.plot)
-print(singleton.composition.plot)
-print(singleton.paired.plot)
-print(population.difference.plot)
+# persist primary and diagnostic plots before printing at the script end
+dir.create(OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
+iwalk(sfs.count.plots, function(plot, tag) {
+  saveRDS(plot, file.path(
+    OUTPUT.DIR,
+    str_replace("sfs.count.{tag}.rds", fixed("{tag}"), tag)
+  ))
+})
+iwalk(sfs.proportion.plots, function(plot, tag) {
+  saveRDS(plot, file.path(
+    OUTPUT.DIR,
+    str_replace("sfs.proportion.{tag}.rds", fixed("{tag}"), tag)
+  ))
+})
+diagnostic.plots <- list(
+  singleton.composition = singleton.composition.plot,
+  singleton.paired = singleton.paired.plot,
+  population.difference = population.difference.plot
+)
+iwalk(diagnostic.plots, function(plot, name) {
+  saveRDS(plot, file.path(OUTPUT.DIR, paste0("sfs.", name, ".rds")))
+})
+
+walk(c(sfs.count.plots, sfs.proportion.plots, diagnostic.plots), print)
