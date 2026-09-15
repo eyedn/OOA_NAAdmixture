@@ -8,7 +8,6 @@
 # ancestry.R
 # ______________________________________________________________________________
 
-
 # set up ----
 library(tidyverse)
 library(nanoparquet)
@@ -819,7 +818,7 @@ make.length.mean.sd.plot <- function(
 # select histogram rows using the resolved primary plot choices
 prepare.histogram.plot.data <- function(
     histogram.data, empirical.method, sample.set.input, chromosomes,
-    data.types, tag
+    data.types, tag, show.all = FALSE
   ) {
   # resolve choices before selecting simulations and empirical references
   choices <- resolve.plot.choices(
@@ -844,7 +843,9 @@ prepare.histogram.plot.data <- function(
           sample.set == choices$sample.set & chrom %in% chromosomes) |
         (data.type == "Empirical" & data.type %in% data.types &
           method == choices$empirical.method &
-          sample.set == "full" & chrom %in% c(chromosomes, "all"))
+          sample.set == "full" & chrom %in% c(
+            chromosomes, if (show.all) "all"
+            ))
       ) %>%
     mutate(
       data.type = factor(data.type, levels = data.types),
@@ -860,13 +861,21 @@ prepare.histogram.plot.data <- function(
 # build chromosome histograms with replicate uncertainty for simulations
 make.histogram.plot <- function(
     histogram.data, empirical.method, sample.set.input, chromosomes,
-    breaks, styles, data.types, tag
+    breaks, styles, data.types, tag, show.all = FALSE
   ) {
   # select one simulation subset plus complete empirical references
   data <- prepare.histogram.plot.data(
     histogram.data, empirical.method, sample.set.input, chromosomes,
-    data.types, tag
-    )
+    data.types, tag, show.all
+    ) %>%
+    filter(
+      as.character(chrom) %in% chromosomes |
+        (show.all & data.type == "Empirical" & chrom == "all")
+      ) %>%
+    mutate(chrom = factor(
+      as.character(chrom),
+      levels = c(chromosomes, if (show.all) "all")
+      ))
   choices <- attr(data, "plot.choices")
   dodge <- position_dodge(width = diff(breaks)[1] * 0.95)
   # draw aligned bins, simulation errors, and the empirical all facet
@@ -957,6 +966,64 @@ make.diagnostic.admixture.plot <- function(
       axis.ticks.x = element_blank()
       )
 
+  return(plot)
+  }
+
+
+# read all requested empirical ADMIXTURE K values for the diagnostic alone
+read.empirical.admixture.diagnostic <- function(data.directory, ks) {
+  data <- read_parquet(file.path(
+    path.expand(data.directory), "ancestry_ADMIXTURE_multik.parquet"
+    ))
+  required <- c("sample_id", "pop", "k")
+  missing <- setdiff(required, names(data))
+  if (length(missing)) {
+    stop("Empirical ADMIXTURE diagnostic is missing: ",
+         paste(missing, collapse = ", "))
+    }
+  component.columns <- paste0("component_", seq_len(max(ks)), "_q")
+  missing <- setdiff(component.columns, names(data))
+  if (length(missing)) {
+    stop("Empirical ADMIXTURE diagnostic is missing: ",
+         paste(missing, collapse = ", "))
+    }
+  diagnostic <- data %>%
+    filter(k %in% ks, pop %in% c("YRI", "ASW", "CEU")) %>%
+    mutate(
+      pop = factor(pop, levels = c("YRI", "ASW", "CEU")),
+      k = factor(k, levels = ks)
+      ) %>%
+    arrange(pop, sample_id) %>%
+    mutate(sample_id = factor(sample_id, levels = unique(sample_id))) %>%
+    pivot_longer(
+      all_of(component.columns),
+      names_to = "component", values_to = "q"
+      ) %>%
+    mutate(component.number = as.integer(str_extract(component, "[0-9]+"))) %>%
+    filter(component.number <= as.integer(as.character(k)))
+  return(diagnostic)
+  }
+
+
+# build a K-faceted whole-genome empirical ADMIXTURE diagnostic
+make.empirical.admixture.diagnostic.plot <- function(data, component.colors) {
+  plot <- ggplot(data, aes(sample_id, q, fill = component)) +
+    geom_col() +
+    facet_wrap(~ k, nrow = 1, scales = "free_x") +
+    scale_fill_manual(values = component.colors) +
+    labs(
+      title = "Empirical ADMIXTURE Component Profiles",
+      subtitle = "Whole genome; populations ordered YRI, ASW, then CEU",
+      x = NULL, y = "Ancestry proportion", fill = NULL
+      ) +
+    theme_bw(base_size = PLOT.BASE.SIZE) +
+    theme(
+      legend.position = "top",
+      legend.direction = "horizontal",
+      legend.box = "horizontal",
+      axis.text.x = element_blank(),
+      axis.ticks.x = element_blank()
+      )
   return(plot)
   }
 
@@ -1126,26 +1193,45 @@ choose.k.frequency.tables <- list(
     )
   )
 # create diagnostic barplots
-simulation.diagnostic.plots <- ancestry.individual.data %>%
-  filter(data.type != "Empirical", sample.set == "full") %>%
-  split(list(.$data.type, .$method), drop = TRUE) %>%
-  map(
-    make.diagnostic.admixture.plot,
-    chromosomes = SELECTED.CHROMOSOMES,
-    component.columns = c("component_1_q", "component_2_q"),
-    sample.id.column = "sample_id", facet.columns = c("rep"),
-    component.colors = ANCESTRY.COMPONENT.COLORS
-    )
-empirical.diagnostic.plots <- ancestry.individual.data %>%
-  filter(data.type == "Empirical", sample.set == "full") %>%
-  split(.$method, drop = TRUE) %>%
-  map(
-    make.diagnostic.admixture.plot,
-    chromosomes = c(SELECTED.CHROMOSOMES, "all"),
+simulation.diagnostic.config <- tribble(
+  ~tag, ~source, ~method,
+  "tc.tspop", "Simulation_2T12Consistent", "tspop",
+  "tc.inference", "Simulation_2T12Consistent", PLOT.EMPIRICAL.METHOD,
+  "tc.d.inference", "Simulation_2T12Consistent_simDown",
+  PLOT.EMPIRICAL.METHOD,
+  "lg.tspop", "Simulation_largeGrowth", "tspop",
+  "lg.inference", "Simulation_largeGrowth", PLOT.EMPIRICAL.METHOD,
+  "lg.d.inference", "Simulation_largeGrowth_simDown", PLOT.EMPIRICAL.METHOD
+  )
+simulation.diagnostic.plots <- pmap(
+  simulation.diagnostic.config,
+  function(tag, source, method) {
+    data <- ancestry.individual.data %>%
+      filter(
+        .data$data.type == source,
+        .data$method == method,
+        .data$sample.set == "full",
+        .data$rep == 1,
+        .data$chrom == "1"
+        )
+    return(make.diagnostic.admixture.plot(
+      data,
+      chromosomes = "1",
     component.columns = c("component_1_q", "component_2_q"),
     sample.id.column = "sample_id", facet.columns = character(),
     component.colors = ANCESTRY.COMPONENT.COLORS
+      ))
+    }
+  )
+names(simulation.diagnostic.plots) <- simulation.diagnostic.config$tag
+empirical.diagnostic.plot <- make.empirical.admixture.diagnostic.plot(
+  read.empirical.admixture.diagnostic(EMPIRICAL.DATA.DIR, 2:5),
+  c(
+    component_1_q = "#0072B2", component_2_q = "#D55E00",
+    component_3_q = "#009E73", component_4_q = "#CC79A7",
+    component_5_q = "#E69F00"
     )
+  )
 # construct all four views for the seven primary plot families
 ancestry.mean.by.chromosome.plots <- imap(
   PLOT.CONFIGS, function(data.types, tag) {
@@ -1205,7 +1291,7 @@ ancestry.histogram.plots <- imap(PLOT.CONFIGS, function(data.types, tag) {
   return(make.histogram.plot(
     ancestry.histogram.data, PLOT.EMPIRICAL.METHOD,
     PLOT.SAMPLE.SET, SELECTED.CHROMOSOMES, HISTOGRAM.BREAKS,
-    PLOT.STYLES, data.types, tag
+    PLOT.STYLES, data.types, tag, show.all = FALSE
     ))
   })
 
@@ -1239,16 +1325,28 @@ iwalk(simulation.diagnostic.plots, function(plot, source.method) {
       )
     ))
   })
-iwalk(empirical.diagnostic.plots, function(plot, method) {
-  saveRDS(plot, file.path(
-    OUTPUT.DIR, paste0("ancestry.diagnostic.1kG.", method, ".rds")
-    ))
-  })
-
-print every figure only after all plot objects have been saved
-all.ancestry.plots <- c(
-  unlist(primary.plot.groups, recursive = FALSE),
-  simulation.diagnostic.plots,
-  empirical.diagnostic.plots
+saveRDS(
+  empirical.diagnostic.plot,
+  file.path(OUTPUT.DIR, "ancestry.diagnostic.1kG.ADMIXTURE.rds")
   )
-walk(all.ancestry.plots, print)
+
+# print every figure only after all plot objects have been saved
+print(ancestry.mean.sd.by.chromosome.plots$TC.1kG)
+print(ancestry.mean.sd.by.chromosome.plots$TC.TCD)
+print(ancestry.mean.sd.by.chromosome.plots$TCD.1kG)
+print(ancestry.mean.sd.by.chromosome.plots$onlyADX)
+print(ancestry.length.mean.sd.plots$TC.1kG)
+print(ancestry.length.mean.sd.plots$TC.TCD)
+print(ancestry.length.mean.sd.plots$TCD.1kG)
+print(ancestry.length.mean.sd.plots$onlyADX)
+print(ancestry.histogram.plots$TC.1kG)
+print(ancestry.histogram.plots$TC.TCD)
+print(ancestry.histogram.plots$TCD.1kG)
+print(ancestry.histogram.plots$onlyADX)
+print(simulation.diagnostic.plots$tc.tspop)
+print(simulation.diagnostic.plots$tc.inference)
+print(simulation.diagnostic.plots$tc.d.inference)
+print(simulation.diagnostic.plots$lg.tspop)
+print(simulation.diagnostic.plots$lg.inference)
+print(simulation.diagnostic.plots$lg.d.inference)
+print(empirical.diagnostic.plot)

@@ -8,7 +8,6 @@
 # kinship.R
 # ______________________________________________________________________________
 
-
 # set up ----
 library(tidyverse)
 library(glue)
@@ -353,12 +352,18 @@ filter.plot.view <- function(data, data.types, tag) {
 
 # construct one scoped pairwise kinship distribution plot
 make.kinship.plot <- function(
-    data, breaks, styles, data.types, tag
+    data, breaks, styles, data.types, tag, show.all = FALSE
   ) {
   source.view <- tag == "onlyADX"
   plot.data <- filter.plot.view(data, data.types, tag) %>%
-    filter(as.character(chrom) %in% SELECTED.CHROMOSOMES) %>%
-    mutate(chrom = forcats::fct_drop(as.factor(chrom))) %>%
+    filter(
+      as.character(chrom) %in% SELECTED.CHROMOSOMES |
+        (show.all & data.type == "Empirical" & chrom == "all")
+      ) %>%
+    mutate(chrom = factor(
+      as.character(chrom),
+      levels = c(SELECTED.CHROMOSOMES, if (show.all) "all")
+      )) %>%
     mutate(
       plot.key = if (source.view) {
         factor(as.character(data.type), levels = data.types)
@@ -477,7 +482,8 @@ kinship.summary <- summarize.kinship.histograms(
   )
 kinship.plots <- imap(PLOT.CONFIGS, function(data.types, tag) {
   return(make.kinship.plot(
-    kinship.summary, kinship.breaks, PLOT.STYLES, data.types, tag
+    kinship.summary, kinship.breaks, PLOT.STYLES, data.types, tag,
+    show.all = FALSE
     ))
   })
 
@@ -490,4 +496,7 @@ iwalk(kinship.plots, function(plot, tag) {
     ))
   })
 
-walk(kinship.plots, print)
+print(kinship.plots$TC.1kG)
+print(kinship.plots$TC.TCD)
+print(kinship.plots$TCD.1kG)
+print(kinship.plots$onlyADX)

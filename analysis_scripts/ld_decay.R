@@ -8,7 +8,6 @@
 # ld_decay.R
 # ______________________________________________________________________________
 
-
 # set up ----
 library(tidyverse)
 library(glue)
@@ -226,10 +225,18 @@ summarize.ld.curves <- function(data, chromosomes) {
       chromosome.count
       ) %>%
     distinct()
-  summary <- bind_rows(simulation, empirical) %>%
+  empirical.genome <- data %>%
+    filter(data.type == "Empirical", as.character(chrom) == "all") %>%
+    transmute(
+      data.type, pop, role, chrom, distance_bin_bp,
+      mean = mean.r2, sd = NA_real_, replicate.count = 1L,
+      chromosome.count
+      ) %>%
+    distinct()
+  summary <- bind_rows(simulation, empirical, empirical.genome) %>%
     mutate(
       role = factor(role, levels = c("AFR", "ADX", "EUR")),
-      chrom = factor(as.character(chrom), levels = chromosomes),
+      chrom = factor(as.character(chrom), levels = c(chromosomes, "all")),
       data.type = factor(
         data.type,
         levels = SOURCE.LEVELS
@@ -340,16 +347,24 @@ filter.plot.view <- function(data, data.types, tag) {
 
 
 # construct one scoped LD view for selected chromosomes
-make.ld.plot <- function(data, chromosomes, styles, data.types, tag) {
+make.ld.plot <- function(
+    data, chromosomes, styles, data.types, tag, show.all = FALSE
+  ) {
   chromosomes <- as.character(chromosomes)
   if (!length(chromosomes) || any(!chromosomes %in% CHROMOSOMES)) {
     stop("LD plotting requires autosomal chromosomes")
     }
   source.view <- tag == "onlyADX"
   plot.data <- filter.plot.view(data, data.types, tag) %>%
-    filter(as.character(chrom) %in% chromosomes) %>%
+    filter(
+      as.character(chrom) %in% chromosomes |
+        (show.all & data.type == "Empirical" & chrom == "all")
+      ) %>%
     mutate(
-      chrom = factor(as.character(chrom), levels = chromosomes),
+      chrom = factor(
+        as.character(chrom),
+        levels = c(chromosomes, if (show.all) "all")
+        ),
       plot.key = if (source.view) {
         factor(as.character(data.type), levels = data.types)
         } else {
@@ -371,6 +386,7 @@ make.ld.plot <- function(data, chromosomes, styles, data.types, tag) {
   plot <- add.ld.geometries(plot, plot.data) +
     facet_grid(
       chrom ~ data.type, drop = TRUE,
+      scales = "free_y",
       labeller = labeller(data.type = styles$series.labels)
       )
   plot <- style.ld.plot(
@@ -417,15 +433,18 @@ empirical.ld.selected <- read.ld.chromosomes(
   EMPIRICAL.DATA.DIR, CHROMOSOMES, "Empirical"
   ) %>%
   pool.ld.curves(include.chromosome = TRUE)
+empirical.ld.genome <- read.empirical.ld.genome(EMPIRICAL.DATA.DIR) %>%
+  pool.ld.curves(include.chromosome = TRUE)
 
 # summarize curves and construct all configured source views
 ld.summary <- bind_rows(
-  simulation.ld.selected, empirical.ld.selected
+  simulation.ld.selected, empirical.ld.selected, empirical.ld.genome
   ) %>%
   summarize.ld.curves(SELECTED.CHROMOSOMES)
 ld.plots <- imap(PLOT.CONFIGS, function(data.types, tag) {
   return(make.ld.plot(
-    ld.summary, SELECTED.CHROMOSOMES, PLOT.STYLES, data.types, tag
+    ld.summary, SELECTED.CHROMOSOMES, PLOT.STYLES, data.types, tag,
+    show.all = FALSE
     ))
   })
 
@@ -438,4 +457,7 @@ iwalk(ld.plots, function(plot, tag) {
     ))
   })
 
-walk(ld.plots, print)
+print(ld.plots$TC.1kG)
+print(ld.plots$TC.TCD)
+print(ld.plots$TCD.1kG)
+print(ld.plots$onlyADX)

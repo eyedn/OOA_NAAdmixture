@@ -8,7 +8,6 @@
 # sfs.R
 # ______________________________________________________________________________
 
-
 # set up ----
 library(tidyverse)
 library(nanoparquet)
@@ -263,7 +262,7 @@ prepare.sfs.analysis <- function(simulation, simDown = NULL, empirical = NULL) {
 
   prepared <- bind_rows(simulation, simDown, empirical) %>%
     apply.sfs.source.contract() %>%
-    filter(chrom %in% SFS.FACET.LEVELS) %>%
+    filter(chrom %in% c(SFS.FACET.LEVELS, "all")) %>%
     mutate(
       series = case_when(
         data.type == "Simulation_2T12Consistent" ~ paste("TC", pop),
@@ -274,7 +273,7 @@ prepare.sfs.analysis <- function(simulation, simDown = NULL, empirical = NULL) {
           paste("LG D.", pop),
         data.type == "Empirical" ~ paste("empirical", pop)
         ),
-      chrom = factor(chrom, levels = SFS.FACET.LEVELS),
+      chrom = factor(chrom, levels = c(SFS.FACET.LEVELS, "all")),
       series = factor(series, levels = SFS.SERIES.LEVELS)
       )
   if (any(is.na(prepared$series))) {
@@ -515,7 +514,6 @@ filter.plot.view <- function(data, data.types, tag) {
   filtered <- data %>%
     filter(as.character(data.type) %in% data.types) %>%
     filter(tag != "onlyADX" | pop == "ADX") %>%
-    filter(as.character(chrom) %in% SELECTED.CHROMOSOMES) %>%
     mutate(
       data.type = factor(as.character(data.type), levels = data.types),
       series = factor(
@@ -524,7 +522,10 @@ filter.plot.view <- function(data, data.types, tag) {
         ),
       chrom = factor(
         as.character(chrom),
-        levels = SFS.FACET.LEVELS[SFS.FACET.LEVELS %in% chrom]
+        levels = c(
+          SFS.FACET.LEVELS[SFS.FACET.LEVELS %in% chrom],
+          if ("all" %in% chrom) "all"
+          )
         )
       ) %>%
     arrange(data.type, series) %>%
@@ -535,9 +536,14 @@ filter.plot.view <- function(data, data.types, tag) {
 
 # build one scoped shared dodged-bar SFS plot
 make.sfs.plot <- function(
-    data, value.column, y.label, pseudo.log, data.types, tag
+    data, value.column, y.label, pseudo.log, data.types, tag,
+    show.all = FALSE
   ) {
   displayed <- filter.plot.view(data, data.types, tag) %>%
+    filter(
+      as.character(chrom) %in% SELECTED.CHROMOSOMES |
+        (show.all & data.type == "Empirical" & chrom == "all")
+      ) %>%
     filter(minor.allele.count <= DISPLAY.BIN.MAX)
   series.keys <- levels(displayed$series)
   plot <- ggplot(
@@ -556,7 +562,7 @@ make.sfs.plot <- function(
       width = 0.25, linewidth = 0.5,
       na.rm = TRUE
       ) +
-    facet_wrap(~chrom, nrow = 1, drop = TRUE) +
+    facet_wrap(~chrom, nrow = 1, drop = TRUE, scales = "free_y") +
     scale_x_continuous(
       breaks = seq_len(DISPLAY.BIN.MAX),
       limits = c(0.5, DISPLAY.BIN.MAX + 0.5)
@@ -617,7 +623,7 @@ make.singleton.composition.plot <- function(data, empirical) {
     geom_hline(
       data = empirical %>% select(bin.range, pop, count),
       aes(yintercept = count, color = pop),
-      linewidth = 0.8
+      linewidth = 0.8, linetype = "dashed"
       ) +
     facet_grid(
       rows = vars(data.type),
@@ -645,47 +651,6 @@ make.singleton.composition.plot <- function(data, empirical) {
       legend.position = "top",
       panel.grid.minor = element_blank(),
       axis.text.x = element_text(angle = 45, hjust = 1)
-      )
-  return(plot)
-  }
-
-
-# build paired simulation singleton proportions with empirical references
-make.singleton.paired.plot <- function(data, empirical) {
-  source.labels <- PLOT.STYLES$series.labels
-  plot <- ggplot(
-    data %>% mutate(pop = factor(pop, levels = c("AFR", "EUR"))),
-    aes(x = pop, y = singleton.proportion, group = rep)
-    ) +
-    geom_line(color = "grey40", alpha = 0.7) +
-    geom_point(aes(color = pop), size = 2.5) +
-    geom_hline(
-      data = empirical %>% select(pop, singleton.proportion),
-      aes(yintercept = singleton.proportion, color = pop),
-      linewidth = 0.8
-      ) +
-    facet_grid(
-      rows = vars(data.type),
-      labeller = labeller(data.type = source.labels),
-      drop = FALSE
-      ) +
-    scale_color_manual(values = c(
-      AFR = "#56B4E9",
-      EUR = "#FB8072",
-      YRI = "#EEC4DC",
-      CEU = "#BB437E"
-      )) +
-    labs(
-      x = NULL,
-      y = "Singleton proportion of segregating sites",
-      color = "Population and empirical reference",
-      title = "Paired singleton proportions",
-      subtitle = "Configured populations are connected within each replicate"
-      ) +
-    theme_bw(base_size = 18) +
-    theme(
-      legend.position = "top",
-      panel.grid.minor = element_blank()
       )
   return(plot)
   }
@@ -839,22 +804,19 @@ population.differences <- prepare.population.differences(sfs.data)
 sfs.count.plots <- imap(PLOT.CONFIGS, function(data.types, tag) {
   return(make.sfs.plot(
     sfs.summaries$count, "mean", "Projected site count", TRUE,
-    data.types, tag
+    data.types, tag, show.all = FALSE
     ))
   })
 sfs.proportion.plots <- imap(PLOT.CONFIGS, function(data.types, tag) {
   return(make.sfs.plot(
     sfs.summaries$proportion, "mean",
-    "Proportion of segregating sites", FALSE, data.types, tag
+    "Proportion of segregating sites", FALSE, data.types, tag,
+    show.all = FALSE
     ))
   })
 singleton.composition.plot <- make.singleton.composition.plot(
   singleton.diagnostics$simulation$composition,
   singleton.diagnostics$empirical$composition
-  )
-singleton.paired.plot <- make.singleton.paired.plot(
-  singleton.diagnostics$simulation$paired,
-  singleton.diagnostics$empirical$paired
   )
 population.difference.plot <- make.population.difference.plot(
   population.differences
@@ -876,11 +838,19 @@ iwalk(sfs.proportion.plots, function(plot, tag) {
   })
 diagnostic.plots <- list(
   singleton.composition = singleton.composition.plot,
-  singleton.paired = singleton.paired.plot,
   population.difference = population.difference.plot
   )
 iwalk(diagnostic.plots, function(plot, name) {
   saveRDS(plot, file.path(OUTPUT.DIR, paste0("sfs.", name, ".rds")))
   })
 
-walk(c(sfs.count.plots, sfs.proportion.plots, diagnostic.plots), print)
+print(sfs.count.plots$TC.1kG)
+print(sfs.count.plots$TC.TCD)
+print(sfs.count.plots$TCD.1kG)
+print(sfs.count.plots$onlyADX)
+print(sfs.proportion.plots$TC.1kG)
+print(sfs.proportion.plots$TC.TCD)
+print(sfs.proportion.plots$TCD.1kG)
+print(sfs.proportion.plots$onlyADX)
+print(singleton.composition.plot)
+print(population.difference.plot)

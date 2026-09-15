@@ -8,7 +8,6 @@
 # diversity.R
 # ______________________________________________________________________________
 
-
 # set up ----
 library(tidyverse)
 library(nanoparquet)
@@ -465,4 +464,7 @@ iwalk(diversity.plots, function(plot, tag) {
     ))
   })
 
-walk(diversity.plots, print)
+print(diversity.plots$TC.1kG)
+print(diversity.plots$TC.TCD)
+print(diversity.plots$TCD.1kG)
+print(diversity.plots$onlyADX)
