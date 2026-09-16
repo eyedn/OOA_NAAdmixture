@@ -1172,7 +1172,514 @@ read.choose.k.diagnostics <- function(
   }
 
 
-# analysis ----
+# prepare one validated long table for all ancestry statistical analyses
+prepare.ancestry.statistics.data <- function(
+    summary.data = ancestry.summary.data,
+    empirical.method = PLOT.EMPIRICAL.METHOD,
+    sample.set.input = PLOT.SAMPLE.SET,
+    chromosomes = CHROMOSOMES,
+    require.genome = TRUE,
+    require.chromosome.reference = TRUE
+  ) {
+  # validate the autosome request and columns used by every analysis
+  chromosomes <- as.character(chromosomes)
+  if (!setequal(chromosomes, as.character(1:22)) ||
+      length(unique(chromosomes)) != 22) {
+    stop("Ancestry statistics require exactly 22 chromosomes (1-22)")
+    }
+  required <- c(
+    "rep", "chrom", "data.type", "method", "sample.set",
+    "mean", "median", "mode", "sd"
+    )
+  missing <- setdiff(required, names(summary.data))
+  if (length(missing)) {
+    stop(
+      "Ancestry statistics data are missing columns: ",
+      paste(missing, collapse = ", ")
+      )
+    }
+  # select the exact methods and sample sets used by the figures
+  data <- summary.data %>%
+    mutate(chrom = as.character(chrom)) %>%
+    filter(
+      (.data$data.type == "Simulation_2T12Consistent" &
+        .data$method == "tspop" &
+        .data$sample.set == sample.set.input) |
+        (.data$data.type == "Simulation_2T12Consistent_simDown" &
+          .data$method == empirical.method &
+          .data$sample.set == sample.set.input) |
+        (.data$data.type == "Simulation_largeGrowth" &
+          .data$method == "tspop" &
+          .data$sample.set == sample.set.input) |
+        (.data$data.type == "Simulation_largeGrowth_simDown" &
+          .data$method == empirical.method &
+          .data$sample.set == sample.set.input) |
+        (.data$data.type == "Empirical" &
+          .data$method == empirical.method &
+          .data$sample.set == "full"),
+      .data$chrom %in% c(chromosomes, "all")
+      ) %>%
+    mutate(source = case_when(
+      .data$data.type == "Simulation_2T12Consistent" ~ "TC",
+      .data$data.type ==
+        "Simulation_2T12Consistent_simDown" ~ "TCD",
+      .data$data.type == "Simulation_largeGrowth" ~ "LG",
+      .data$data.type == "Simulation_largeGrowth_simDown" ~ "LGD",
+      .data$data.type == "Empirical" ~ "1kG"
+      ))
+  empirical.chromosomes <- c(
+    if (require.chromosome.reference) chromosomes,
+    if (require.genome) "all"
+    )
+  data <- data %>%
+    filter(source != "1kG" | chrom %in% empirical.chromosomes) %>%
+    select(source, rep, chrom, mean, median, mode, sd)
+  expected.sources <- c("TC", "TCD", "LG", "LGD", "1kG")
+  missing.sources <- setdiff(expected.sources, unique(data$source))
+  if (length(missing.sources)) {
+    stop(
+      "Ancestry statistics are missing sources: ",
+      paste(missing.sources, collapse = ", ")
+      )
+    }
+  if (any(is.na(data$rep[data$source != "1kG"]))) {
+    stop("Simulation statistics require non-missing replicate IDs")
+    }
+  # reject duplicate identifiers before reshaping statistics
+  duplicates <- data %>%
+    count(source, chrom, rep, name = "rows") %>%
+    filter(rows != 1)
+  if (nrow(duplicates)) {
+    first.duplicate <- duplicates[1, ]
+    stop(
+      "Ancestry statistics contain duplicated replicate IDs for ",
+      first.duplicate$source, " chromosome ", first.duplicate$chrom
+      )
+    }
+  # require 50 unique simulation replicates for every autosome
+  simulation.counts <- data %>%
+    filter(source != "1kG", chrom != "all") %>%
+    count(source, chrom, name = "n.replicates") %>%
+    complete(
+      source = c("TC", "TCD", "LG", "LGD"),
+      chrom = chromosomes,
+      fill = list(n.replicates = 0L)
+      ) %>%
+    filter(n.replicates != 50)
+  if (nrow(simulation.counts)) {
+    first.incomplete <- simulation.counts[1, ]
+    stop(
+      "Each simulation source and chromosome must contain exactly ",
+      "50 replicate IDs; found ", first.incomplete$n.replicates,
+      " for ", first.incomplete$source, " chromosome ",
+      first.incomplete$chrom
+      )
+    }
+  # require one empirical estimate for each requested reference scope
+  empirical.counts <- data %>%
+    filter(source == "1kG") %>%
+    count(chrom, name = "n.estimates") %>%
+    complete(
+      chrom = empirical.chromosomes,
+      fill = list(n.estimates = 0L)
+      ) %>%
+    filter(n.estimates != 1)
+  if (nrow(empirical.counts)) {
+    first.incomplete <- empirical.counts[1, ]
+    expected.description <- paste(
+      c(
+        if (require.chromosome.reference) "all 22 chromosomes",
+        if (require.genome) "one genome estimate"
+        ),
+      collapse = " and "
+      )
+    stop(
+      "The 1kG reference must contain ", expected.description,
+      "; chromosome ", first.incomplete$chrom,
+      " has ", first.incomplete$n.estimates, " estimates"
+      )
+    }
+  # create the shared long representation and reject invalid estimates
+  data <- data %>%
+    pivot_longer(
+      c(mean, median, mode, sd),
+      names_to = "statistic", values_to = "estimate"
+      )
+  if (any(!is.finite(data$estimate))) {
+    invalid <- data %>% filter(!is.finite(estimate)) %>% slice(1)
+    stop(
+      "Ancestry statistics require finite estimates; found ",
+      invalid$source, " chromosome ", invalid$chrom, " ",
+      invalid$statistic
+      )
+    }
+
+  return(data)
+  }
+
+
+# run one t-test and return its shared output fields
+extract.ancestry.t.test <- function(
+    left.values, right.values = NULL, reference = NULL,
+    test.type, paired, var.equal = FALSE, context
+  ) {
+  # execute the requested test and attach context to unusable inputs
+  result <- tryCatch(
+    {
+      if (is.null(right.values)) {
+        stats::t.test(left.values, mu = reference)
+        } else {
+        stats::t.test(
+          left.values, right.values, paired = paired,
+          var.equal = var.equal
+          )
+        }
+      },
+    error = function(condition) {
+      stop(
+        "Unable to run ", context, ": ", conditionMessage(condition),
+        call. = FALSE
+        )
+      }
+    )
+  # standardize estimates and express every interval as left minus right
+  left.estimate <- mean(left.values)
+  if (is.null(right.values)) {
+    right.estimate <- reference
+    interval <- unname(result$conf.int) - reference
+    n.right <- 1L
+    } else {
+    right.estimate <- mean(right.values)
+    interval <- unname(result$conf.int)
+    n.right <- length(right.values)
+    }
+  extracted <- tibble(
+    test.type = test.type,
+    paired = paired,
+    n.left = length(left.values),
+    n.right = n.right,
+    left.estimate = left.estimate,
+    right.estimate = right.estimate,
+    difference = left.estimate - right.estimate,
+    conf.low = interval[[1]],
+    conf.high = interval[[2]],
+    statistic.t = unname(result$statistic),
+    df = unname(result$parameter),
+    p.value = result$p.value
+    )
+
+  return(extracted)
+  }
+
+
+# align two source vectors by replicate identifier for a paired test
+prepare.paired.ancestry.values <- function(
+    data, left.source, right.source, statistic, chromosome, context
+  ) {
+  left <- data %>%
+    filter(
+      source == left.source, .data$statistic == .env$statistic,
+      chrom == chromosome
+      ) %>%
+    select(rep, left = estimate)
+  right <- data %>%
+    filter(
+      source == right.source, .data$statistic == .env$statistic,
+      chrom == chromosome
+      ) %>%
+    select(rep, right = estimate)
+  if (!setequal(left$rep, right$rep)) {
+    stop(
+      context, " requires matching replicate IDs; ", left.source,
+      " and ", right.source, " differ",
+      call. = FALSE
+      )
+    }
+  paired.values <- inner_join(left, right, by = "rep") %>% arrange(rep)
+  return(paired.values)
+  }
+
+
+# compare simulation summaries within chromosomes for question one
+test.ancestry.chromosome.comparisons <- function(
+    summary.data = ancestry.summary.data,
+    empirical.method = PLOT.EMPIRICAL.METHOD,
+    sample.set.input = PLOT.SAMPLE.SET,
+    chromosomes = CHROMOSOMES
+  ) {
+  data <- prepare.ancestry.statistics.data(
+    summary.data, empirical.method, sample.set.input, chromosomes,
+    require.genome = FALSE
+    )
+  contrasts <- tribble(
+    ~left.source, ~right.source, ~test.type, ~paired, ~var.equal,
+    "TC", "1kG", "one-sample t-test", FALSE, FALSE,
+    "TC", "TCD", "paired t-test", TRUE, FALSE,
+    "TC", "LG", "Student t-test", FALSE, TRUE,
+    "TCD", "1kG", "one-sample t-test", FALSE, FALSE,
+    "LG", "LGD", "paired t-test", TRUE, FALSE
+    )
+  tests <- map_dfr(c("mean", "mode", "sd"), function(statistic.name) {
+    map_dfr(as.character(chromosomes), function(chromosome.name) {
+      pmap_dfr(contrasts, function(
+          left.source, right.source, test.type, paired, var.equal
+        ) {
+        contrast <- paste(left.source, "-", right.source)
+        context <- paste(
+          contrast, statistic.name, "chromosome", chromosome.name
+          )
+        left.values <- data %>%
+          filter(
+            source == left.source,
+            statistic == statistic.name,
+            chrom == chromosome.name
+            ) %>%
+          pull(estimate)
+        if (right.source == "1kG") {
+          reference <- data %>%
+            filter(
+              source == "1kG", statistic == statistic.name,
+              chrom == chromosome.name
+              ) %>%
+            pull(estimate)
+          result <- extract.ancestry.t.test(
+            left.values, reference = reference,
+            test.type = test.type, paired = FALSE,
+            context = context
+            )
+          reference.scope <- "chromosome"
+          } else if (paired) {
+          paired.values <- prepare.paired.ancestry.values(
+            data, left.source, right.source, statistic.name,
+            chromosome.name, context
+            )
+          result <- extract.ancestry.t.test(
+            paired.values$left, paired.values$right,
+            test.type = test.type, paired = TRUE,
+            context = context
+            )
+          reference.scope <- NA_character_
+          } else {
+          right.values <- data %>%
+            filter(
+              source == right.source,
+              statistic == statistic.name,
+              chrom == chromosome.name
+              ) %>%
+            pull(estimate)
+          result <- extract.ancestry.t.test(
+            left.values, right.values,
+            test.type = test.type, paired = FALSE,
+            var.equal = var.equal, context = context
+            )
+          reference.scope <- NA_character_
+          }
+        return(bind_cols(
+          tibble(
+            statistic = statistic.name,
+            chromosome = chromosome.name,
+            contrast = contrast,
+            left.source = left.source,
+            right.source = right.source,
+            reference.scope = reference.scope
+            ),
+          result
+          ))
+        })
+      })
+    }) %>%
+    group_by(statistic) %>%
+    mutate(
+      p.adjusted = p.adjust(p.value, method = "bonferroni"),
+      significant = p.adjusted < 0.05,
+      direction = case_when(
+        significant & right.source == "1kG" & difference < 0 ~
+          "underestimation",
+        significant & right.source == "1kG" & difference > 0 ~
+          "overestimation",
+        significant & right.source != "1kG" & difference < 0 ~ "lower",
+        significant & right.source != "1kG" & difference > 0 ~ "higher",
+        TRUE ~ NA_character_
+        )
+      ) %>%
+    ungroup()
+
+  return(tests)
+  }
+
+
+# compare chromosome simulations with the genome-wide reference
+test.ancestry.genome.reference <- function(
+    summary.data = ancestry.summary.data,
+    empirical.method = PLOT.EMPIRICAL.METHOD,
+    sample.set.input = PLOT.SAMPLE.SET,
+    chromosomes = CHROMOSOMES
+  ) {
+  data <- prepare.ancestry.statistics.data(
+    summary.data, empirical.method, sample.set.input, chromosomes,
+    require.chromosome.reference = FALSE
+    )
+  tests <- map_dfr(c("mean", "median", "mode"), function(statistic.name) {
+    reference <- data %>%
+      filter(
+        source == "1kG", statistic == statistic.name, chrom == "all"
+        ) %>%
+      pull(estimate)
+    map_dfr(c("TC", "TCD", "LG", "LGD"), function(source.name) {
+      map_dfr(as.character(chromosomes), function(chromosome.name) {
+        values <- data %>%
+          filter(
+            source == source.name,
+            statistic == statistic.name,
+            chrom == chromosome.name
+            ) %>%
+          pull(estimate)
+        contrast <- paste(source.name, "- genome 1kG")
+        result <- extract.ancestry.t.test(
+          values, reference = reference,
+          test.type = "one-sample t-test", paired = FALSE,
+          context = paste(
+            contrast, statistic.name, "chromosome", chromosome.name
+            )
+          )
+        return(bind_cols(
+          tibble(
+            statistic = statistic.name,
+            chromosome = chromosome.name,
+            contrast = contrast,
+            left.source = source.name,
+            right.source = "1kG",
+            reference.scope = "genome"
+            ),
+          result
+          ))
+        })
+      })
+    }) %>%
+    group_by(statistic) %>%
+    mutate(
+      p.adjusted = p.adjust(p.value, method = "bonferroni"),
+      significant = p.adjusted < 0.05,
+      direction = case_when(
+        significant & difference < 0 ~ "underestimation",
+        significant & difference > 0 ~ "overestimation",
+        TRUE ~ NA_character_
+        )
+      ) %>%
+    ungroup()
+
+  return(tests)
+  }
+
+
+# fit chromosome-length models to median simulation summaries
+fit.ancestry.chromosome.length.models <- function(
+    summary.data = ancestry.summary.data,
+    length.data = chromosome.lengths,
+    empirical.method = PLOT.EMPIRICAL.METHOD,
+    sample.set.input = PLOT.SAMPLE.SET,
+    chromosomes = CHROMOSOMES
+  ) {
+  data <- prepare.ancestry.statistics.data(
+    summary.data, empirical.method, sample.set.input, chromosomes,
+    require.genome = FALSE
+    )
+  required.length.columns <- c("chrom", "chr_len")
+  missing <- setdiff(required.length.columns, names(length.data))
+  if (length(missing)) {
+    stop(
+      "Chromosome lengths are missing columns: ",
+      paste(missing, collapse = ", ")
+      )
+    }
+  lengths <- length.data %>%
+    transmute(chrom = as.character(chrom), chr.len.mb = chr_len / 1e6) %>%
+    filter(chrom %in% chromosomes)
+  if (nrow(lengths) != 22 || n_distinct(lengths$chrom) != 22) {
+    stop("Chromosome-length models require exactly 22 chromosome lengths")
+    }
+  if (any(!is.finite(lengths$chr.len.mb)) ||
+      stats::sd(lengths$chr.len.mb) == 0) {
+    stop("Chromosome-length models require finite, non-zero length variance")
+    }
+  model.data <- data %>%
+    filter(
+      statistic %in% c("mean", "mode", "sd"),
+      chrom != "all"
+      ) %>%
+    group_by(source, statistic, chrom) %>%
+    summarise(estimate = median(estimate), .groups = "drop") %>%
+    left_join(lengths, by = "chrom")
+  models <- model.data %>%
+    group_by(statistic, source) %>%
+    group_modify(function(group, key) {
+      context <- paste(key$source, key$statistic)
+      if (nrow(group) != 22 || n_distinct(group$chrom) != 22 ||
+          any(!is.finite(group$chr.len.mb))) {
+        stop(
+          "Chromosome-length model for ", context,
+          " requires 22 chromosomes",
+          call. = FALSE
+          )
+        }
+      if (stats::sd(group$estimate) == 0) {
+        stop(
+          "Chromosome-length model for ", context,
+          " has zero variance in estimates",
+          call. = FALSE
+          )
+        }
+      model <- stats::lm(estimate ~ chr.len.mb, data = group)
+      model.summary <- summary(model)
+      slope <- model.summary$coefficients["chr.len.mb", ]
+      interval <- stats::confint(model, "chr.len.mb", level = 0.95)
+      if (any(!is.finite(c(slope, interval)))) {
+        stop(
+          "Chromosome-length model for ", context,
+          " produced non-finite slope statistics",
+          call. = FALSE
+          )
+        }
+      return(tibble(
+        n.chromosomes = nrow(group),
+        intercept = unname(stats::coef(model)[["(Intercept)"]]),
+        slope.per.mb = unname(slope[["Estimate"]]),
+        slope.std.error = unname(slope[["Std. Error"]]),
+        conf.low = unname(interval[[1]]),
+        conf.high = unname(interval[[2]]),
+        statistic.t = unname(slope[["t value"]]),
+        df = stats::df.residual(model),
+        p.value = unname(slope[["Pr(>|t|)"]]),
+        r.squared = model.summary$r.squared
+        ))
+      }) %>%
+    ungroup() %>%
+    mutate(
+      statistic = factor(statistic, levels = c("mean", "mode", "sd")),
+      source = factor(source, levels = c("TC", "TCD", "LG", "LGD", "1kG"))
+      ) %>%
+    arrange(statistic, source) %>%
+    group_by(statistic) %>%
+    mutate(
+      p.adjusted = p.adjust(p.value, method = "bonferroni"),
+      significant = p.adjusted < 0.05,
+      direction = case_when(
+        slope.per.mb < 0 ~ "negative",
+        slope.per.mb > 0 ~ "positive",
+        TRUE ~ NA_character_
+        )
+      ) %>%
+    ungroup() %>%
+    mutate(
+      statistic = as.character(statistic),
+      source = as.character(source)
+      )
+
+  return(models)
+  }
+
+
+# analysis data prep ----
 
 
 # read simulation ancestry sources
@@ -1303,6 +1810,39 @@ choose.k.frequency.tables <- list(
     emp.fastStructure.choose.k.genome$model_components_k
     )
   )
+
+
+# statistical tests ----
+
+
+# calculate each statistical analysis independently
+ancestry.chromosome.comparison.tests <-
+  test.ancestry.chromosome.comparisons()
+ancestry.genome.reference.tests <- test.ancestry.genome.reference()
+ancestry.chromosome.length.models <-
+  fit.ancestry.chromosome.length.models()
+
+# persist statistical result tables after creating the output directory
+dir.create(OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
+readr::write_csv(
+  ancestry.chromosome.comparison.tests,
+  file.path(
+    OUTPUT.DIR, "ancestry.statistics.chromosome.comparisons.csv"
+    )
+  )
+readr::write_csv(
+  ancestry.genome.reference.tests,
+  file.path(OUTPUT.DIR, "ancestry.statistics.genome.reference.csv")
+  )
+readr::write_csv(
+  ancestry.chromosome.length.models,
+  file.path(OUTPUT.DIR, "ancestry.statistics.chromosome.length.csv")
+  )
+
+
+# plotting ----
+
+
 # create diagnostic barplots
 simulation.diagnostic.config <- tribble(
   ~tag, ~source, ~method,
@@ -1425,7 +1965,6 @@ ancestry.histogram.plots <- imap(PLOT.CONFIGS, function(data.types, tag) {
   })
 
 # persist all primary and diagnostic plot objects
-dir.create(OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
 primary.plot.groups <- list(
   "ancestry.mean.by.chromosome.{tag}.rds" =
     ancestry.mean.by.chromosome.plots,
