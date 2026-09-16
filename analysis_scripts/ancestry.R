@@ -13,15 +13,15 @@ library(tidyverse)
 library(nanoparquet)
 
 
-SIM.TC.DATA.DIR <- "~/scratch/OOA_NAAdmixture_small/stats"
-SIMDOWN.TC.DATA.DIR <- "~/scratch/OOA_NAAdmixture_smallOnekgDownsample/stats"
-SIM.LG.DATA.DIR <- "~/scratch/OOA_NAAdmixture_large/stats"
-SIMDOWN.LG.DATA.DIR <- "~/scratch/OOA_NAAdmixture_largeOnekgDownsample/stats"
+SIM.TC.DATA.DIR <- "~/scratch/OOA_NAAdmixture_2T12Consistent/stats"
+SIMDOWN.TC.DATA.DIR <- "~/scratch/OOA_NAAdmixture_2T12ConsistentOnekgDownsample/stats"
+SIM.LG.DATA.DIR <- "~/scratch/OOA_NAAdmixture_largeGrowth/stats"
+SIMDOWN.LG.DATA.DIR <- "~/scratch/OOA_NAAdmixture_largeGrowthOnekgDownsample/stats"
 EMPIRICAL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_1kG/stats"
 OUTPUT.DIR <- "/home1/karatas/proj/OOA_NAAdmixture_data"
 CHROMOSOME.LENGTHS.PATH <- "~/proj/1000GenomeNYGC_hg38_karatas/ONEKG_chr_lens.tsv"
 CHROMOSOMES <- as.character(1:22)
-SELECTED.CHROMOSOMES <- c("1", "18")
+SELECTED.CHROMOSOMES <- c("1", "7", "13", "18")
 SIMULATION.K <- 2
 EMPIRICAL.K <- 2
 RANDOM.SEED <- 123
@@ -343,8 +343,7 @@ estimate.ancestry.mode <- function(values) {
   # return the observation directly when bandwidth estimation is undefined
   if (length(unique(values)) == 1) return(values[[1]])
   estimate <- density(
-    values, kernel = "gaussian", bw = "nrd0",
-    from = 0, to = 1, n = 512
+    values, kernel = "gaussian", from = 0, to = 1
     )
   mode <- estimate$x[which.max(estimate$y)]
 
@@ -572,7 +571,7 @@ make.stat.by.chrom.plot <- function(
     geom_boxplot(aes(group = interaction(chrom, series)), outlier.shape = NA) +
     geom_errorbar(data = empirical.chrom,
       aes(x = chrom, ymin = .data[[lower]], ymax = .data[[upper]]),
-      inherit.aes = FALSE, color = color, width = 0.15
+      inherit.aes = FALSE, color = color, linewidth = 0.6, width = 0
       ) +
     geom_point(data = empirical.chrom, aes(chrom, .data[[estimate]]),
       inherit.aes = FALSE, shape = 23, size = 3, fill = color
@@ -994,7 +993,8 @@ make.histogram.plot <- function(
     geom_col(position = dodge, width = diff(breaks)[1] * 0.95,
       color = "black", linewidth = 0.3) +
     geom_errorbar(
-      aes(ymin = ymin, ymax = ymax), position = dodge, width = 0.01
+      aes(ymin = ymin, ymax = ymax), position = dodge, linewidth = 0.6, 
+      width = 0
       ) +
     facet_wrap(~ chrom, ncol = 3, drop = TRUE) +
     scale_x_continuous(limits = c(0, 1), breaks = seq(0, 1, 0.2)) +
