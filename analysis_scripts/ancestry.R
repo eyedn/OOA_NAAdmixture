@@ -338,6 +338,20 @@ bootstrap.estimates <- function(values, statistic, replicates, seed) {
   }
 
 
+# estimate the ancestry mode on a fixed, bounded Gaussian KDE grid
+estimate.ancestry.mode <- function(values) {
+  # return the observation directly when bandwidth estimation is undefined
+  if (length(unique(values)) == 1) return(values[[1]])
+  estimate <- density(
+    values, kernel = "gaussian", bw = "nrd0",
+    from = 0, to = 1, n = 512
+    )
+  mode <- estimate$x[which.max(estimate$y)]
+
+  return(mode)
+  }
+
+
 # summarize ancestry and add empirical bootstrap uncertainty intervals
 summarize.ancestry <- function(
     data, grouping.columns, bootstrap.replicates, bootstrap.seed,
@@ -356,14 +370,22 @@ summarize.ancestry <- function(
       sd.estimates <- if (empirical) bootstrap.estimates(
         x, sd, bootstrap.replicates, bootstrap.seed + 1
         ) else NA_real_
+      mode.estimates <- if (empirical) bootstrap.estimates(
+        x, estimate.ancestry.mode, bootstrap.replicates,
+        bootstrap.seed + 2
+        ) else NA_real_
       mean.ci <- if (empirical) as.numeric(
         quantile(mean.estimates, c(0.025, 0.975), names = FALSE)
         ) else c(NA_real_, NA_real_)
       sd.ci <- if (empirical) as.numeric(
         quantile(sd.estimates, c(0.025, 0.975), names = FALSE)
         ) else c(NA_real_, NA_real_)
+      mode.ci <- if (empirical) as.numeric(
+        quantile(mode.estimates, c(0.025, 0.975), names = FALSE)
+        ) else c(NA_real_, NA_real_)
       return(tibble(
-        mean = mean(x), sd = sd(x), median = median(x),
+        mean = mean(x), mode = estimate.ancestry.mode(x), sd = sd(x),
+        median = median(x),
         q25 = quantile(x, 0.25, names = FALSE),
         q75 = quantile(x, 0.75, names = FALSE), n = length(x),
         mean.boot = if (empirical) mean(x) else NA_real_,
@@ -371,7 +393,10 @@ summarize.ancestry <- function(
         mean.boot.estimates = list(mean.estimates),
         sd.boot = if (empirical) sd(x) else NA_real_,
         sd.boot.lower = sd.ci[1], sd.boot.upper = sd.ci[2],
-        sd.boot.estimates = list(sd.estimates)
+        sd.boot.estimates = list(sd.estimates),
+        mode.boot = if (empirical) estimate.ancestry.mode(x) else NA_real_,
+        mode.boot.lower = mode.ci[1], mode.boot.upper = mode.ci[2],
+        mode.boot.estimates = list(mode.estimates)
         ))
       }) %>%
     ungroup()
@@ -380,7 +405,8 @@ summarize.ancestry <- function(
     filter(sample.set == "downsampled") %>%
     select(-sample.set, -contains("boot")) %>%
     rename(
-      mean.rand.downsample = mean, sd.rand.downsample = sd,
+      mean.rand.downsample = mean, mode.rand.downsample = mode,
+      sd.rand.downsample = sd,
       median.rand.downsample = median, q25.rand.downsample = q25,
       q75.rand.downsample = q75, n.rand.downsample = n
       )
@@ -509,7 +535,7 @@ prepare.plot.data <- function(
   }
 
 
-# build a chromosome plot for either mean or standard deviation
+# build a chromosome plot for one ancestry summary statistic
 make.stat.by.chrom.plot <- function(
     summary.data, empirical.method, sample.set.input, chromosomes, styles,
     statistic, y.label, data.types, tag
@@ -528,11 +554,11 @@ make.stat.by.chrom.plot <- function(
   upper <- paste0(statistic, ".boot.upper")
   estimate <- paste0(statistic, ".boot")
   color <- styles$empirical.colors[[choices$empirical.method]]
-  title <- if (statistic == "mean") {
-    "Mean African Ancestry Across Chromosomes"
-    } else {
-    "Variation in African Ancestry Across Chromosomes"
-    }
+  title <- c(
+    mean = "Mean African Ancestry Across Chromosomes",
+    mode = "Mode of African Ancestry Across Chromosomes",
+    sd = "Variation in African Ancestry Across Chromosomes"
+    )[[statistic]]
   # draw simulation boxes with empirical chromosome and genome uncertainty
   plot <- ggplot(simulation, aes(chrom, .data[[statistic]], fill = series)) +
     geom_rect(data = genome,
@@ -585,6 +611,22 @@ make.mean.by.chrom.plot <- function(
   }
 
 
+# build the chromosome-level mode ancestry plot
+make.mode.by.chrom.plot <- function(
+    summary.data, empirical.method, sample.set.input, chromosomes, styles,
+    data.types, tag
+  ) {
+  # delegate construction using the KDE mode statistic and axis label
+  plot <- make.stat.by.chrom.plot(
+    summary.data, empirical.method, sample.set.input, chromosomes, styles,
+    "mode",
+    "Mode of African ancestry", data.types, tag
+    )
+
+  return(plot)
+  }
+
+
 # build the chromosome-level ancestry standard-deviation plot
 make.sd.by.chrom.plot <- function(
     summary.data, empirical.method, sample.set.input, chromosomes, styles,
@@ -601,12 +643,12 @@ make.sd.by.chrom.plot <- function(
   }
 
 
-# build vertically faceted mean and standard-deviation chromosome plots
-make.mean.sd.plot <- function(
+# build vertically faceted chromosome ancestry-summary plots
+make.summary.by.chrom.plot <- function(
     summary.data, empirical.method, sample.set.input, chromosomes, styles,
     data.types, tag
   ) {
-  # reshape simulation mean and SD summaries into one plotting table
+  # reshape simulation summaries into one plotting table
   data <- prepare.plot.data(
     summary.data, empirical.method, sample.set.input, chromosomes,
     data.types, tag
@@ -614,13 +656,17 @@ make.mean.sd.plot <- function(
   choices <- attr(data, "plot.choices")
   simulation <- data %>%
     filter(data.type != "Empirical") %>%
-    pivot_longer(c(mean, sd), names_to = "stat", values_to = "estimate")
+    pivot_longer(
+      c(mean, mode, sd), names_to = "stat", values_to = "estimate"
+      ) %>%
+    mutate(stat = factor(stat, levels = c("mean", "mode", "sd")))
   # reshape empirical estimates, bounds, and bootstrap draws by statistic
   empirical.summary <- data %>%
     filter(data.type == "Empirical") %>%
     select(
       chrom, data.type, simulation.source, method, sample.set, series,
-      starts_with("mean.boot"), starts_with("sd.boot")
+      starts_with("mean.boot"), starts_with("mode.boot"),
+      starts_with("sd.boot")
       )
   empirical <- bind_rows(
     transmute(
@@ -632,21 +678,31 @@ make.mean.sd.plot <- function(
     transmute(
       empirical.summary, chrom, data.type, simulation.source, method,
       sample.set,
+      series, stat = "mode", estimate = mode.boot,
+      lower = mode.boot.lower, upper = mode.boot.upper
+      ),
+    transmute(
+      empirical.summary, chrom, data.type, simulation.source, method,
+      sample.set,
       series, stat = "sd", estimate = sd.boot,
       lower = sd.boot.lower, upper = sd.boot.upper
       )
-    )
+    ) %>%
+    mutate(stat = factor(stat, levels = c("mean", "mode", "sd")))
   empirical.chrom <- empirical.summary %>%
     filter(chrom != "all") %>%
     select(
       chrom, data.type, simulation.source, method, sample.set, series,
-      mean.boot.estimates, sd.boot.estimates
+      mean.boot.estimates, mode.boot.estimates, sd.boot.estimates
       ) %>%
     pivot_longer(
-      c(mean.boot.estimates, sd.boot.estimates),
+      c(mean.boot.estimates, mode.boot.estimates, sd.boot.estimates),
       names_to = "stat", values_to = "estimate"
     ) %>%
-    mutate(stat = str_remove(stat, ".boot.estimates")) %>%
+    mutate(
+      stat = str_remove(stat, fixed(".boot.estimates")),
+      stat = factor(stat, levels = c("mean", "mode", "sd"))
+      ) %>%
     unnest(estimate)
   # combine simulation summaries and empirical bootstrap draws for shared boxes
   boxplot.data <- bind_rows(
@@ -654,7 +710,7 @@ make.mean.sd.plot <- function(
     empirical.chrom %>% select(series, chrom, stat, estimate)
     )
   color <- styles$empirical.colors[[choices$empirical.method]]
-  # draw both statistics with chromosome and genome empirical references
+  # draw all summaries with chromosome and genome empirical references
   plot <- ggplot(boxplot.data, aes(chrom, estimate, fill = series)) +
     geom_rect(data = filter(empirical, chrom == "all"),
       aes(xmin = -Inf, xmax = Inf, ymin = lower, ymax = upper),
@@ -665,11 +721,18 @@ make.mean.sd.plot <- function(
       color = color, linetype = "dashed"
       ) +
     geom_boxplot(aes(group = interaction(chrom, series)), outliers = FALSE) +
-    facet_grid(rows = vars(stat), scales = "free_y") +
+    facet_grid(
+      rows = vars(stat), scales = "free_y",
+      labeller = labeller(stat = c(
+        mean = "Mean of African ancestry",
+        mode = "Mode of African ancestry",
+        sd = "Standard deviation of African ancestry"
+        ))
+      ) +
     scale_x_discrete(limits = chromosomes, drop = FALSE) +
     scale_fill_manual(values = styles$colors, labels = styles$labels) +
     labs(
-      title = "Mean and Variation in African Ancestry Across Chromosomes",
+      title = "African Ancestry Summaries Across Chromosomes",
       subtitle = choices$subtitle,
       x = "Chromosome", y = NULL, fill = NULL
       ) +
@@ -684,7 +747,7 @@ make.mean.sd.plot <- function(
   }
 
 
-# relate chromosome length to either mean or SD ancestry summaries
+# relate chromosome length to one ancestry summary statistic
 make.length.stat.plot <- function(
     summary.data, chromosome.lengths, empirical.method,
     sample.set.input, chromosomes, styles, statistic, y.label,
@@ -704,17 +767,15 @@ make.length.stat.plot <- function(
       ) %>%
     summarise(estimate = median(.data[[statistic]]), .groups = "drop") %>%
     left_join(chromosome.lengths, by = "chrom") %>%
-    mutate(chr.len.mb = if_else(
-      data.type == "Empirical", chr_len_after_qc, chr_len
-      ) / 1e6)
+    mutate(chr.len.mb = chr_len / 1e6)
   if (any(is.na(data$chr.len.mb))) {
     stop("Chromosome lengths are unavailable for requested data")
     }
-  title <- if (statistic == "mean") {
-    "Chromosome Length and Mean African Ancestry Across Autosomes"
-    } else {
-    "Chromosome Length and African Ancestry Variation Across Autosomes"
-    }
+  title <- c(
+    mean = "Chromosome Length and Mean African Ancestry Across Autosomes",
+    mode = "Chromosome Length and Mode of African Ancestry Across Autosomes",
+    sd = "Chromosome Length and African Ancestry Variation Across Autosomes"
+    )[[statistic]]
   # draw per-series linear trends and chromosome-level estimates
   plot <- ggplot(data, aes(chr.len.mb, estimate, color = series,
     linetype = sample.set, group = series)) +
@@ -761,6 +822,22 @@ make.length.mean.plot <- function(
   }
 
 
+# build the chromosome-length versus mode-ancestry plot
+make.length.mode.plot <- function(
+    summary.data, chromosome.lengths, empirical.method,
+    sample.set.input, chromosomes, styles, data.types, tag
+  ) {
+  # delegate shared length plotting using the KDE mode statistic
+  plot <- make.length.stat.plot(
+    summary.data, chromosome.lengths, empirical.method,
+    sample.set.input, chromosomes, styles, "mode",
+    "Mode of African ancestry", data.types, tag
+    )
+
+  return(plot)
+  }
+
+
 # build the chromosome-length versus ancestry-SD plot
 make.length.sd.plot <- function(
     summary.data, chromosome.lengths, empirical.method,
@@ -777,12 +854,12 @@ make.length.sd.plot <- function(
   }
 
 
-# build vertically faceted chromosome-length mean and SD plots
-make.length.mean.sd.plot <- function(
+# build vertically faceted chromosome-length ancestry-summary plots
+make.summary.by.contig.len.plot <- function(
     summary.data, chromosome.lengths, empirical.method,
     sample.set.input, chromosomes, styles, data.types, tag
   ) {
-  # select plot rows and reshape mean and SD before replicate aggregation
+  # select plot rows and reshape summaries before replicate aggregation
   selected.data <- prepare.plot.data(
     summary.data, empirical.method, sample.set.input, chromosomes,
     data.types, tag
@@ -792,18 +869,16 @@ make.length.mean.sd.plot <- function(
     filter(chrom != "all") %>%
     mutate(chrom = as.character(chrom)) %>%
     pivot_longer(
-      c(mean, sd), names_to = "stat", values_to = "estimate"
+      c(mean, mode, sd), names_to = "stat", values_to = "estimate"
       ) %>%
-    mutate(stat = factor(stat, levels = c("mean", "sd"))) %>%
+    mutate(stat = factor(stat, levels = c("mean", "mode", "sd"))) %>%
     group_by(
       chrom, data.type, simulation.source, method, sample.set, series,
       stat
       ) %>%
     summarise(estimate = median(estimate), .groups = "drop") %>%
     left_join(chromosome.lengths, by = "chrom") %>%
-    mutate(chr.len.mb = if_else(
-      data.type == "Empirical", chr_len_after_qc, chr_len
-      ) / 1e6)
+    mutate(chr.len.mb = chr_len / 1e6)
   if (any(is.na(data$chr.len.mb))) {
     stop("Chromosome lengths are unavailable for requested data")
     }
@@ -814,7 +889,14 @@ make.length.mean.sd.plot <- function(
     )) +
     geom_smooth(method = "lm", formula = y ~ x, se = FALSE) +
     geom_point(aes(shape = sample.set, fill = series), size = 3) +
-    facet_grid(rows = vars(stat), scales = "free_y") +
+    facet_grid(
+      rows = vars(stat), scales = "free_y",
+      labeller = labeller(stat = c(
+        mean = "Mean of African ancestry",
+        mode = "Mode of African ancestry",
+        sd = "Standard deviation of African ancestry"
+        ))
+      ) +
     scale_color_manual(
       values = styles$colors, labels = styles$labels, name = NULL
       ) +
@@ -825,7 +907,7 @@ make.length.mean.sd.plot <- function(
     scale_linetype_manual(values = styles$linetypes) +
     labs(
       title = paste(
-        "Chromosome Length, Mean, and Variation in African Ancestry",
+        "Chromosome Length and African Ancestry Summaries",
         "Across Autosomes"
         ),
       subtitle = choices$subtitle,
@@ -1261,10 +1343,19 @@ empirical.diagnostic.plot <- make.empirical.admixture.diagnostic.plot(
     component_5_q = "#E69F00"
     )
   )
-# construct all four views for the seven primary plot families
+# construct all four views for the nine primary plot families
 ancestry.mean.by.chromosome.plots <- imap(
   PLOT.CONFIGS, function(data.types, tag) {
     return(make.mean.by.chrom.plot(
+      ancestry.summary.data, PLOT.EMPIRICAL.METHOD,
+      PLOT.SAMPLE.SET, SELECTED.CHROMOSOMES, PLOT.STYLES,
+      data.types, tag
+      ))
+    }
+  )
+ancestry.mode.by.chromosome.plots <- imap(
+  PLOT.CONFIGS, function(data.types, tag) {
+    return(make.mode.by.chrom.plot(
       ancestry.summary.data, PLOT.EMPIRICAL.METHOD,
       PLOT.SAMPLE.SET, SELECTED.CHROMOSOMES, PLOT.STYLES,
       data.types, tag
@@ -1280,9 +1371,9 @@ ancestry.sd.by.chromosome.plots <- imap(
       ))
     }
   )
-ancestry.mean.sd.by.chromosome.plots <- imap(
+ancestry.summary.by.chrom.plots <- imap(
   PLOT.CONFIGS, function(data.types, tag) {
-    return(make.mean.sd.plot(
+    return(make.summary.by.chrom.plot(
       ancestry.summary.data, PLOT.EMPIRICAL.METHOD,
       PLOT.SAMPLE.SET, SELECTED.CHROMOSOMES, PLOT.STYLES,
       data.types, tag
@@ -1298,6 +1389,15 @@ ancestry.length.versus.mean.plots <- imap(
       ))
     }
   )
+ancestry.length.versus.mode.plots <- imap(
+  PLOT.CONFIGS, function(data.types, tag) {
+    return(make.length.mode.plot(
+      ancestry.summary.data, chromosome.lengths,
+      PLOT.EMPIRICAL.METHOD, PLOT.SAMPLE.SET, CHROMOSOMES,
+      PLOT.STYLES, data.types, tag
+      ))
+    }
+  )
 ancestry.length.versus.sd.plots <- imap(
   PLOT.CONFIGS, function(data.types, tag) {
     return(make.length.sd.plot(
@@ -1307,9 +1407,9 @@ ancestry.length.versus.sd.plots <- imap(
       ))
     }
   )
-ancestry.length.mean.sd.plots <- imap(
+ancestry.summary.by.contig.len.plots <- imap(
   PLOT.CONFIGS, function(data.types, tag) {
-    return(make.length.mean.sd.plot(
+    return(make.summary.by.contig.len.plot(
       ancestry.summary.data, chromosome.lengths,
       PLOT.EMPIRICAL.METHOD, PLOT.SAMPLE.SET, CHROMOSOMES,
       PLOT.STYLES, data.types, tag
@@ -1329,15 +1429,20 @@ dir.create(OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
 primary.plot.groups <- list(
   "ancestry.mean.by.chromosome.{tag}.rds" =
     ancestry.mean.by.chromosome.plots,
+  "ancestry.mode.by.chromosome.{tag}.rds" =
+    ancestry.mode.by.chromosome.plots,
   "ancestry.sd.by.chromosome.{tag}.rds" =
     ancestry.sd.by.chromosome.plots,
-  "ancestry.mean.sd.by.chromosome.{tag}.rds" =
-    ancestry.mean.sd.by.chromosome.plots,
+  "ancestry.summary.by.chrom.{tag}.rds" =
+    ancestry.summary.by.chrom.plots,
   "ancestry.length.versus.mean.{tag}.rds" =
     ancestry.length.versus.mean.plots,
+  "ancestry.length.versus.mode.{tag}.rds" =
+    ancestry.length.versus.mode.plots,
   "ancestry.length.versus.sd.{tag}.rds" =
     ancestry.length.versus.sd.plots,
-  "ancestry.length.mean.sd.{tag}.rds" = ancestry.length.mean.sd.plots,
+  "ancestry.summary.by.contig.len.{tag}.rds" =
+    ancestry.summary.by.contig.len.plots,
   "ancestry.histogram.{tag}.rds" = ancestry.histogram.plots
   )
 iwalk(primary.plot.groups, function(plots, template) {
@@ -1360,14 +1465,14 @@ saveRDS(
   )
 
 # print every figure only after all plot objects have been saved
-print(ancestry.mean.sd.by.chromosome.plots$TC.1kG)
-print(ancestry.mean.sd.by.chromosome.plots$TC.TCD)
-print(ancestry.mean.sd.by.chromosome.plots$TCD.1kG)
-print(ancestry.mean.sd.by.chromosome.plots$onlyADX)
-print(ancestry.length.mean.sd.plots$TC.1kG)
-print(ancestry.length.mean.sd.plots$TC.TCD)
-print(ancestry.length.mean.sd.plots$TCD.1kG)
-print(ancestry.length.mean.sd.plots$onlyADX)
+print(ancestry.summary.by.chrom.plots$TC.1kG)
+print(ancestry.summary.by.chrom.plots$TC.TCD)
+print(ancestry.summary.by.chrom.plots$TCD.1kG)
+print(ancestry.summary.by.chrom.plots$onlyADX)
+print(ancestry.summary.by.contig.len.plots$TC.1kG)
+print(ancestry.summary.by.contig.len.plots$TC.TCD)
+print(ancestry.summary.by.contig.len.plots$TCD.1kG)
+print(ancestry.summary.by.contig.len.plots$onlyADX)
 print(ancestry.histogram.plots$TC.1kG)
 print(ancestry.histogram.plots$TC.TCD)
 print(ancestry.histogram.plots$TCD.1kG)
