@@ -724,9 +724,9 @@ make.summary.by.chrom.plot <- function(
     facet_grid(
       rows = vars(stat), scales = "free_y",
       labeller = labeller(stat = c(
-        mean = "Mean of African ancestry",
-        mode = "Mode of African ancestry",
-        sd = "Standard deviation of African ancestry"
+        mean = "Mean",
+        mode = "Mode",
+        sd = "SD"
         ))
       ) +
     scale_x_discrete(limits = chromosomes, drop = FALSE) +
@@ -892,9 +892,9 @@ make.summary.by.contig.len.plot <- function(
     facet_grid(
       rows = vars(stat), scales = "free_y",
       labeller = labeller(stat = c(
-        mean = "Mean of African ancestry",
-        mode = "Mode of African ancestry",
-        sd = "Standard deviation of African ancestry"
+        mean = "Mean",
+        mode = "Mode",
+        sd = "SD"
         ))
       ) +
     scale_color_manual(
