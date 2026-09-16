@@ -352,7 +352,7 @@ filter.plot.view <- function(data, data.types, tag) {
 
 # construct one scoped pairwise kinship distribution plot
 make.kinship.plot <- function(
-    data, breaks, styles, data.types, tag, show.all = FALSE
+    data, breaks, styles, data.types, tag, show.all = TRUE
   ) {
   source.view <- tag == "onlyADX"
   plot.data <- filter.plot.view(data, data.types, tag) %>%
@@ -483,7 +483,7 @@ kinship.summary <- summarize.kinship.histograms(
 kinship.plots <- imap(PLOT.CONFIGS, function(data.types, tag) {
   return(make.kinship.plot(
     kinship.summary, kinship.breaks, PLOT.STYLES, data.types, tag,
-    show.all = FALSE
+    show.all = TRUE
     ))
   })
 

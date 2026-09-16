@@ -313,18 +313,28 @@ apply.downsample.ids <- function(
 
 # calculate a percentile bootstrap interval for a supplied statistic.
 bootstrap.interval <- function(values, statistic, replicates, seed) {
-  # return undefined bounds when the sample or bootstrap is too small.
-  if (length(values) < 2 || replicates < 2) return(c(NA_real_, NA_real_))
-  # resample deterministically and extract the central 95% interval.
-  set.seed(seed)
-  estimates <- replicate(replicates, {
-    statistic(sample(values, length(values), replace = TRUE))
-    })
+  # calculate the interval from the configured deterministic resamples.
+  estimates <- bootstrap.estimates(values, statistic, replicates, seed)
+  if (all(is.na(estimates))) return(c(NA_real_, NA_real_))
   interval <- as.numeric(
     quantile(estimates, c(0.025, 0.975), names = FALSE)
     )
 
   return(interval)
+  }
+
+
+# return deterministic bootstrap estimates for one supplied statistic
+bootstrap.estimates <- function(values, statistic, replicates, seed) {
+  # return undefined estimates when the sample or bootstrap is too small.
+  if (length(values) < 2 || replicates < 2) return(NA_real_)
+  # resample deterministically to retain the full bootstrap distribution.
+  set.seed(seed)
+  estimates <- replicate(replicates, {
+    statistic(sample(values, length(values), replace = TRUE))
+    })
+
+  return(estimates)
   }
 
 
@@ -340,11 +350,17 @@ summarize.ancestry <- function(
     group_modify(function(group, key) {
       x <- group$afr.q
       empirical <- key$data.type[[1]] == "Empirical"
-      mean.ci <- if (empirical) bootstrap.interval(
+      mean.estimates <- if (empirical) bootstrap.estimates(
         x, mean, bootstrap.replicates, bootstrap.seed
-        ) else c(NA_real_, NA_real_)
-      sd.ci <- if (empirical) bootstrap.interval(
+        ) else NA_real_
+      sd.estimates <- if (empirical) bootstrap.estimates(
         x, sd, bootstrap.replicates, bootstrap.seed + 1
+        ) else NA_real_
+      mean.ci <- if (empirical) as.numeric(
+        quantile(mean.estimates, c(0.025, 0.975), names = FALSE)
+        ) else c(NA_real_, NA_real_)
+      sd.ci <- if (empirical) as.numeric(
+        quantile(sd.estimates, c(0.025, 0.975), names = FALSE)
         ) else c(NA_real_, NA_real_)
       return(tibble(
         mean = mean(x), sd = sd(x), median = median(x),
@@ -352,8 +368,10 @@ summarize.ancestry <- function(
         q75 = quantile(x, 0.75, names = FALSE), n = length(x),
         mean.boot = if (empirical) mean(x) else NA_real_,
         mean.boot.lower = mean.ci[1], mean.boot.upper = mean.ci[2],
+        mean.boot.estimates = list(mean.estimates),
         sd.boot = if (empirical) sd(x) else NA_real_,
-        sd.boot.lower = sd.ci[1], sd.boot.upper = sd.ci[2]
+        sd.boot.lower = sd.ci[1], sd.boot.upper = sd.ci[2],
+        sd.boot.estimates = list(sd.estimates)
         ))
       }) %>%
     ungroup()
@@ -597,8 +615,8 @@ make.mean.sd.plot <- function(
   simulation <- data %>%
     filter(data.type != "Empirical") %>%
     pivot_longer(c(mean, sd), names_to = "stat", values_to = "estimate")
-  # reshape empirical estimates and bounds to the same statistic key
-  empirical <- data %>%
+  # reshape empirical estimates, bounds, and bootstrap draws by statistic
+  empirical.summary <- data %>%
     filter(data.type == "Empirical") %>%
     select(
       chrom, data.type, simulation.source, method, sample.set, series,
@@ -606,16 +624,30 @@ make.mean.sd.plot <- function(
       )
   empirical <- bind_rows(
     transmute(
-      empirical, chrom, data.type, simulation.source, method, sample.set,
+      empirical.summary, chrom, data.type, simulation.source, method,
+      sample.set,
       series, stat = "mean", estimate = mean.boot,
       lower = mean.boot.lower, upper = mean.boot.upper
       ),
     transmute(
-      empirical, chrom, data.type, simulation.source, method, sample.set,
+      empirical.summary, chrom, data.type, simulation.source, method,
+      sample.set,
       series, stat = "sd", estimate = sd.boot,
       lower = sd.boot.lower, upper = sd.boot.upper
       )
     )
+  empirical.chrom <- empirical.summary %>%
+    filter(chrom != "all") %>%
+    select(
+      chrom, data.type, simulation.source, method, sample.set, series,
+      mean.boot.estimates, sd.boot.estimates
+      ) %>%
+    pivot_longer(
+      c(mean.boot.estimates, sd.boot.estimates),
+      names_to = "stat", values_to = "estimate"
+      ) %>%
+    mutate(stat = str_remove(stat, ".boot.estimates")) %>%
+    unnest(estimate)
   color <- styles$empirical.colors[[choices$empirical.method]]
   # draw both statistics with chromosome and genome empirical references
   plot <- ggplot(simulation, aes(chrom, estimate, fill = series)) +
@@ -628,13 +660,10 @@ make.mean.sd.plot <- function(
       color = color, linetype = "dashed"
       ) +
     geom_boxplot(aes(group = interaction(chrom, series)), outliers = FALSE) +
-    geom_errorbar(data = filter(empirical, chrom != "all"),
-      aes(chrom, ymin = lower, ymax = upper), inherit.aes = FALSE,
-      color = color, width = 0.15
-      ) +
-    geom_point(data = filter(empirical, chrom != "all"),
-      aes(chrom, estimate), inherit.aes = FALSE, shape = 23,
-      fill = color, size = 3
+    geom_boxplot(data = empirical.chrom,
+      aes(chrom, estimate, fill = series,
+        group = interaction(chrom, series)),
+      inherit.aes = FALSE, outliers = FALSE
       ) +
     facet_grid(rows = vars(stat), scales = "free_y") +
     scale_x_discrete(limits = chromosomes, drop = FALSE) +
@@ -818,7 +847,7 @@ make.length.mean.sd.plot <- function(
 # select histogram rows using the resolved primary plot choices
 prepare.histogram.plot.data <- function(
     histogram.data, empirical.method, sample.set.input, chromosomes,
-    data.types, tag, show.all = FALSE
+    data.types, tag, show.all = TRUE
   ) {
   # resolve choices before selecting simulations and empirical references
   choices <- resolve.plot.choices(
@@ -861,7 +890,7 @@ prepare.histogram.plot.data <- function(
 # build chromosome histograms with replicate uncertainty for simulations
 make.histogram.plot <- function(
     histogram.data, empirical.method, sample.set.input, chromosomes,
-    breaks, styles, data.types, tag, show.all = FALSE
+    breaks, styles, data.types, tag, show.all = TRUE
   ) {
   # select one simulation subset plus complete empirical references
   data <- prepare.histogram.plot.data(
@@ -1291,7 +1320,7 @@ ancestry.histogram.plots <- imap(PLOT.CONFIGS, function(data.types, tag) {
   return(make.histogram.plot(
     ancestry.histogram.data, PLOT.EMPIRICAL.METHOD,
     PLOT.SAMPLE.SET, SELECTED.CHROMOSOMES, HISTOGRAM.BREAKS,
-    PLOT.STYLES, data.types, tag, show.all = FALSE
+    PLOT.STYLES, data.types, tag, show.all = TRUE
     ))
   })
 
