@@ -645,12 +645,17 @@ make.mean.sd.plot <- function(
     pivot_longer(
       c(mean.boot.estimates, sd.boot.estimates),
       names_to = "stat", values_to = "estimate"
-      ) %>%
+    ) %>%
     mutate(stat = str_remove(stat, ".boot.estimates")) %>%
     unnest(estimate)
+  # combine simulation summaries and empirical bootstrap draws for shared boxes
+  boxplot.data <- bind_rows(
+    simulation %>% select(series, chrom, stat, estimate),
+    empirical.chrom %>% select(series, chrom, stat, estimate)
+    )
   color <- styles$empirical.colors[[choices$empirical.method]]
   # draw both statistics with chromosome and genome empirical references
-  plot <- ggplot(simulation, aes(chrom, estimate, fill = series)) +
+  plot <- ggplot(boxplot.data, aes(chrom, estimate, fill = series)) +
     geom_rect(data = filter(empirical, chrom == "all"),
       aes(xmin = -Inf, xmax = Inf, ymin = lower, ymax = upper),
       inherit.aes = FALSE, fill = color, alpha = 0.1
@@ -660,11 +665,6 @@ make.mean.sd.plot <- function(
       color = color, linetype = "dashed"
       ) +
     geom_boxplot(aes(group = interaction(chrom, series)), outliers = FALSE) +
-    geom_boxplot(data = empirical.chrom,
-      aes(chrom, estimate, fill = series,
-        group = interaction(chrom, series)),
-      inherit.aes = FALSE, outliers = FALSE
-      ) +
     facet_grid(rows = vars(stat), scales = "free_y") +
     scale_x_discrete(limits = chromosomes, drop = FALSE) +
     scale_fill_manual(values = styles$colors, labels = styles$labels) +
@@ -1372,10 +1372,10 @@ print(ancestry.histogram.plots$TC.1kG)
 print(ancestry.histogram.plots$TC.TCD)
 print(ancestry.histogram.plots$TCD.1kG)
 print(ancestry.histogram.plots$onlyADX)
-print(simulation.diagnostic.plots$tc.tspop)
-print(simulation.diagnostic.plots$tc.inference)
-print(simulation.diagnostic.plots$tc.d.inference)
-print(simulation.diagnostic.plots$lg.tspop)
-print(simulation.diagnostic.plots$lg.inference)
-print(simulation.diagnostic.plots$lg.d.inference)
-print(empirical.diagnostic.plot)
+# print(simulation.diagnostic.plots$tc.tspop)
+# print(simulation.diagnostic.plots$tc.inference)
+# print(simulation.diagnostic.plots$tc.d.inference)
+# print(simulation.diagnostic.plots$lg.tspop)
+# print(simulation.diagnostic.plots$lg.inference)
+# print(simulation.diagnostic.plots$lg.d.inference)
+# print(empirical.diagnostic.plot)
