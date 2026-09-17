@@ -21,7 +21,7 @@ SIMDOWN.LG.DATA.DIR <- "~/scratch/OOA_NAAdmixture_largeGrowthOnekgDownsample/sta
 EMPIRICAL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_1kG/stats"
 OUTPUT.DIR <- "/home1/karatas/proj/OOA_NAAdmixture_data"
 CHROMOSOMES <- as.character(1:22)
-SELECTED.CHROMOSOMES <- c("1", "18")
+SELECTED.CHROMOSOMES <- c("1", "10", "20")
 SOURCE.LEVELS <- c(
   "Simulation_2T12Consistent", "Simulation_2T12Consistent_simDown",
   "Simulation_largeGrowth", "Simulation_largeGrowth_simDown",

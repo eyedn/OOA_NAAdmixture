@@ -21,7 +21,7 @@ EMPIRICAL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_1kG/stats"
 OUTPUT.DIR <- "/home1/karatas/proj/OOA_NAAdmixture_data"
 CHROMOSOME.LENGTHS.PATH <- "~/proj/1000GenomeNYGC_hg38_karatas/ONEKG_chr_lens.tsv"
 CHROMOSOMES <- as.character(1:22)
-SELECTED.CHROMOSOMES <- c("1", "7", "13", "18")
+SELECTED.CHROMOSOMES <- c("1", "10", "20")
 SIMULATION.K <- 2
 EMPIRICAL.K <- 2
 RANDOM.SEED <- 123
@@ -1519,7 +1519,7 @@ test.ancestry.genome.reference <- function(
     summary.data, empirical.method, sample.set.input, chromosomes,
     require.chromosome.reference = FALSE
     )
-  tests <- map_dfr(c("mean", "median", "mode"), function(statistic.name) {
+  tests <- map_dfr(c("mean", "mode", "sd"), function(statistic.name) {
     reference <- data %>%
       filter(
         source == "1kG", statistic == statistic.name, chrom == "all"
@@ -1816,11 +1816,9 @@ choose.k.frequency.tables <- list(
 
 
 # calculate each statistical analysis independently
-ancestry.chromosome.comparison.tests <-
-  test.ancestry.chromosome.comparisons()
+ancestry.chromosome.comparison.tests <- test.ancestry.chromosome.comparisons()
 ancestry.genome.reference.tests <- test.ancestry.genome.reference()
-ancestry.chromosome.length.models <-
-  fit.ancestry.chromosome.length.models()
+ancestry.chromosome.length.models <- fit.ancestry.chromosome.length.models()
 
 # persist statistical result tables after creating the output directory
 dir.create(OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
