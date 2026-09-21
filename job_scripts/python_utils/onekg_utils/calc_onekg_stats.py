@@ -352,7 +352,17 @@ def _aggregate_pi_theta_rows(rows):
 
     aggregated = []
     for (rep, pop, stat), stat_rows in sorted(grouped.items()):
-        span = sum(float(row["span"]) for row in stat_rows)
+        spans = []
+        for row in stat_rows:
+            if "span" not in row:
+                raise ValueError("Chromosome pi/theta row is missing span")
+            row_span = float(row["span"])
+            if not math.isfinite(row_span) or row_span <= 0:
+                raise ValueError(
+                    "Chromosome pi/theta spans must be finite and positive"
+                )
+            spans.append(row_span)
+        span = sum(spans)
         mutation_rate = float(stat_rows[0]["mutation_rate"])
         wattersons_const = float(stat_rows[0]["wattersons_const"])
         if stat == "pi":
@@ -377,6 +387,7 @@ def _aggregate_pi_theta_rows(rows):
                 "value": value,
                 "ne_value": value / (4 * mutation_rate),
                 "mutation_rate": mutation_rate,
+                "span": span,
                 "segregating_sites": segregating_sites,
                 "wattersons_const": wattersons_const
             }
