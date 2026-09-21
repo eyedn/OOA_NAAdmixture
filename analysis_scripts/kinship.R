@@ -49,10 +49,10 @@ PLOT.STYLES <- list(
     Simulation_largeGrowth_simDown = "#4B1FA8"
     ),
   series.labels = c(
-    Simulation_2T12Consistent = "TC",
-    Simulation_2T12Consistent_simDown = "TC D.",
-    Simulation_largeGrowth = "LG",
-    Simulation_largeGrowth_simDown = "LG D.",
+    Simulation_2T12Consistent = "T.C.",
+    Simulation_2T12Consistent_simDown = "T.C.D.",
+    Simulation_largeGrowth = "L.G.",
+    Simulation_largeGrowth_simDown = "L.G.D.",
     Empirical = "Emp."
     )
   )
@@ -158,8 +158,7 @@ summarize.bootstrap.kinship <- function(data, breaks) {
     filter(data.type != "Empirical") %>%
     summarize.simulation.interval(
       c(
-        "data.type", "rep", "pop", "role", "chrom", "xmin", "xmax",
-        "xmid", "target", "available", "selected", "shortfall"
+        "data.type", "rep", "pop", "role", "chrom", "xmin", "xmax", "xmid"
         ),
       "fraction"
       )
@@ -192,7 +191,11 @@ make.bootstrap.kinship.plot <- function(
     geom_errorbar(aes(ymin = lower, ymax = upper),
       position = position_dodge(diff(breaks)[1] * 0.9), width = 0,
       na.rm = TRUE) +
-    facet_grid(data.type ~ chrom, scales = "free_y") +
+    facet_grid(
+      data.type ~ chrom,
+      scales = "free_y",
+      labeller = labeller(data.type = PLOT.STYLES$series.labels)
+      ) +
     coord_cartesian(xlim = c(-0.2, 0.0442)) +
     scale_fill_manual(values = PLOT.STYLES$population.colors) +
     labs(title = title, x = "Pairwise KING kinship", y = "Fraction of pairs",

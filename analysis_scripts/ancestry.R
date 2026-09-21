@@ -55,17 +55,17 @@ PLOT.STYLES <- list(
     Empirical = "#B83264"
     ),
   labels = c(
-    Simulation_2T12Consistent = "TC",
-    Simulation_2T12Consistent_simDown = "TC D.",
-    Simulation_largeGrowth = "LG",
-    Simulation_largeGrowth_simDown = "LG D.",
+    Simulation_2T12Consistent = "T.C.",
+    Simulation_2T12Consistent_simDown = "T.C.D.",
+    Simulation_largeGrowth = "L.G.",
+    Simulation_largeGrowth_simDown = "L.G.D.",
     Empirical = "Emp."
     ),
   series.labels = c(
-    Simulation_2T12Consistent = "TC",
-    Simulation_2T12Consistent_simDown = "TC D.",
-    Simulation_largeGrowth = "LG",
-    Simulation_largeGrowth_simDown = "LG D.",
+    Simulation_2T12Consistent = "T.C.",
+    Simulation_2T12Consistent_simDown = "T.C.D.",
+    Simulation_largeGrowth = "L.G.",
+    Simulation_largeGrowth_simDown = "L.G.D.",
     Empirical = "Emp."
     ),
   shapes = c(full = 21, downsampled = 24),
@@ -233,7 +233,10 @@ make.bootstrap.ancestry.bar.plot <- function(data, data.types, title) {
       position = position_dodge(width = 0.8), width = 0, na.rm = TRUE) +
     facet_wrap(~stat, scales = "free_y", labeller = labeller(stat = c(
       mean = "Mean", sd = "SD"))) +
-    scale_fill_manual(values = PLOT.STYLES$colors) +
+    scale_fill_manual(
+      values = PLOT.STYLES$colors,
+      labels = PLOT.STYLES$labels
+      ) +
     labs(title = title, x = "Chromosome", y = "African ancestry", fill = NULL) +
     theme_bw(base_size = PLOT.BASE.SIZE) +
     theme(legend.position = "top", panel.grid.minor = element_blank())
@@ -243,13 +246,19 @@ make.bootstrap.ancestry.bar.plot <- function(data, data.types, title) {
 
 # construct a chromosome-1 ancestry histogram with direct simulation intervals
 make.bootstrap.ancestry.histogram.plot <- function(data, data.types, title) {
-  plotted <- data %>% filter(as.character(data.type) %in% data.types)
+  plotted <- data %>% filter(
+    as.character(data.type) %in% data.types,
+    as.character(chrom) == "1"
+    )
   plot <- ggplot(plotted, aes(xmid, mean, fill = data.type)) +
     geom_col(position = position_dodge(width = 0.045), width = 0.04,
       color = "black", linewidth = 0.2) +
     geom_errorbar(aes(ymin = lower, ymax = upper),
       position = position_dodge(width = 0.045), width = 0, na.rm = TRUE) +
-    scale_fill_manual(values = PLOT.STYLES$colors) +
+    scale_fill_manual(
+      values = PLOT.STYLES$colors,
+      labels = PLOT.STYLES$labels
+      ) +
     labs(title = title, x = "African ancestry", y = "Fraction of individuals",
       fill = NULL) +
     theme_bw(base_size = PLOT.BASE.SIZE) +

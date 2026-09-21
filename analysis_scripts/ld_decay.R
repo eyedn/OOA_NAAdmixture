@@ -49,10 +49,10 @@ PLOT.STYLES <- list(
     Simulation_largeGrowth_simDown = "#4B1FA8"
     ),
   series.labels = c(
-    Simulation_2T12Consistent = "TC",
-    Simulation_2T12Consistent_simDown = "TC D.",
-    Simulation_largeGrowth = "LG",
-    Simulation_largeGrowth_simDown = "LG D.",
+    Simulation_2T12Consistent = "T.C.",
+    Simulation_2T12Consistent_simDown = "T.C.D.",
+    Simulation_largeGrowth = "L.G.",
+    Simulation_largeGrowth_simDown = "L.G.D.",
     Empirical = "Emp."
     )
   )
@@ -430,7 +430,13 @@ make.bootstrap.ld.plot <- function(data, data.types, view) {
         (data.type != "Empirical" & pop == "ADX") |
         (data.type == "Empirical" & pop == "ASW")
       ) %>%
-    mutate(plot.key = if (source.view) as.character(data.type) else pop)
+    mutate(
+      plot.key = case_when(
+        source.view & data.type == "Empirical" ~ "ASW",
+        source.view ~ as.character(data.type),
+        TRUE ~ as.character(pop)
+        )
+      )
   plot <- ggplot(plotted, aes(distance_bin_bp, mean, color = plot.key,
     fill = plot.key, group = interaction(data.type, pop))) +
     scale_x_continuous(limits = c(5000, 250000)) +
@@ -444,20 +450,36 @@ make.bootstrap.ld.plot <- function(data, data.types, view) {
       aes(ymin = lower, ymax = upper), alpha = 0.2, color = NA
       )
     }
+  source.colors <- c(
+    PLOT.STYLES$source.colors,
+    ASW = PLOT.STYLES$population.colors[["ASW"]]
+    )
+  source.labels <- c(PLOT.STYLES$series.labels, ASW = "ASW")
   plot <- plot + geom_line(linewidth = 1) +
-    scale_color_manual(values = if (source.view) {
-      c(PLOT.STYLES$source.colors, ASW = PLOT.STYLES$population.colors[["ASW"]])
-      } else {
-      PLOT.STYLES$population.colors
-      }) +
-    scale_fill_manual(values = if (source.view) {
-      c(PLOT.STYLES$source.colors, ASW = PLOT.STYLES$population.colors[["ASW"]])
-      } else {
-      PLOT.STYLES$population.colors
-      })
+    scale_color_manual(
+      values = if (source.view) {
+        source.colors
+        } else {
+        PLOT.STYLES$population.colors
+        },
+      breaks = if (source.view) names(source.colors) else NULL,
+      labels = if (source.view) source.labels[names(source.colors)] else NULL
+      ) +
+    scale_fill_manual(
+      values = if (source.view) {
+        source.colors
+        } else {
+        PLOT.STYLES$population.colors
+        },
+      breaks = if (source.view) names(source.colors) else NULL,
+      labels = if (source.view) source.labels[names(source.colors)] else NULL
+      )
   if (view == "role.interval") plot <- plot + facet_wrap(~role)
   if (grepl("datatype.interval$", view)) {
-    plot <- plot + facet_wrap(~data.type)
+    plot <- plot + facet_wrap(
+      ~data.type,
+      labeller = labeller(data.type = PLOT.STYLES$series.labels)
+      )
     }
   return(plot)
   }

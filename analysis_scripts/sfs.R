@@ -58,24 +58,24 @@ SFS.COLORS <- c(
   "empirical CEU" = "#BB437E"
   )
 SFS.SERIES.LABELS <- c(
-  "TC AFR" = "TC AFR",
-  "TC ADX" = "TC ADX",
-  "TC EUR" = "TC EUR",
-  "TC D. AFR" = "TC D. AFR",
-  "TC D. ADX" = "TC D. ADX",
-  "TC D. EUR" = "TC D. EUR",
-  "LG ADX" = "LG ADX",
-  "LG D. ADX" = "LG D. ADX",
+  "TC AFR" = "T.C. AFR",
+  "TC ADX" = "T.C. ADX",
+  "TC EUR" = "T.C. EUR",
+  "TC D. AFR" = "T.C.D. AFR",
+  "TC D. ADX" = "T.C.D. ADX",
+  "TC D. EUR" = "T.C.D. EUR",
+  "LG ADX" = "L.G. ADX",
+  "LG D. ADX" = "L.G.D. ADX",
   "empirical YRI" = "Emp. YRI",
   "empirical ASW" = "Emp. ASW",
   "empirical CEU" = "Emp. CEU"
   )
 SFS.DODGE <- position_dodge(width = 0.9)
 PLOT.STYLES <- list(series.labels = c(
-  Simulation_2T12Consistent = "TC",
-  Simulation_2T12Consistent_simDown = "TC D.",
-  Simulation_largeGrowth = "LG",
-  Simulation_largeGrowth_simDown = "LG D.",
+  Simulation_2T12Consistent = "T.C.",
+  Simulation_2T12Consistent_simDown = "T.C.D.",
+  Simulation_largeGrowth = "L.G.",
+  Simulation_largeGrowth_simDown = "L.G.D.",
   Empirical = "Emp."
   ))
 
