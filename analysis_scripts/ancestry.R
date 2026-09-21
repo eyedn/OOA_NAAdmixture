@@ -10,6 +10,8 @@
 
 # set up ----
 library(tidyverse)
+library(ggh4x)
+library(ggfx)
 library(nanoparquet)
 
 
@@ -265,7 +267,7 @@ make.bootstrap.ancestry.bar.plot <- function(data, data.types, title) {
       data.type == "Empirical", chrom == "all",
       stat %in% unique(plotted$stat)
       )
-  dodge <- position_dodge(width = 0.8)
+  dodge <- position_dodge(width = 0.9)
   plot <- ggplot(plotted, aes(chrom, mean, fill = data.type)) +
     geom_rect(
       data = genome,
@@ -274,15 +276,29 @@ make.bootstrap.ancestry.bar.plot <- function(data, data.types, title) {
       fill = PLOT.STYLES$empirical.colors[[PLOT.EMPIRICAL.METHOD]],
       alpha = 0.15
       ) +
-    geom_col(position = dodge, color = "black") +
+    geom_col(
+      position = dodge, width = 0.8, linewidth = 1, color = "black"
+      ) +
     geom_errorbar(aes(ymin = lower, ymax = upper),
-      position = dodge, width = 0, na.rm = TRUE) +
-    geom_hline(data = genome, aes(yintercept = mean),
-               linetype = "dashed", color = PLOT.STYLES$empirical.colors[[
-                 PLOT.EMPIRICAL.METHOD
-               ]]) +
+      position = dodge, width = 0, linewidth = 1, na.rm = TRUE) +
+    with_outer_glow(
+      geom_hline(
+        data = genome, aes(yintercept = mean), linetype = "longdash",
+        color = PLOT.STYLES$empirical.colors[[PLOT.EMPIRICAL.METHOD]],
+        linewidth = 1,
+      ),
+      colour = "black",
+      sigma = 0,
+      expand = 3
+    ) +
     facet_wrap(vars(stat), scales = "free_y", nrow = 1,
       labeller = labeller(stat = c(mean = "Mean", sd = "SD"))) +
+    facetted_pos_scales(
+      y = list(
+        stat == "mean" ~ scale_y_continuous(limits = c(0.70, 0.95)),
+        stat == "sd"   ~ scale_y_continuous(limits = c(0, 0.25))
+      )
+    ) +
     scale_fill_manual(
       values = PLOT.STYLES$colors,
       labels = PLOT.STYLES$labels
@@ -298,17 +314,22 @@ make.bootstrap.ancestry.bar.plot <- function(data, data.types, title) {
 make.bootstrap.ancestry.histogram.plot <- function(data, data.types, title) {
   plotted <- data %>% filter(
     as.character(data.type) %in% data.types,
-    (as.character(chrom) == "all" & data.type == "Empirical") | (as.character(chrom) == "1" & data.type != "Empirical")
+    (
+      as.character(chrom) == "all" & data.type == "Empirical"
+      ) | (
+        as.character(chrom) == "1" & data.type != "Empirical"
+        )
     ) %>%
     mutate(data.type = factor(
       as.character(data.type),
       levels = order.active.levels(data.type, SOURCE.LEVELS)
       ))
+  dodge <- position_dodge(width = 0.05)
   plot <- ggplot(plotted, aes(xmid, mean, fill = data.type)) +
-    geom_col(position = position_dodge(width = 0.045), width = 0.04,
-      color = "black", linewidth = 0.2) +
+    geom_col(position = dodge, width = 0.04,
+      color = "black", linewidth = 0.75) +
     geom_errorbar(aes(ymin = lower, ymax = upper),
-      position = position_dodge(width = 0.045), width = 0, na.rm = TRUE) +
+      position = dodge, width = 0, linewidth = 0.75, na.rm = TRUE) +
     scale_fill_manual(
       values = PLOT.STYLES$colors,
       labels = PLOT.STYLES$labels
@@ -2328,7 +2349,6 @@ saveRDS(ancestry.bootstrap.tcd.1kg.histogram, file.path(
 saveRDS(ancestry.bootstrap.all.datatypes.adx.asw.histogram, file.path(
   OUTPUT.DIR, "ancestry.bootstrap.all.datatypes.adx.asw.histogram.rds"
   ))
-
 print(ancestry.bootstrap.tcd.1kg.bar)
 print(ancestry.bootstrap.all.datatypes.adx.asw.bar)
 print(ancestry.bootstrap.tcd.1kg.histogram)

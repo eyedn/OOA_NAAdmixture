@@ -20,7 +20,7 @@ SIM.LG.DATA.DIR <- "~/scratch/OOA_NAAdmixture_largeGrowth/stats"
 SIMDOWN.LG.DATA.DIR <- "~/scratch/OOA_NAAdmixture_largeGrowthOnekgDownsample/stats"
 EMPIRICAL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_1kG/stats"
 OUTPUT.DIR <- "/home1/karatas/proj/OOA_NAAdmixture_data"
-SELECTED.CHROMOSOMES <- c("1", "10", "20")
+SELECTED.CHROMOSOMES <- c("1")
 SOURCE.LEVELS <- c(
   "Simulation_2T12Consistent", "Simulation_2T12Consistent_simDown",
   "Simulation_largeGrowth", "Simulation_largeGrowth_simDown",
@@ -257,12 +257,12 @@ make.bootstrap.kinship.plot <- function(
     geom_errorbar(aes(ymin = lower, ymax = upper),
       position = position_dodge(diff(breaks)[1] * 0.9), width = 0,
       na.rm = TRUE) +
-    facet_grid(
-      data.type ~ chrom,
-      scales = "free_y",
-      labeller = labeller(data.type = PLOT.STYLES$series.labels)
-      ) +
-    coord_cartesian(xlim = c(-0.2, 0.0442)) +
+    # facet_grid(
+    #   data.type ~ chrom,
+    #   scales = "free_y",
+    #   labeller = labeller(data.type = PLOT.STYLES$series.labels)
+    #   ) +
+    coord_cartesian(xlim = c(-0.1, 0.0442)) +
     scale_fill_manual(values = PLOT.STYLES$population.colors) +
     labs(title = title, x = "Pairwise KING kinship", y = "Fraction of pairs",
       fill = NULL) +

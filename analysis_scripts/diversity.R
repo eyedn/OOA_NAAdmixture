@@ -324,7 +324,7 @@ filter.diversity.plot.view <- function(
       tag != "all.datatypes.adx.asw" |
         (data.type != "Empirical" & pop == "ADX") |
         (data.type == "Empirical" & pop == "ASW")
-      ) %>%
+      )
   active.sources <- order.active.levels(
     view.points$data.type, SOURCE.LEVELS
     )
@@ -381,7 +381,7 @@ make.diversity.plot <- function(
       ) +
     geom_col(
       position = dodge, width = 0.7,
-      color = "black", linewidth = 0.15
+      color = "black", linewidth = 0.2
       ) +
     geom_errorbar(
       data = points,

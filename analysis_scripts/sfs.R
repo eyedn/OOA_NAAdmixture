@@ -566,7 +566,7 @@ filter.plot.view <- function(data, data.types, tag) {
       tag != "all.datatypes.adx.asw" |
         (data.type != "Empirical" & pop == "ADX") |
         (data.type == "Empirical" & pop == "ASW")
-      ) %>%
+      )
   active.sources <- order.active.levels(filtered$data.type, SOURCE.LEVELS)
   active.populations <- order.active.levels(
     filtered$pop, POPULATION.LEVELS
@@ -877,8 +877,8 @@ sfs.data <- prepare.sfs.analysis(
   sfs.inputs$empirical
   )
 sfs.summaries <- summarize.sfs.analysis(sfs.data)
-singleton.diagnostics <- prepare.singleton.diagnostics(sfs.data)
-population.differences <- prepare.population.differences(sfs.data)
+# singleton.diagnostics <- prepare.singleton.diagnostics(sfs.data)
+# population.differences <- prepare.population.differences(sfs.data)
 
 sfs.bootstrap.count.plots <- imap(list(
   tcd.1kg = PLOT.CONFIGS$tcd.1kg,
@@ -901,13 +901,13 @@ sfs.bootstrap.proportion.plots <- imap(list(
     show.all = FALSE
     ))
   })
-singleton.composition.plot <- make.singleton.composition.plot(
-  singleton.diagnostics$simulation$composition,
-  singleton.diagnostics$empirical$composition
-  )
-population.difference.plot <- make.population.difference.plot(
-  population.differences
-  )
+# singleton.composition.plot <- make.singleton.composition.plot(
+#   singleton.diagnostics$simulation$composition,
+#   singleton.diagnostics$empirical$composition
+#   )
+# population.difference.plot <- make.population.difference.plot(
+#   population.differences
+#   )
 
 # Legacy diagnostics remain available above but are not emitted in this refresh.
 # Persist chromosome-1 bootstrap count and proportion plots before printing.
