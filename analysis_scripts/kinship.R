@@ -20,7 +20,6 @@ SIM.LG.DATA.DIR <- "~/scratch/OOA_NAAdmixture_largeGrowth/stats"
 SIMDOWN.LG.DATA.DIR <- "~/scratch/OOA_NAAdmixture_largeGrowthOnekgDownsample/stats"
 EMPIRICAL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_1kG/stats"
 OUTPUT.DIR <- "/home1/karatas/proj/OOA_NAAdmixture_data"
-CHROMOSOMES <- as.character(1:22)
 SELECTED.CHROMOSOMES <- c("1", "10", "20")
 SOURCE.LEVELS <- c(
   "Simulation_2T12Consistent", "Simulation_2T12Consistent_simDown",
@@ -35,6 +34,7 @@ PLOT.CONFIGS <- list(
   )
 KINSHIP.BIN.WIDTH <- 0.01
 KINSHIP.DOWNSAMPLE.SIZES <- c(AFR = 118L, ADX = 50L, EUR = 119L)
+BOOTSTRAP.REPLICATES <- 1000L
 RANDOM.SEED <- 123
 PLOT.BASE.SIZE <- 24
 PLOT.STYLES <- list(
@@ -162,15 +162,64 @@ summarize.bootstrap.kinship <- function(data, breaks) {
         ),
       "fraction"
       )
-  empirical <- build.kinship.histograms(
-    filter(data, data.type == "Empirical"), breaks
-    ) %>%
-    transmute(
-      data.type, pop, role, chrom, xmin, xmax, xmid,
-      mean = fraction, lower = NA_real_, upper = NA_real_, replicate.count = 1L
-      )
+  empirical <- summarize.empirical.kinship.interval(
+    filter(data, data.type == "Empirical"), breaks,
+    BOOTSTRAP.REPLICATES, RANDOM.SEED
+    )
   summary <- bind_rows(simulation, empirical)
   attr(summary, "sample.sizes") <- attr(selected, "sample.sizes")
+  return(summary)
+  }
+
+
+# resample empirical kinship pairs to calculate fixed-bin percentile intervals
+summarize.empirical.kinship.interval <- function(
+    data, breaks, replicates, seed
+  ) {
+  if (!is.numeric(replicates) || length(replicates) != 1L ||
+      !is.finite(replicates) || replicates < 1L || replicates %% 1L != 0) {
+    stop("Bootstrap replicate count must be a positive integer")
+    }
+  if (any(!is.finite(data$kinship))) {
+    stop("Empirical kinship values must be finite")
+    }
+  set.seed(seed)
+  summary <- data %>%
+    group_by(data.type, pop, role, chrom) %>%
+    group_modify(function(group, key) {
+      observed <- hist(
+        group$kinship, breaks = breaks, plot = FALSE, include.lowest = TRUE
+        )
+      observed.fraction <- observed$counts / sum(observed$counts)
+      bootstrap.fractions <- vapply(
+        seq_len(replicates),
+        function(replicate.id) {
+          values <- sample(group$kinship, nrow(group), replace = TRUE)
+          bootstrap <- hist(
+            values, breaks = breaks, plot = FALSE, include.lowest = TRUE
+            )
+          return(bootstrap$counts / sum(bootstrap$counts))
+          },
+        numeric(length(observed$counts))
+        )
+      bootstrap.fractions <- matrix(
+        bootstrap.fractions, nrow = length(observed$counts)
+        )
+      return(tibble(
+        xmin = head(observed$breaks, -1),
+        xmax = tail(observed$breaks, -1),
+        xmid = observed$mids,
+        mean = observed.fraction,
+        lower = apply(
+          bootstrap.fractions, 1L, quantile, 0.025, names = FALSE
+          ),
+        upper = apply(
+          bootstrap.fractions, 1L, quantile, 0.975, names = FALSE
+          ),
+        replicate.count = as.integer(replicates)
+        ))
+      }) %>%
+    ungroup()
   return(summary)
   }
 
@@ -297,18 +346,6 @@ read.kinship.chromosomes <- function(
     table$chrom <- chrom
     return(normalize.kinship.table(table, data.type.input))
     })
-
-  return(data)
-  }
-
-
-# read the empirical genome-wide kinship table
-read.empirical.kinship.genome <- function(data.directory) {
-  data <- read_parquet(file.path(
-    path.expand(data.directory), "kinship_unrelated.parquet"
-    ))
-  data$chrom <- "all"
-  data <- normalize.kinship.table(data, "Empirical")
 
   return(data)
   }
@@ -585,26 +622,23 @@ make.kinship.plot <- function(
 # analysis ----
 
 
-# read all available chromosome-level simulation and empirical estimates
+# read selected chromosome-level simulation and empirical estimates
 sim.tc.kinship <- read.kinship.chromosomes(
-  SIM.TC.DATA.DIR, CHROMOSOMES, "Simulation_2T12Consistent"
+  SIM.TC.DATA.DIR, SELECTED.CHROMOSOMES, "Simulation_2T12Consistent"
   )
 simDown.tc.kinship <- read.kinship.chromosomes(
-  SIMDOWN.TC.DATA.DIR, CHROMOSOMES,
+  SIMDOWN.TC.DATA.DIR, SELECTED.CHROMOSOMES,
   "Simulation_2T12Consistent_simDown"
   )
 sim.lg.kinship <- read.kinship.chromosomes(
-  SIM.LG.DATA.DIR, CHROMOSOMES, "Simulation_largeGrowth"
+  SIM.LG.DATA.DIR, SELECTED.CHROMOSOMES, "Simulation_largeGrowth"
   )
 simDown.lg.kinship <- read.kinship.chromosomes(
-  SIMDOWN.LG.DATA.DIR, CHROMOSOMES,
+  SIMDOWN.LG.DATA.DIR, SELECTED.CHROMOSOMES,
   "Simulation_largeGrowth_simDown"
   )
 emp.chromosome.kinship <- read.kinship.chromosomes(
-  EMPIRICAL.DATA.DIR, CHROMOSOMES, "Empirical"
-  )
-emp.genome.kinship <- read.empirical.kinship.genome(
-  EMPIRICAL.DATA.DIR
+  EMPIRICAL.DATA.DIR, SELECTED.CHROMOSOMES, "Empirical"
   )
 
 # combine all unrelated simulation and empirical pairs
@@ -612,9 +646,7 @@ simulation.kinship <- bind_rows(
   sim.tc.kinship, simDown.tc.kinship,
   sim.lg.kinship, simDown.lg.kinship
   )
-empirical.kinship <- bind_rows(
-  emp.chromosome.kinship, emp.genome.kinship
-  )
+empirical.kinship <- emp.chromosome.kinship
 
 # summarize common-bin histograms and construct all configured plots
 kinship.data <- bind_rows(simulation.kinship, empirical.kinship)
