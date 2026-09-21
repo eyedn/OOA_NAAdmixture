@@ -31,6 +31,9 @@ SOURCE.LEVELS <- c(
   "Simulation_largeGrowth", "Simulation_largeGrowth_simDown",
   "Empirical"
   )
+SOURCE.DISPLAY.LEVELS <- c("T.C.", "T.C.D.", "L.G.", "L.G.D.", "Emp.")
+SOURCE.LABELS <- setNames(SOURCE.DISPLAY.LEVELS, SOURCE.LEVELS)
+POPULATION.LEVELS <- c("AFR", "ADX", "EUR", "YRI", "ASW", "CEU")
 PLOT.CONFIGS <- list(
   TC.1kG = SOURCE.LEVELS[c(1, 5)],
   TC.TCD = SOURCE.LEVELS[c(1, 2)],
@@ -54,20 +57,8 @@ PLOT.STYLES <- list(
     Simulation_largeGrowth_simDown = "#4B1FA8",
     Empirical = "#B83264"
     ),
-  labels = c(
-    Simulation_2T12Consistent = "T.C.",
-    Simulation_2T12Consistent_simDown = "T.C.D.",
-    Simulation_largeGrowth = "L.G.",
-    Simulation_largeGrowth_simDown = "L.G.D.",
-    Empirical = "Emp."
-    ),
-  series.labels = c(
-    Simulation_2T12Consistent = "T.C.",
-    Simulation_2T12Consistent_simDown = "T.C.D.",
-    Simulation_largeGrowth = "L.G.",
-    Simulation_largeGrowth_simDown = "L.G.D.",
-    Empirical = "Emp."
-    ),
+  labels = SOURCE.LABELS,
+  series.labels = SOURCE.LABELS,
   shapes = c(full = 21, downsampled = 24),
   linetypes = c(full = "solid", downsampled = "dashed"),
   simulation.labels = c(
@@ -79,6 +70,15 @@ PLOT.STYLES <- list(
 
 
 # internal functions ----
+
+
+# return the canonical levels represented by a filtered plot view
+order.active.levels <- function(values, canonical.levels) {
+  active.levels <- canonical.levels[
+    canonical.levels %in% as.character(values)
+    ]
+  return(active.levels)
+  }
 
 
 # summarize complete simulation replicates with a 95% simulation interval
@@ -255,7 +255,11 @@ make.bootstrap.ancestry.bar.plot <- function(data, data.types, title) {
     filter(
       as.character(data.type) %in% data.types,
       chrom %in% SELECTED.CHROMOSOMES
-      )
+      ) %>%
+    mutate(data.type = factor(
+      as.character(data.type),
+      levels = order.active.levels(data.type, SOURCE.LEVELS)
+      ))
   genome <- data %>%
     filter(
       data.type == "Empirical", chrom == "all",
@@ -295,7 +299,11 @@ make.bootstrap.ancestry.histogram.plot <- function(data, data.types, title) {
   plotted <- data %>% filter(
     as.character(data.type) %in% data.types,
     (as.character(chrom) == "all" & data.type == "Empirical") | (as.character(chrom) == "1" & data.type != "Empirical")
-    )
+    ) %>%
+    mutate(data.type = factor(
+      as.character(data.type),
+      levels = order.active.levels(data.type, SOURCE.LEVELS)
+      ))
   plot <- ggplot(plotted, aes(xmid, mean, fill = data.type)) +
     geom_col(position = position_dodge(width = 0.045), width = 0.04,
       color = "black", linewidth = 0.2) +
@@ -756,8 +764,14 @@ prepare.plot.data <- function(
       ) %>%
     mutate(
       chrom = factor(chrom, levels = c(chromosomes, "all")),
-      data.type = factor(data.type, levels = data.types),
-      series = factor(data.type, levels = data.types)
+      data.type = factor(
+        data.type,
+        levels = order.active.levels(data.type, SOURCE.LEVELS)
+        ),
+      series = factor(
+        data.type,
+        levels = order.active.levels(data.type, SOURCE.LEVELS)
+        )
       ) %>%
     droplevels()
   attr(plot.data, "plot.choices") <- choices
@@ -1190,8 +1204,14 @@ prepare.histogram.plot.data <- function(
             ))
       ) %>%
     mutate(
-      data.type = factor(data.type, levels = data.types),
-      series = factor(data.type, levels = data.types)
+      data.type = factor(
+        data.type,
+        levels = order.active.levels(data.type, SOURCE.LEVELS)
+        ),
+      series = factor(
+        data.type,
+        levels = order.active.levels(data.type, SOURCE.LEVELS)
+        )
       ) %>%
     droplevels()
   attr(data, "plot.choices") <- choices
@@ -1333,7 +1353,7 @@ read.empirical.admixture.diagnostic <- function(data.directory, ks) {
   diagnostic <- data %>%
     filter(k %in% ks, pop %in% c("YRI", "ASW", "CEU")) %>%
     mutate(
-      pop = factor(pop, levels = c("YRI", "ASW", "CEU")),
+      pop = factor(pop, levels = POPULATION.LEVELS[4:6]),
       k = factor(k, levels = ks)
       ) %>%
     arrange(pop, sample_id) %>%

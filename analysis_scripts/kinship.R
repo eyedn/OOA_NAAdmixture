@@ -26,6 +26,9 @@ SOURCE.LEVELS <- c(
   "Simulation_largeGrowth", "Simulation_largeGrowth_simDown",
   "Empirical"
   )
+SOURCE.DISPLAY.LEVELS <- c("T.C.", "T.C.D.", "L.G.", "L.G.D.", "Emp.")
+SOURCE.LABELS <- setNames(SOURCE.DISPLAY.LEVELS, SOURCE.LEVELS)
+POPULATION.LEVELS <- c("AFR", "ADX", "EUR", "YRI", "ASW", "CEU")
 PLOT.CONFIGS <- list(
   TC.1kG = SOURCE.LEVELS[c(1, 5)],
   TC.TCD = SOURCE.LEVELS[c(1, 2)],
@@ -48,17 +51,20 @@ PLOT.STYLES <- list(
     Simulation_largeGrowth = "#32146F",
     Simulation_largeGrowth_simDown = "#4B1FA8"
     ),
-  series.labels = c(
-    Simulation_2T12Consistent = "T.C.",
-    Simulation_2T12Consistent_simDown = "T.C.D.",
-    Simulation_largeGrowth = "L.G.",
-    Simulation_largeGrowth_simDown = "L.G.D.",
-    Empirical = "Emp."
-    )
+  series.labels = SOURCE.LABELS
   )
 
 
 # internal functions ----
+
+
+# return the canonical levels represented by a filtered plot view
+order.active.levels <- function(values, canonical.levels) {
+  active.levels <- canonical.levels[
+    canonical.levels %in% as.character(values)
+    ]
+  return(active.levels)
+  }
 
 
 # summarize the 50 complete simulation replicates with percentile intervals
@@ -234,6 +240,17 @@ make.bootstrap.kinship.plot <- function(
   if (!is.null(populations)) {
     plotted <- plotted %>% filter(pop %in% populations)
     }
+  plotted <- plotted %>%
+    mutate(
+      data.type = factor(
+        as.character(data.type),
+        levels = order.active.levels(data.type, SOURCE.LEVELS)
+        ),
+      pop = factor(
+        as.character(pop),
+        levels = order.active.levels(pop, POPULATION.LEVELS)
+        )
+      )
   plot <- ggplot(plotted, aes(xmid, mean, fill = pop, group = pop)) +
     geom_col(position = position_dodge(diff(breaks)[1] * 0.9),
       width = diff(breaks)[1] * 0.85, color = "black", linewidth = 0.1) +
@@ -502,7 +519,7 @@ summarize.kinship.histograms <- function(data) {
     mutate(sd.fraction = NA_real_, replicate.count = 1L)
   summary <- bind_rows(simulation, empirical) %>%
     mutate(
-      pop = factor(pop, levels = c("AFR", "ADX", "EUR", "YRI", "ASW", "CEU")),
+      pop = factor(pop, levels = POPULATION.LEVELS),
       chrom = factor(
         chrom, levels = c(SELECTED.CHROMOSOMES, "all")
         ),
@@ -526,8 +543,16 @@ filter.plot.view <- function(data, data.types, tag) {
     }
   filtered <- data %>%
     filter(as.character(data.type) %in% data.types) %>%
-    filter(tag != "onlyADX" | pop == "ADX") %>%
-    mutate(data.type = factor(as.character(data.type), levels = data.types)) %>%
+    filter(tag != "onlyADX" | pop == "ADX")
+  active.sources <- order.active.levels(filtered$data.type, SOURCE.LEVELS)
+  active.populations <- order.active.levels(
+    filtered$pop, POPULATION.LEVELS
+    )
+  filtered <- filtered %>%
+    mutate(
+      data.type = factor(as.character(data.type), levels = active.sources),
+      pop = factor(as.character(pop), levels = active.populations)
+      ) %>%
     arrange(data.type) %>%
     droplevels()
   return(filtered)
@@ -550,11 +575,15 @@ make.kinship.plot <- function(
       )) %>%
     mutate(
       plot.key = if (source.view) {
-        factor(as.character(data.type), levels = data.types)
+        factor(
+          as.character(data.type),
+          levels = order.active.levels(data.type, SOURCE.LEVELS)
+          )
         } else {
-        factor(as.character(pop), levels = c(
-          "AFR", "ADX", "EUR", "YRI", "ASW", "CEU"
-          ))
+        factor(
+          as.character(pop),
+          levels = order.active.levels(pop, POPULATION.LEVELS)
+          )
         }
       )
   dodge <- position_dodge(width = diff(breaks)[1] * 0.9)
@@ -584,19 +613,17 @@ make.kinship.plot <- function(
         data.type = as_labeller(styles$series.labels)
         )
       ) +
-    scale_fill_manual(values = if (source.view) {
-      styles$source.colors
-      } else {
-      styles$population.colors
-      }, breaks = if (source.view) {
-      data.types
-      } else {
-      names(styles$population.colors)
-      }, labels = if (source.view) {
-      styles$series.labels[data.types]
-      } else {
-      waiver()
-      }) +
+    scale_fill_manual(
+      values = if (source.view) styles$source.colors else {
+        styles$population.colors
+        },
+      breaks = levels(plot.data$plot.key),
+      labels = if (source.view) {
+        styles$series.labels[levels(plot.data$plot.key)]
+        } else {
+        waiver()
+        }
+      ) +
     labs(
       x = "Pairwise KING Kinship", y = "Fraction of pairs",
       title = paste("Pairwise KING Kinship Distributions:", tag),

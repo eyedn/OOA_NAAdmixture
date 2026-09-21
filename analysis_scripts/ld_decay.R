@@ -27,6 +27,9 @@ SOURCE.LEVELS <- c(
   "Simulation_largeGrowth", "Simulation_largeGrowth_simDown",
   "Empirical"
   )
+SOURCE.DISPLAY.LEVELS <- c("T.C.", "T.C.D.", "L.G.", "L.G.D.", "Emp.")
+SOURCE.LABELS <- setNames(SOURCE.DISPLAY.LEVELS, SOURCE.LEVELS)
+POPULATION.LEVELS <- c("AFR", "ADX", "EUR", "YRI", "ASW", "CEU")
 PLOT.CONFIGS <- list(
   TC.1kG = SOURCE.LEVELS[c(1, 5)],
   TC.TCD = SOURCE.LEVELS[c(1, 2)],
@@ -36,6 +39,7 @@ PLOT.CONFIGS <- list(
 LD.X.LOWER <- 0
 LD.X.UPPER <- 250000
 LD.X.BREAKS <- seq(LD.X.LOWER, LD.X.UPPER, by = 50000)
+BOOTSTRAP.LEGEND.VIEWS <- c("all.lines", "role.interval")
 PLOT.BASE.SIZE <- 24
 PLOT.STYLES <- list(
   population.colors = c(
@@ -48,17 +52,20 @@ PLOT.STYLES <- list(
     Simulation_largeGrowth = "#32146F",
     Simulation_largeGrowth_simDown = "#4B1FA8"
     ),
-  series.labels = c(
-    Simulation_2T12Consistent = "T.C.",
-    Simulation_2T12Consistent_simDown = "T.C.D.",
-    Simulation_largeGrowth = "L.G.",
-    Simulation_largeGrowth_simDown = "L.G.D.",
-    Empirical = "Emp."
-    )
+  series.labels = SOURCE.LABELS
   )
 
 
 # internal functions ----
+
+
+# return the canonical levels represented by a filtered plot view
+order.active.levels <- function(values, canonical.levels) {
+  active.levels <- canonical.levels[
+    canonical.levels %in% as.character(values)
+    ]
+  return(active.levels)
+  }
 
 
 # summarize complete pooled replicate curves with percentile intervals
@@ -250,7 +257,7 @@ summarize.ld.curves <- function(data, chromosomes) {
     distinct()
   summary <- bind_rows(simulation, empirical, empirical.genome) %>%
     mutate(
-      role = factor(role, levels = c("AFR", "ADX", "EUR")),
+      role = factor(role, levels = POPULATION.LEVELS[1:3]),
       chrom = factor(as.character(chrom), levels = c(chromosomes, "all")),
       data.type = factor(
         data.type,
@@ -264,7 +271,7 @@ summarize.ld.curves <- function(data, chromosomes) {
 
 
 # add shared scales, labels, guides, and theme to one LD plot
-style.ld.plot <- function(plot, title, subtitle, styles, tag) {
+style.ld.plot <- function(plot, title, subtitle, styles, tag, active.keys) {
   source.view <- tag == "onlyADX"
   plot <- plot +
     scale_color_manual(
@@ -273,13 +280,9 @@ style.ld.plot <- function(plot, title, subtitle, styles, tag) {
         } else {
         styles$population.colors
         },
-      breaks = if (source.view) {
-        PLOT.CONFIGS[[tag]]
-        } else {
-        names(styles$population.colors)
-        },
+      breaks = active.keys,
       labels = if (source.view) {
-        styles$series.labels[PLOT.CONFIGS[[tag]]]
+        styles$series.labels[active.keys]
         } else {
         waiver()
         }
@@ -353,8 +356,16 @@ filter.plot.view <- function(data, data.types, tag) {
     }
   filtered <- data %>%
     filter(as.character(data.type) %in% data.types) %>%
-    filter(tag != "onlyADX" | pop == "ADX") %>%
-    mutate(data.type = factor(as.character(data.type), levels = data.types)) %>%
+    filter(tag != "onlyADX" | pop == "ADX")
+  active.sources <- order.active.levels(filtered$data.type, SOURCE.LEVELS)
+  active.populations <- order.active.levels(
+    filtered$pop, POPULATION.LEVELS
+    )
+  filtered <- filtered %>%
+    mutate(
+      data.type = factor(as.character(data.type), levels = active.sources),
+      pop = factor(as.character(pop), levels = active.populations)
+      ) %>%
     arrange(data.type) %>%
     droplevels()
   return(filtered)
@@ -381,11 +392,15 @@ make.ld.plot <- function(
         levels = c(chromosomes, if (show.all) "all")
         ),
       plot.key = if (source.view) {
-        factor(as.character(data.type), levels = data.types)
+        factor(
+          as.character(data.type),
+          levels = order.active.levels(data.type, SOURCE.LEVELS)
+          )
         } else {
-        factor(as.character(pop), levels = c(
-          "AFR", "ADX", "EUR", "YRI", "ASW", "CEU"
-          ))
+        factor(
+          as.character(pop),
+          levels = order.active.levels(pop, POPULATION.LEVELS)
+          )
         }
       )
   if (!nrow(plot.data)) {
@@ -409,7 +424,7 @@ make.ld.plot <- function(
     paste0(
       "Rogers–Huff r²; chrom.", paste(chromosomes, collapse = ", ")
       ),
-    styles, tag
+    styles, tag, levels(plot.data$plot.key)
     )
 
   return(plot)
@@ -419,6 +434,7 @@ make.ld.plot <- function(
 # build one chromosome-1 bootstrap LD view over the requested distance range
 make.bootstrap.ld.plot <- function(data, data.types, view) {
   source.view <- grepl("all.datatypes.adx.asw", view)
+  show.legend <- source.view || view %in% BOOTSTRAP.LEGEND.VIEWS
   plotted <- data %>%
     filter(
       as.character(chrom) == "1",
@@ -429,12 +445,27 @@ make.bootstrap.ld.plot <- function(data, data.types, view) {
       !source.view |
         (data.type != "Empirical" & pop == "ADX") |
         (data.type == "Empirical" & pop == "ASW")
-      ) %>%
+      )
+  active.sources <- order.active.levels(plotted$data.type, SOURCE.LEVELS)
+  active.populations <- order.active.levels(
+    plotted$pop, POPULATION.LEVELS
+    )
+  plotted <- plotted %>%
     mutate(
+      data.type = factor(as.character(data.type), levels = active.sources),
+      pop = factor(as.character(pop), levels = active.populations),
       plot.key = case_when(
         source.view & data.type == "Empirical" ~ "ASW",
         source.view ~ as.character(data.type),
         TRUE ~ as.character(pop)
+        ),
+      plot.key = factor(
+        plot.key,
+        levels = if (source.view) {
+          c(active.sources, "ASW")[c(active.sources, "ASW") %in% plot.key]
+          } else {
+          active.populations
+          }
         )
       )
   plot <- ggplot(plotted, aes(distance_bin_bp, mean, color = plot.key,
@@ -455,15 +486,20 @@ make.bootstrap.ld.plot <- function(data, data.types, view) {
     ASW = PLOT.STYLES$population.colors[["ASW"]]
     )
   source.labels <- c(PLOT.STYLES$series.labels, ASW = "ASW")
-  plot <- plot + geom_line(linewidth = 1) +
+  plot <- plot +
+    geom_line(linewidth = 1, show.legend = show.legend) +
     scale_color_manual(
       values = if (source.view) {
         source.colors
         } else {
         PLOT.STYLES$population.colors
         },
-      breaks = if (source.view) names(source.colors) else NULL,
-      labels = if (source.view) source.labels[names(source.colors)] else NULL
+      breaks = levels(plotted$plot.key),
+      labels = if (source.view) {
+        source.labels[levels(plotted$plot.key)]
+        } else {
+        waiver()
+        }
       ) +
     scale_fill_manual(
       values = if (source.view) {
@@ -471,8 +507,20 @@ make.bootstrap.ld.plot <- function(data, data.types, view) {
         } else {
         PLOT.STYLES$population.colors
         },
-      breaks = if (source.view) names(source.colors) else NULL,
-      labels = if (source.view) source.labels[names(source.colors)] else NULL
+      breaks = levels(plotted$plot.key),
+      labels = if (source.view) {
+        source.labels[levels(plotted$plot.key)]
+        } else {
+        waiver()
+        }
+      ) +
+    guides(
+      color = if (show.legend) {
+        guide_legend(order = 1, nrow = 1, byrow = TRUE)
+        } else {
+        "none"
+        },
+      fill = "none"
       )
   if (view == "role.interval") plot <- plot + facet_wrap(~role)
   if (grepl("datatype.interval$", view)) {

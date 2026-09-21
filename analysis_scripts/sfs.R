@@ -29,6 +29,9 @@ SOURCE.LEVELS <- c(
   "Simulation_largeGrowth", "Simulation_largeGrowth_simDown",
   "Empirical"
   )
+SOURCE.DISPLAY.LEVELS <- c("T.C.", "T.C.D.", "L.G.", "L.G.D.", "Emp.")
+SOURCE.LABELS <- setNames(SOURCE.DISPLAY.LEVELS, SOURCE.LEVELS)
+POPULATION.LEVELS <- c("AFR", "ADX", "EUR", "YRI", "ASW", "CEU")
 PLOT.CONFIGS <- list(
   TC.1kG = SOURCE.LEVELS[c(1, 5)],
   TC.TCD = SOURCE.LEVELS[c(1, 2)],
@@ -38,12 +41,23 @@ PLOT.CONFIGS <- list(
   all.datatypes.adx.asw = SOURCE.LEVELS
   )
 SFS.FACET.LEVELS <- SELECTED.CHROMOSOMES
-SFS.SERIES.LEVELS <- c(
-  "TC AFR", "TC ADX", "TC EUR",
-  "TC D. AFR", "TC D. ADX", "TC D. EUR",
-  "LG ADX", "LG D. ADX",
-  "empirical YRI", "empirical ASW", "empirical CEU"
+SFS.SERIES.PREFIXES <- c(
+  Simulation_2T12Consistent = "TC",
+  Simulation_2T12Consistent_simDown = "TC D.",
+  Simulation_largeGrowth = "LG",
+  Simulation_largeGrowth_simDown = "LG D.",
+  Empirical = "empirical"
   )
+SFS.SOURCE.POPULATIONS <- list(
+  Simulation_2T12Consistent = POPULATION.LEVELS[1:3],
+  Simulation_2T12Consistent_simDown = POPULATION.LEVELS[1:3],
+  Simulation_largeGrowth = POPULATION.LEVELS[2],
+  Simulation_largeGrowth_simDown = POPULATION.LEVELS[2],
+  Empirical = POPULATION.LEVELS[4:6]
+  )
+SFS.SERIES.LEVELS <- unname(unlist(lapply(SOURCE.LEVELS, function(source) {
+  paste(SFS.SERIES.PREFIXES[[source]], SFS.SOURCE.POPULATIONS[[source]])
+  })))
 SFS.COLORS <- c(
   "TC AFR" = "#9BD5F2",
   "TC ADX" = "#9A83CE",
@@ -71,16 +85,19 @@ SFS.SERIES.LABELS <- c(
   "empirical CEU" = "Emp. CEU"
   )
 SFS.DODGE <- position_dodge(width = 0.9)
-PLOT.STYLES <- list(series.labels = c(
-  Simulation_2T12Consistent = "T.C.",
-  Simulation_2T12Consistent_simDown = "T.C.D.",
-  Simulation_largeGrowth = "L.G.",
-  Simulation_largeGrowth_simDown = "L.G.D.",
-  Empirical = "Emp."
-  ))
+PLOT.STYLES <- list(series.labels = SOURCE.LABELS)
 
 
 # internal functions ----
+
+
+# return the canonical levels represented by a filtered plot view
+order.active.levels <- function(values, canonical.levels) {
+  active.levels <- canonical.levels[
+    canonical.levels %in% as.character(values)
+    ]
+  return(active.levels)
+  }
 
 
 # summarize complete folded spectrum vectors with percentile intervals
@@ -298,6 +315,7 @@ prepare.sfs.analysis <- function(simulation, simDown = NULL, empirical = NULL) {
           paste("LG D.", pop),
         data.type == "Empirical" ~ paste("empirical", pop)
         ),
+      pop = factor(pop, levels = POPULATION.LEVELS),
       chrom = factor(chrom, levels = c(SFS.FACET.LEVELS, "all")),
       series = factor(series, levels = SFS.SERIES.LEVELS)
       )
@@ -549,11 +567,17 @@ filter.plot.view <- function(data, data.types, tag) {
         (data.type != "Empirical" & pop == "ADX") |
         (data.type == "Empirical" & pop == "ASW")
       ) %>%
+  active.sources <- order.active.levels(filtered$data.type, SOURCE.LEVELS)
+  active.populations <- order.active.levels(
+    filtered$pop, POPULATION.LEVELS
+    )
+  filtered <- filtered %>%
     mutate(
-      data.type = factor(as.character(data.type), levels = data.types),
+      data.type = factor(as.character(data.type), levels = active.sources),
+      pop = factor(as.character(pop), levels = active.populations),
       series = factor(
         as.character(series),
-        levels = SFS.SERIES.LEVELS[SFS.SERIES.LEVELS %in% series]
+        levels = order.active.levels(series, SFS.SERIES.LEVELS)
         ),
       chrom = factor(
         as.character(chrom),
@@ -644,6 +668,22 @@ make.sfs.plot <- function(
 # build simulation count compositions with empirical population references
 make.singleton.composition.plot <- function(data, empirical) {
   source.labels <- PLOT.STYLES$series.labels
+  data <- data %>%
+    mutate(
+      data.type = factor(
+        as.character(data.type),
+        levels = order.active.levels(data.type, SOURCE.LEVELS)
+        ),
+      pop = factor(
+        as.character(pop),
+        levels = order.active.levels(pop, POPULATION.LEVELS)
+        )
+      )
+  empirical <- empirical %>%
+    mutate(pop = factor(
+      as.character(pop),
+      levels = order.active.levels(pop, POPULATION.LEVELS)
+      ))
   plot <- ggplot(
     data,
     aes(
@@ -698,6 +738,11 @@ make.population.difference.plot <- function(data) {
     Simulation_2T12Consistent_simDown = "#6F55B5",
     Empirical = "#E44B8D"
     )
+  data <- data %>%
+    mutate(data.type = factor(
+      as.character(data.type),
+      levels = order.active.levels(data.type, SOURCE.LEVELS)
+      ))
   plot <- ggplot(
     data,
     aes(
@@ -719,8 +764,8 @@ make.population.difference.plot <- function(data) {
     scale_x_continuous(breaks = seq_len(DISPLAY.BIN.MAX)) +
     scale_color_manual(
       values = source.colors,
-      breaks = names(source.colors),
-      labels = source.labels[names(source.colors)]
+      breaks = levels(data$data.type),
+      labels = source.labels[levels(data$data.type)]
       ) +
     labs(
       x = "Minor allele count",

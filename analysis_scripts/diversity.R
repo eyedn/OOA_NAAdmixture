@@ -26,6 +26,9 @@ SOURCE.LEVELS <- c(
   "Simulation_largeGrowth", "Simulation_largeGrowth_simDown",
   "Empirical"
   )
+SOURCE.DISPLAY.LEVELS <- c("T.C.", "T.C.D.", "L.G.", "L.G.D.", "Emp.")
+SOURCE.LABELS <- setNames(SOURCE.DISPLAY.LEVELS, SOURCE.LEVELS)
+POPULATION.LEVELS <- c("AFR", "ADX", "EUR", "YRI", "ASW", "CEU")
 PLOT.CONFIGS <- list(
   TC.1kG = SOURCE.LEVELS[c(1, 5)],
   TC.TCD = SOURCE.LEVELS[c(1, 2)],
@@ -66,11 +69,21 @@ PLOT.STYLES <- list(
     ),
   empirical.colors = c(
     YRI = "#EEC4DC", ASW = "#E44B8D", CEU = "#BB437E"
-    )
+    ),
+  series.labels = SOURCE.LABELS
   )
 
 
 # internal functions ----
+
+
+# return the canonical levels represented by a filtered plot view
+order.active.levels <- function(values, canonical.levels) {
+  active.levels <- canonical.levels[
+    canonical.levels %in% as.character(values)
+    ]
+  return(active.levels)
+  }
 
 
 # summarize complete simulation replicates with direct percentile intervals
@@ -266,7 +279,7 @@ build.diversity.plot.data <- function(
   points <- bind_rows(simulation.points, empirical.points) %>%
     mutate(
       chrom = factor(chrom, levels = chromosomes),
-      pop = factor(pop, levels = c("AFR", "ADX", "EUR", "YRI", "ASW", "CEU")),
+      pop = factor(pop, levels = POPULATION.LEVELS),
       data.type = factor(
         data.type, levels = SOURCE.LEVELS
         ),
@@ -285,7 +298,7 @@ build.diversity.plot.data <- function(
     filter(chrom == "all", stat %in% c("pi", "theta")) %>%
     transmute(pop, role, stat, mask, estimate = value) %>%
     mutate(
-      pop = factor(pop, levels = c("AFR", "ADX", "EUR", "YRI", "ASW", "CEU")),
+      pop = factor(pop, levels = POPULATION.LEVELS),
       mask = factor(mask, levels = c("Intergenic", "Full callable")),
       stat = factor(stat, levels = c("pi", "theta"))
       )
@@ -312,20 +325,31 @@ filter.diversity.plot.view <- function(
         (data.type != "Empirical" & pop == "ADX") |
         (data.type == "Empirical" & pop == "ASW")
       ) %>%
+  active.sources <- order.active.levels(
+    view.points$data.type, SOURCE.LEVELS
+    )
+  active.populations <- order.active.levels(
+    view.points$pop, POPULATION.LEVELS
+    )
+  view.points <- view.points %>%
     mutate(
-      data.type = factor(as.character(data.type), levels = data.types),
+      data.type = factor(as.character(data.type), levels = active.sources),
+      pop = factor(as.character(pop), levels = active.populations),
       fill.key = factor(
         as.character(fill.key),
-        levels = names(PLOT.STYLES$fill.colors)[
-          names(PLOT.STYLES$fill.colors) %in% fill.key
-          ]
+        levels = order.active.levels(
+          fill.key, names(PLOT.STYLES$fill.colors)
+          )
         )
       ) %>%
     arrange(data.type, fill.key) %>%
     droplevels()
-  view.lines <- if ("Empirical" %in% data.types) genome.lines else {
+  view.lines <- if ("Empirical" %in% active.sources) genome.lines else {
     genome.lines[0, , drop = FALSE]
     }
+  view.lines <- view.lines %>%
+    filter(as.character(pop) %in% active.populations) %>%
+    mutate(pop = factor(as.character(pop), levels = active.populations))
   return(list(points = view.points, genome.lines = view.lines))
   }
 
@@ -342,9 +366,7 @@ make.diversity.plot <- function(
   points <- filter(points, mask == "Intergenic")
   genome.lines <- filter(genome.lines, mask == "Intergenic")
   dodge <- position_dodge(width = 0.75)
-  fill.keys <- names(styles$fill.colors)[
-    names(styles$fill.colors) %in% as.character(points$fill.key)
-    ]
+  fill.keys <- levels(points$fill.key)
   plot <- ggplot(
     points,
     aes(
