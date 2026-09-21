@@ -26,7 +26,7 @@ CHROMOSOMES <- as.character(1:22)
 SELECTED.CHROMOSOMES <- c("1", "10", "20")
 SIMULATION.K <- 2
 EMPIRICAL.K <- 2
-RANDOM.SEED <- 123
+RANDOM.SEED <- 123L
 DOWNSAMPLE.SIZE <- 50
 SOURCE.LEVELS <- c(
   "Simulation_2T12Consistent", "Simulation_2T12Consistent_simDown",
@@ -40,14 +40,21 @@ PLOT.CONFIGS <- list(
   TC.1kG = SOURCE.LEVELS[c(1, 5)],
   TC.TCD = SOURCE.LEVELS[c(1, 2)],
   TCD.1kG = SOURCE.LEVELS[c(2, 5)],
-  onlyADX = SOURCE.LEVELS[1:4]
+  onlyADX = SOURCE.LEVELS[1:4],
+  tcd.1kg = SOURCE.LEVELS[c(2, 5)],
+  all.datatypes.adx.asw = SOURCE.LEVELS
   )
-BOOTSTRAP.REPLICATES <- 1000
+BOOTSTRAP.REPLICATES <- 1000L
 HISTOGRAM.BREAKS <- seq(0, 1, by = 0.05)
 ADMIXED.ROLES <- c("ADX", "ASW")
 PLOT.EMPIRICAL.METHOD <- "ADMIXTURE"
 PLOT.SAMPLE.SET <- "downsampled"
 PLOT.BASE.SIZE <- 24
+CATEGORICAL.BAR.DODGE <- 0.9
+CATEGORICAL.BAR.WIDTH <- 0.8
+CATEGORICAL.BAR.LINEWIDTH <- 1
+DENSE.BAR.WIDTH.MULTIPLIER <- 0.8
+DENSE.BAR.LINEWIDTH <- 0.75
 ANCESTRY.COMPONENT.COLORS <- c(
   component_1_q = "#0072B2", component_2_q = "#D55E00"
   )
@@ -83,8 +90,8 @@ order.active.levels <- function(values, canonical.levels) {
   }
 
 
-# summarize complete simulation replicates with a 95% simulation interval
-summarize.simulation.interval <- function(
+# summarize complete simulation replicates with a 95% bootstrap interval
+summarize.bootstrap.interval <- function(
     data, grouping.columns, value.column
   ) {
   if (any(!is.finite(data[[value.column]]))) {
@@ -175,7 +182,7 @@ summarize.bootstrap.ancestry <- function(
     group_by(data.type, rep, chrom) %>%
     summarise(mean = mean(afr.q), sd = sd(afr.q), .groups = "drop") %>%
     pivot_longer(c(mean, sd), names_to = "stat", values_to = "value") %>%
-    summarize.simulation.interval(c("data.type", "rep", "chrom", "stat"),
+    summarize.bootstrap.interval(c("data.type", "rep", "chrom", "stat"),
       "value")
   empirical.data <- data %>%
     filter(
@@ -222,7 +229,7 @@ summarize.bootstrap.histograms <- function(data, breaks, seed, replicates) {
       return(tibble(bin = seq_along(counts), fraction = counts / sum(counts)))
       }) %>%
     ungroup() %>%
-    summarize.simulation.interval(c("data.type", "rep", "chrom", "bin"),
+    summarize.bootstrap.interval(c("data.type", "rep", "chrom", "bin"),
       "fraction")
   empirical <- data %>%
     filter(
@@ -267,7 +274,7 @@ make.bootstrap.ancestry.bar.plot <- function(data, data.types, title) {
       data.type == "Empirical", chrom == "all",
       stat %in% unique(plotted$stat)
       )
-  dodge <- position_dodge(width = 0.9)
+  dodge <- position_dodge(width = CATEGORICAL.BAR.DODGE)
   plot <- ggplot(plotted, aes(chrom, mean, fill = data.type)) +
     geom_rect(
       data = genome,
@@ -277,10 +284,12 @@ make.bootstrap.ancestry.bar.plot <- function(data, data.types, title) {
       alpha = 0.15
       ) +
     geom_col(
-      position = dodge, width = 0.8, linewidth = 1, color = "black"
+      position = dodge, width = CATEGORICAL.BAR.WIDTH,
+      linewidth = CATEGORICAL.BAR.LINEWIDTH, color = "black"
       ) +
     geom_errorbar(aes(ymin = lower, ymax = upper),
-      position = dodge, width = 0, linewidth = 1, na.rm = TRUE) +
+      position = dodge, width = 0,
+      linewidth = CATEGORICAL.BAR.LINEWIDTH, na.rm = TRUE) +
     with_outer_glow(
       geom_hline(
         data = genome, aes(yintercept = mean), linetype = "longdash",
@@ -324,12 +333,16 @@ make.bootstrap.ancestry.histogram.plot <- function(data, data.types, title) {
       as.character(data.type),
       levels = order.active.levels(data.type, SOURCE.LEVELS)
       ))
-  dodge <- position_dodge(width = 0.05)
+  dodge <- position_dodge(width = diff(HISTOGRAM.BREAKS)[1])
   plot <- ggplot(plotted, aes(xmid, mean, fill = data.type)) +
-    geom_col(position = dodge, width = 0.04,
-      color = "black", linewidth = 0.75) +
+    geom_col(
+      position = dodge,
+      width = diff(HISTOGRAM.BREAKS)[1] * DENSE.BAR.WIDTH.MULTIPLIER,
+      color = "black", linewidth = DENSE.BAR.LINEWIDTH
+      ) +
     geom_errorbar(aes(ymin = lower, ymax = upper),
-      position = dodge, width = 0, linewidth = 0.75, na.rm = TRUE) +
+      position = dodge, width = 0, linewidth = DENSE.BAR.LINEWIDTH,
+      na.rm = TRUE) +
     scale_fill_manual(
       values = PLOT.STYLES$colors,
       labels = PLOT.STYLES$labels
@@ -1260,14 +1273,17 @@ make.histogram.plot <- function(
       levels = c(chromosomes, if (show.all) "all")
       ))
   choices <- attr(data, "plot.choices")
-  dodge <- position_dodge(width = diff(breaks)[1] * 0.95)
+  dodge <- position_dodge(width = diff(breaks)[1])
   # draw aligned bins, simulation errors, and the empirical all facet
   plot <- ggplot(data, aes(xmid, mean.frac, fill = series, group = series)) +
-    geom_col(position = dodge, width = diff(breaks)[1] * 0.95,
-      color = "black", linewidth = 0.3) +
+    geom_col(
+      position = dodge,
+      width = diff(breaks)[1] * DENSE.BAR.WIDTH.MULTIPLIER,
+      color = "black", linewidth = DENSE.BAR.LINEWIDTH
+      ) +
     geom_errorbar(
-      aes(ymin = ymin, ymax = ymax), position = dodge, linewidth = 0.6, 
-      width = 0
+      aes(ymin = ymin, ymax = ymax), position = dodge,
+      linewidth = DENSE.BAR.LINEWIDTH, width = 0
       ) +
     facet_wrap(~ chrom, ncol = 3, drop = TRUE) +
     scale_x_continuous(limits = c(0, 1), breaks = seq(0, 1, 0.2)) +

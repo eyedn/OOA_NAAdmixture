@@ -40,6 +40,8 @@ PLOT.CONFIGS <- list(
   tcd.1kg = SOURCE.LEVELS[c(2, 5)],
   all.datatypes.adx.asw = SOURCE.LEVELS
   )
+RANDOM.SEED <- 123L
+BOOTSTRAP.REPLICATES <- 1000L
 SFS.FACET.LEVELS <- SELECTED.CHROMOSOMES
 SFS.SERIES.PREFIXES <- c(
   Simulation_2T12Consistent = "TC",
@@ -80,11 +82,18 @@ SFS.SERIES.LABELS <- c(
   "TC D. EUR" = "T.C.D. EUR",
   "LG ADX" = "L.G. ADX",
   "LG D. ADX" = "L.G.D. ADX",
-  "empirical YRI" = "Emp. YRI",
-  "empirical ASW" = "Emp. ASW",
-  "empirical CEU" = "Emp. CEU"
+  "empirical YRI" = "YRI",
+  "empirical ASW" = "ASW",
+  "empirical CEU" = "CEU"
   )
-SFS.DODGE <- position_dodge(width = 0.9)
+SFS.BIN.WIDTH <- 1
+SFS.DODGE <- position_dodge(width = SFS.BIN.WIDTH)
+PLOT.BASE.SIZE <- 24
+CATEGORICAL.BAR.DODGE <- 0.9
+CATEGORICAL.BAR.WIDTH <- 0.8
+CATEGORICAL.BAR.LINEWIDTH <- 1
+DENSE.BAR.WIDTH.MULTIPLIER <- 0.8
+DENSE.BAR.LINEWIDTH <- 0.75
 PLOT.STYLES <- list(series.labels = SOURCE.LABELS)
 
 
@@ -101,7 +110,7 @@ order.active.levels <- function(values, canonical.levels) {
 
 
 # summarize complete folded spectrum vectors with percentile intervals
-summarize.simulation.interval <- function(
+summarize.bootstrap.interval <- function(
     data, grouping.columns, value.column
   ) {
   if (any(!is.finite(data[[value.column]]))) {
@@ -515,7 +524,7 @@ prepare.population.differences <- function(data) {
 summarize.one.sfs.value <- function(data, value.column) {
   simulation <- data %>%
     filter(data.set != "empirical") %>%
-    summarize.simulation.interval(
+    summarize.bootstrap.interval(
       c("data.set", "data.type", "rep", "chrom", "pop", "series",
         "minor.allele.count"),
       value.column
@@ -614,11 +623,15 @@ make.sfs.plot <- function(
       group = series
       )
     ) +
-    geom_col(position = SFS.DODGE, width = 0.9) +
+    geom_col(
+      position = SFS.DODGE,
+      width = SFS.BIN.WIDTH * DENSE.BAR.WIDTH.MULTIPLIER,
+      color = "black", linewidth = DENSE.BAR.LINEWIDTH
+      ) +
     geom_errorbar(
       aes(ymin = lower, ymax = upper),
       position = SFS.DODGE,
-      width = 0.25, linewidth = 0.5,
+      width = 0.25, linewidth = DENSE.BAR.LINEWIDTH,
       na.rm = TRUE
       ) +
     scale_x_continuous(
@@ -645,7 +658,7 @@ make.sfs.plot <- function(
       fill = NULL
       ) +
     guides(fill = guide_legend(order = 1, nrow = 2, byrow = TRUE)) +
-    theme_bw(base_size = 24) +
+    theme_bw(base_size = PLOT.BASE.SIZE) +
     theme(
       legend.position = "top", legend.direction = "horizontal", 
       legend.box = "horizontal", panel.grid.minor = element_blank()

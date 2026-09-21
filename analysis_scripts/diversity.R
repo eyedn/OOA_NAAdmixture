@@ -34,10 +34,17 @@ PLOT.CONFIGS <- list(
   TC.TCD = SOURCE.LEVELS[c(1, 2)],
   TCD.1kG = SOURCE.LEVELS[c(2, 5)],
   onlyADX = SOURCE.LEVELS[1:4],
-  tc.tcd.1kg = SOURCE.LEVELS[c(1, 2, 5)],
+  tcd.1kg = SOURCE.LEVELS[c(2, 5)],
   all.datatypes.adx.asw = SOURCE.LEVELS
   )
+RANDOM.SEED <- 123L
+BOOTSTRAP.REPLICATES <- 1000L
 PLOT.BASE.SIZE <- 24
+CATEGORICAL.BAR.DODGE <- 0.9
+CATEGORICAL.BAR.WIDTH <- 0.8
+CATEGORICAL.BAR.LINEWIDTH <- 1
+DENSE.BAR.WIDTH.MULTIPLIER <- 0.8
+DENSE.BAR.LINEWIDTH <- 0.75
 PLOT.STYLES <- list(
   population.colors = c(
     AFR = "#56B4E9", ADX = "#4B1FA8", EUR = "#fb8072",
@@ -63,9 +70,9 @@ PLOT.STYLES <- list(
     "TC D. EUR" = "T.C.D. EUR",
     "LG ADX" = "L.G. ADX",
     "LG D. ADX" = "L.G.D. ADX",
-    "empirical YRI" = "Emp. YRI",
-    "empirical ASW" = "Emp. ASW",
-    "empirical CEU" = "Emp. CEU"
+    "empirical YRI" = "YRI",
+    "empirical ASW" = "ASW",
+    "empirical CEU" = "CEU"
     ),
   empirical.colors = c(
     YRI = "#EEC4DC", ASW = "#E44B8D", CEU = "#BB437E"
@@ -87,7 +94,7 @@ order.active.levels <- function(values, canonical.levels) {
 
 
 # summarize complete simulation replicates with direct percentile intervals
-summarize.simulation.interval <- function(
+summarize.bootstrap.interval <- function(
     data, grouping.columns, value.column
   ) {
   if (any(!is.finite(data[[value.column]]))) {
@@ -149,6 +156,9 @@ add.population.roles <- function(data) {
 normalize.diversity.table <- function(
     data, data.type.input, mask.input = NA_character_
   ) {
+  if (!"span" %in% names(data)) {
+    stop("Diversity data are missing the required span column")
+    }
   data <- data %>%
     mutate(
       rep = as.numeric(rep),
@@ -156,11 +166,15 @@ normalize.diversity.table <- function(
       pop = as.character(pop),
       stat = as.character(stat),
       value = as.numeric(value),
+      span = as.numeric(span),
       data.type = data.type.input,
       mask = mask.input
       ) %>%
     apply.diversity.source.contract() %>%
     add.population.roles()
+  if (any(!is.finite(data$span) | data$span <= 0)) {
+    stop("Diversity spans must be positive and finite")
+    }
 
   return(data)
   }
@@ -221,14 +235,17 @@ summarize.simulation.diversity <- function(data) {
   if (!"role" %in% names(data)) data <- add.population.roles(data)
   replicate.summary <- data %>%
     filter(stat %in% c("pi", "theta")) %>%
-    group_by(data.type, rep, pop, role, stat, chrom, mask) %>%
+    group_by(data.type, rep, pop, role, stat, chrom, mask, span) %>%
     summarise(
       value = mean(value),
       .groups = "drop"
       )
-  summary <- summarize.simulation.interval(
+  summary <- summarize.bootstrap.interval(
     replicate.summary,
-    c("data.type", "rep", "pop", "role", "stat", "chrom", "mask"),
+    c(
+      "data.type", "rep", "pop", "role", "stat", "chrom", "mask",
+      "span"
+      ),
     "value"
     )
   return(summary)
@@ -267,13 +284,13 @@ build.diversity.plot.data <- function(
     filter(chrom %in% chromosomes) %>%
     duplicate.simulation.masks() %>%
     transmute(
-      data.type, pop, role, stat, chrom, mask,
+      data.type, pop, role, stat, chrom, mask, span,
       estimate = mean, lower, upper, replicate.count
       )
   empirical.points <- empirical.chromosome %>%
     filter(chrom %in% chromosomes, stat %in% c("pi", "theta")) %>%
     transmute(
-      data.type, pop, role, stat, chrom, mask,
+      data.type, pop, role, stat, chrom, mask, span,
       estimate = value, lower = NA_real_, upper = NA_real_, replicate.count = 1L
       )
   points <- bind_rows(simulation.points, empirical.points) %>%
@@ -296,7 +313,7 @@ build.diversity.plot.data <- function(
       )
   genome.lines <- empirical.genome %>%
     filter(chrom == "all", stat %in% c("pi", "theta")) %>%
-    transmute(pop, role, stat, mask, estimate = value) %>%
+    transmute(pop, role, stat, mask, span, estimate = value) %>%
     mutate(
       pop = factor(pop, levels = POPULATION.LEVELS),
       mask = factor(mask, levels = c("Intergenic", "Full callable")),
@@ -304,6 +321,29 @@ build.diversity.plot.data <- function(
       )
 
   return(list(points = points, genome.lines = genome.lines))
+  }
+
+
+# retain normalized values or scale all diversity estimates by their span
+rescale.diversity.plot.values <- function(data, value.view) {
+  if (!value.view %in% c("normalized", "unscaled")) {
+    stop("Unsupported diversity value view: ", value.view)
+    }
+  if (!"span" %in% names(data)) {
+    stop("Diversity plot data are missing span")
+    }
+  if (any(!is.finite(data$span) | data$span <= 0)) {
+    stop("Diversity plot spans must be positive and finite")
+    }
+  if (value.view == "normalized") {
+    return(data)
+    }
+  scaled <- data %>% mutate(estimate = estimate * span)
+  if (all(c("lower", "upper") %in% names(scaled))) {
+    scaled <- scaled %>%
+      mutate(lower = lower * span, upper = upper * span)
+    }
+  return(scaled)
   }
 
 
@@ -356,16 +396,18 @@ filter.diversity.plot.view <- function(
 
 # construct one configured selected-chromosome diversity plot
 make.diversity.plot <- function(
-    points, genome.lines, styles, data.types, tag
+    points, genome.lines, styles, data.types, tag, value.view = "normalized"
   ) {
   view <- filter.diversity.plot.view(
     points, genome.lines, data.types, tag
     )
-  points <- view$points
-  genome.lines <- view$genome.lines
+  points <- rescale.diversity.plot.values(view$points, value.view)
+  genome.lines <- rescale.diversity.plot.values(
+    view$genome.lines, value.view
+    )
   points <- filter(points, mask == "Intergenic")
   genome.lines <- filter(genome.lines, mask == "Intergenic")
-  dodge <- position_dodge(width = 0.75)
+  dodge <- position_dodge(width = CATEGORICAL.BAR.DODGE)
   fill.keys <- levels(points$fill.key)
   plot <- ggplot(
     points,
@@ -374,19 +416,23 @@ make.diversity.plot <- function(
       group = interaction(pop, data.type)
       )
     ) +
-    geom_hline(
-      data = genome.lines,
-      aes(yintercept = estimate, color = pop),
-      linetype = "dotted", linewidth = 0.9
+    ggfx::with_outer_glow(
+      geom_hline(
+        data = genome.lines,
+        aes(yintercept = estimate, color = pop),
+        linetype = "longdash", linewidth = CATEGORICAL.BAR.LINEWIDTH
+        ),
+      colour = "black", sigma = 0, expand = 3
       ) +
     geom_col(
-      position = dodge, width = 0.7,
-      color = "black", linewidth = 0.2
+      position = dodge, width = CATEGORICAL.BAR.WIDTH,
+      color = "black", linewidth = CATEGORICAL.BAR.LINEWIDTH
       ) +
     geom_errorbar(
       data = points,
       aes(ymin = lower, ymax = upper),
-      position = dodge, width = 0.15, linewidth = 0.8,
+      position = dodge, width = 0.15,
+      linewidth = CATEGORICAL.BAR.LINEWIDTH,
       na.rm = TRUE
       ) +
     facet_grid(
@@ -408,7 +454,11 @@ make.diversity.plot <- function(
       ) +
     labs(
       x = "Chromosome", y = NULL,
-      title = "Genetic Diversity Across Selected Chromosomes",
+      title = if (value.view == "normalized") {
+        "Genetic Diversity Across Selected Chromosomes"
+        } else {
+        "Span-Unscaled Genetic Diversity Across Selected Chromosomes"
+        },
       color = NULL, fill = NULL, shape = NULL
       ) +
     guides(
@@ -504,7 +554,7 @@ diversity.plot.data <- build.diversity.plot.data(
   SELECTED.CHROMOSOMES
   )
 diversity.bootstrap.plots <- imap(list(
-  tc.tcd.1kg = PLOT.CONFIGS$tc.tcd.1kg,
+  tcd.1kg = PLOT.CONFIGS$tcd.1kg,
   all.datatypes.adx.asw = PLOT.CONFIGS$all.datatypes.adx.asw
   ), function(data.types, tag) {
   return(make.diversity.plot(
@@ -514,15 +564,34 @@ diversity.bootstrap.plots <- imap(list(
     tag
     ))
   })
+diversity.bootstrap.unscaled.plots <- imap(list(
+  tcd.1kg = PLOT.CONFIGS$tcd.1kg,
+  all.datatypes.adx.asw = PLOT.CONFIGS$all.datatypes.adx.asw
+  ), function(data.types, tag) {
+  return(make.diversity.plot(
+    diversity.plot.data$points,
+    diversity.plot.data$genome.lines,
+    PLOT.STYLES, data.types, tag,
+    value.view = "unscaled"
+    ))
+  })
 
 # persist every plot before printing figures at the end of the script
 dir.create(OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
-saveRDS(diversity.bootstrap.plots$tc.tcd.1kg, file.path(
-  OUTPUT.DIR, "diversity.bootstrap.tc.tcd.1kg.rds"
+saveRDS(diversity.bootstrap.plots$tcd.1kg, file.path(
+  OUTPUT.DIR, "diversity.bootstrap.tcd.1kg.rds"
   ))
 saveRDS(diversity.bootstrap.plots$all.datatypes.adx.asw, file.path(
   OUTPUT.DIR, "diversity.bootstrap.all.datatypes.adx.asw.rds"
   ))
+saveRDS(diversity.bootstrap.unscaled.plots$tcd.1kg, file.path(
+  OUTPUT.DIR, "diversity.bootstrap.tcd.1kg.unscaled.rds"
+  ))
+saveRDS(diversity.bootstrap.unscaled.plots$all.datatypes.adx.asw, file.path(
+  OUTPUT.DIR, "diversity.bootstrap.all.datatypes.adx.asw.unscaled.rds"
+  ))
 
-print(diversity.bootstrap.plots$tc.tcd.1kg)
+print(diversity.bootstrap.plots$tcd.1kg)
 print(diversity.bootstrap.plots$all.datatypes.adx.asw)
+print(diversity.bootstrap.unscaled.plots$tcd.1kg)
+print(diversity.bootstrap.unscaled.plots$all.datatypes.adx.asw)

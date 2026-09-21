@@ -34,13 +34,22 @@ PLOT.CONFIGS <- list(
   TC.1kG = SOURCE.LEVELS[c(1, 5)],
   TC.TCD = SOURCE.LEVELS[c(1, 2)],
   TCD.1kG = SOURCE.LEVELS[c(2, 5)],
-  onlyADX = SOURCE.LEVELS[1:4]
+  onlyADX = SOURCE.LEVELS[1:4],
+  tcd.1kg = SOURCE.LEVELS[c(2, 5)],
+  all.datatypes.adx.asw = SOURCE.LEVELS
   )
 LD.X.LOWER <- 0
 LD.X.UPPER <- 250000
 LD.X.BREAKS <- seq(LD.X.LOWER, LD.X.UPPER, by = 50000)
 BOOTSTRAP.LEGEND.VIEWS <- c("all.lines", "role.interval")
+RANDOM.SEED <- 123L
+BOOTSTRAP.REPLICATES <- 1000L
 PLOT.BASE.SIZE <- 24
+CATEGORICAL.BAR.DODGE <- 0.9
+CATEGORICAL.BAR.WIDTH <- 0.8
+CATEGORICAL.BAR.LINEWIDTH <- 1
+DENSE.BAR.WIDTH.MULTIPLIER <- 0.8
+DENSE.BAR.LINEWIDTH <- 0.75
 PLOT.STYLES <- list(
   population.colors = c(
     AFR = "#56B4E9", ADX = "#4B1FA8", EUR = "#fb8072",
@@ -69,7 +78,7 @@ order.active.levels <- function(values, canonical.levels) {
 
 
 # summarize complete pooled replicate curves with percentile intervals
-summarize.simulation.interval <- function(
+summarize.bootstrap.interval <- function(
     data, grouping.columns, value.column
   ) {
   if (any(!is.finite(data[[value.column]]))) {
@@ -235,7 +244,7 @@ summarize.ld.curves <- function(data, chromosomes) {
     }
   simulation <- scoped %>%
     filter(data.type != "Empirical") %>%
-    summarize.simulation.interval(
+    summarize.bootstrap.interval(
       c("data.type", "rep", "pop", "role", "chrom", "distance_bin_bp"),
       "mean.r2"
       )
@@ -432,7 +441,7 @@ make.ld.plot <- function(
 
 
 # build one chromosome-1 bootstrap LD view over the requested distance range
-make.bootstrap.ld.plot <- function(data, data.types, view) {
+make.bootstrap.ld.plot <- function(data, data.types, view, title = view) {
   source.view <- grepl("all.datatypes.adx.asw", view)
   show.legend <- source.view || view %in% BOOTSTRAP.LEGEND.VIEWS
   plotted <- data %>%
@@ -471,8 +480,10 @@ make.bootstrap.ld.plot <- function(data, data.types, view) {
   plot <- ggplot(plotted, aes(distance_bin_bp, mean, color = plot.key,
     fill = plot.key, group = interaction(data.type, pop))) +
     scale_x_continuous(limits = c(5000, 250000)) +
-    labs(x = "Distance between SNPs (bp)", y = expression("Mean " * r^2),
-      color = NULL, fill = NULL) +
+    labs(
+      x = "Distance between SNPs (bp)", y = expression("Mean " * r^2),
+      title = title, color = NULL, fill = NULL
+      ) +
     theme_bw(base_size = PLOT.BASE.SIZE) +
     theme(legend.position = "top", panel.grid.minor = element_blank())
   if (!grepl("all.lines$", view)) {
@@ -599,21 +610,23 @@ if (FALSE) {
 # save TCD/1kG and all-datatype ADX/ASW chromosome-1 bootstrap LD views
 bootstrap.tcd.1kg.ld.all.lines <- make.bootstrap.ld.plot(
   ld.summary, c("Simulation_2T12Consistent_simDown", "Empirical"),
-  "all.lines"
+  "all.lines", "LD decay: chromosome 1 TCD and 1kG"
   )
 bootstrap.tcd.1kg.ld.role.interval <- make.bootstrap.ld.plot(
   ld.summary, c("Simulation_2T12Consistent_simDown", "Empirical"),
-  "role.interval"
+  "role.interval", "LD decay: chromosome 1 TCD and 1kG by role"
   )
 bootstrap.tcd.1kg.ld.datatype.interval <- make.bootstrap.ld.plot(
   ld.summary, c("Simulation_2T12Consistent_simDown", "Empirical"),
-  "datatype.interval"
+  "datatype.interval", "LD decay: chromosome 1 TCD and 1kG by source"
   )
 bootstrap.all.datatypes.adx.asw.ld.all.lines <- make.bootstrap.ld.plot(
-  ld.summary, SOURCE.LEVELS, "all.datatypes.adx.asw.all.lines"
+  ld.summary, SOURCE.LEVELS, "all.datatypes.adx.asw.all.lines",
+  "LD decay: chromosome 1 all ADX sources and ASW"
   )
 bootstrap.all.datatypes.adx.asw.ld.datatype.interval <- make.bootstrap.ld.plot(
-  ld.summary, SOURCE.LEVELS, "all.datatypes.adx.asw.datatype.interval"
+  ld.summary, SOURCE.LEVELS, "all.datatypes.adx.asw.datatype.interval",
+  "LD decay: chromosome 1 all ADX sources and ASW by source"
   )
 dir.create(OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
 saveRDS(bootstrap.tcd.1kg.ld.all.lines, file.path(

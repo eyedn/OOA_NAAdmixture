@@ -33,13 +33,20 @@ PLOT.CONFIGS <- list(
   TC.1kG = SOURCE.LEVELS[c(1, 5)],
   TC.TCD = SOURCE.LEVELS[c(1, 2)],
   TCD.1kG = SOURCE.LEVELS[c(2, 5)],
-  onlyADX = SOURCE.LEVELS[1:4]
+  onlyADX = SOURCE.LEVELS[1:4],
+  tcd.1kg = SOURCE.LEVELS[c(2, 5)],
+  all.datatypes.adx.asw = SOURCE.LEVELS
   )
 KINSHIP.BIN.WIDTH <- 0.01
 KINSHIP.DOWNSAMPLE.SIZES <- c(AFR = 118L, ADX = 50L, EUR = 119L)
 BOOTSTRAP.REPLICATES <- 1000L
-RANDOM.SEED <- 123
+RANDOM.SEED <- 123L
 PLOT.BASE.SIZE <- 24
+CATEGORICAL.BAR.DODGE <- 0.9
+CATEGORICAL.BAR.WIDTH <- 0.8
+CATEGORICAL.BAR.LINEWIDTH <- 1
+DENSE.BAR.WIDTH.MULTIPLIER <- 0.8
+DENSE.BAR.LINEWIDTH <- 0.75
 PLOT.STYLES <- list(
   population.colors = c(
     AFR = "#56B4E9", ADX = "#4B1FA8", EUR = "#fb8072",
@@ -68,7 +75,7 @@ order.active.levels <- function(values, canonical.levels) {
 
 
 # summarize the 50 complete simulation replicates with percentile intervals
-summarize.simulation.interval <- function(
+summarize.bootstrap.interval <- function(
     data, grouping.columns, value.column
   ) {
   if (any(!is.finite(data[[value.column]]))) {
@@ -162,7 +169,7 @@ summarize.bootstrap.kinship <- function(data, breaks) {
       )
   simulation <- histograms %>%
     filter(data.type != "Empirical") %>%
-    summarize.simulation.interval(
+    summarize.bootstrap.interval(
       c(
         "data.type", "rep", "pop", "role", "chrom", "xmin", "xmax", "xmid"
         ),
@@ -232,8 +239,11 @@ summarize.empirical.kinship.interval <- function(
 
 # construct TCD/1kG and all-datatype ADX/ASW kinship plots with intervals
 make.bootstrap.kinship.plot <- function(
-    data, breaks, data.types, title, populations = NULL
+    data, breaks, data.types, title, x.limits, populations = NULL
   ) {
+  if (length(x.limits) != 2L || any(!is.finite(x.limits))) {
+    stop("Kinship x limits must contain two finite values")
+    }
   plotted <- data %>%
     filter(as.character(data.type) %in% data.types,
       as.character(chrom) %in% SELECTED.CHROMOSOMES)
@@ -251,18 +261,22 @@ make.bootstrap.kinship.plot <- function(
         levels = order.active.levels(pop, POPULATION.LEVELS)
         )
       )
+  dodge <- position_dodge(diff(breaks)[1])
   plot <- ggplot(plotted, aes(xmid, mean, fill = pop, group = pop)) +
-    geom_col(position = position_dodge(diff(breaks)[1] * 0.9),
-      width = diff(breaks)[1] * 0.85, color = "black", linewidth = 0.1) +
+    geom_col(
+      position = dodge,
+      width = diff(breaks)[1] * DENSE.BAR.WIDTH.MULTIPLIER,
+      color = "black", linewidth = DENSE.BAR.LINEWIDTH
+      ) +
     geom_errorbar(aes(ymin = lower, ymax = upper),
-      position = position_dodge(diff(breaks)[1] * 0.9), width = 0,
+      position = dodge, width = 0, linewidth = DENSE.BAR.LINEWIDTH,
       na.rm = TRUE) +
     # facet_grid(
     #   data.type ~ chrom,
     #   scales = "free_y",
     #   labeller = labeller(data.type = PLOT.STYLES$series.labels)
     #   ) +
-    coord_cartesian(xlim = c(-0.1, 0.0442)) +
+    coord_cartesian(xlim = x.limits) +
     scale_fill_manual(values = PLOT.STYLES$population.colors) +
     labs(title = title, x = "Pairwise KING kinship", y = "Fraction of pairs",
       fill = NULL) +
@@ -682,13 +696,14 @@ kinship.breaks <- make.kinship.breaks(
   )
 kinship.summary <- summarize.bootstrap.kinship(kinship.data, kinship.breaks)
 kinship.bootstrap.tcd.1kg <- make.bootstrap.kinship.plot(
-  kinship.summary, kinship.breaks,
-  c("Simulation_2T12Consistent_simDown", "Empirical"),
-  "Pairwise KING kinship: TCD and 1kG"
+  kinship.summary, kinship.breaks, PLOT.CONFIGS$tcd.1kg,
+  "Pairwise KING kinship: chromosome 1 TCD and 1kG",
+  x.limits = c(-0.1, 0.05)
   )
 kinship.bootstrap.all.datatypes.adx.asw <- make.bootstrap.kinship.plot(
-  kinship.summary, kinship.breaks, c(SOURCE.LEVELS[1:4], "Empirical"),
-  "Pairwise KING kinship: all ADX sources and ASW",
+  kinship.summary, kinship.breaks, PLOT.CONFIGS$all.datatypes.adx.asw,
+  "Pairwise KING kinship: chromosome 1 all ADX sources and ASW",
+  x.limits = c(-0.2, 0.05),
   populations = c("ADX", "ASW")
   )
 
