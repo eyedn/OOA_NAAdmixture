@@ -104,15 +104,31 @@ summarize.simulation.interval <- function(
   }
 
 
+# retain the sole analysis method for each simulated ancestry source
+filter.bootstrap.ancestry.simulation <- function(data) {
+  simulation <- data %>%
+    filter(data.type != "Empirical", role == "ADX") %>%
+    filter(
+      (data.type %in% c(
+        "Simulation_2T12Consistent", "Simulation_largeGrowth"
+        ) & method == "tspop") |
+        (data.type %in% c(
+          "Simulation_2T12Consistent_simDown",
+          "Simulation_largeGrowth_simDown"
+          ) & method == PLOT.EMPIRICAL.METHOD)
+      )
+  if ("sample.set" %in% names(simulation)) {
+    simulation <- filter(simulation, sample.set == "full")
+    }
+  return(simulation)
+  }
+
+
 # deterministically select empirical-sized ADX samples in each replicate
 select.bootstrap.ancestry.ids <- function(
     data, downsample.size, sample.id.column, seed
   ) {
-  candidates <- data %>%
-    filter(data.type != "Empirical", role == "ADX")
-  if ("sample.set" %in% names(candidates)) {
-    candidates <- filter(candidates, sample.set == "full")
-    }
+  candidates <- filter.bootstrap.ancestry.simulation(data)
   candidates <- candidates %>%
     select(data.type, rep, chrom, all_of(sample.id.column), afr.q)
   if (any(!is.finite(candidates$afr.q))) {
@@ -145,10 +161,7 @@ summarize.bootstrap.ancestry <- function(data, downsample.size, seed) {
   selected <- select.bootstrap.ancestry.ids(
     data, downsample.size, "sample_id", seed
     )
-  simulation.data <- data %>% filter(data.type != "Empirical", role == "ADX")
-  if ("sample.set" %in% names(simulation.data)) {
-    simulation.data <- filter(simulation.data, sample.set == "full")
-    }
+  simulation.data <- filter.bootstrap.ancestry.simulation(data)
   simulation <- simulation.data %>%
     inner_join(selected, by = c("data.type", "rep", "chrom", "sample_id")) %>%
     group_by(data.type, rep, chrom) %>%
@@ -169,10 +182,7 @@ summarize.bootstrap.ancestry <- function(data, downsample.size, seed) {
 # summarize complete simulated and bootstrap-resampled empirical histograms
 summarize.bootstrap.histograms <- function(data, breaks, seed, replicates) {
   selected <- select.bootstrap.ancestry.ids(data, 50, "sample_id", seed)
-  simulation.data <- data %>% filter(data.type != "Empirical", role == "ADX")
-  if ("sample.set" %in% names(simulation.data)) {
-    simulation.data <- filter(simulation.data, sample.set == "full")
-    }
+  simulation.data <- filter.bootstrap.ancestry.simulation(data)
   simulation <- simulation.data %>%
     inner_join(selected, by = c("data.type", "rep", "chrom", "sample_id")) %>%
     group_by(data.type, rep, chrom) %>%
@@ -2206,23 +2216,23 @@ bootstrap.ancestry.histograms <- summarize.bootstrap.histograms(
   BOOTSTRAP.REPLICATES
   )
 
-# construct focused TCD/ASW and all-source ADX/ASW bootstrap views
-ancestry.bootstrap.focused.bar <- make.bootstrap.ancestry.bar.plot(
+# construct TCD/ASW and all-datatype ADX/ASW bootstrap views
+ancestry.bootstrap.tcd.1kg.bar <- make.bootstrap.ancestry.bar.plot(
   bootstrap.ancestry.summary,
   c("Simulation_2T12Consistent_simDown", "Empirical"),
   "African ancestry: TCD and ASW"
   )
-ancestry.bootstrap.all.bar <- make.bootstrap.ancestry.bar.plot(
+ancestry.bootstrap.all.datatypes.adx.asw.bar <- make.bootstrap.ancestry.bar.plot(
   bootstrap.ancestry.summary,
   c(SOURCE.LEVELS[1:4], "Empirical"),
   "African ancestry: all ADX sources and ASW"
   )
-ancestry.bootstrap.focused.histogram <- make.bootstrap.ancestry.histogram.plot(
+ancestry.bootstrap.tcd.1kg.histogram <- make.bootstrap.ancestry.histogram.plot(
   bootstrap.ancestry.histograms,
   c("Simulation_2T12Consistent_simDown", "Empirical"),
   "Chromosome 1 African ancestry: TCD and ASW"
   )
-ancestry.bootstrap.all.histogram <- make.bootstrap.ancestry.histogram.plot(
+ancestry.bootstrap.all.datatypes.adx.asw.histogram <- make.bootstrap.ancestry.histogram.plot(
   bootstrap.ancestry.histograms,
   c(SOURCE.LEVELS[1:4], "Empirical"),
   "Chromosome 1 African ancestry: all ADX sources and ASW"
@@ -2230,20 +2240,20 @@ ancestry.bootstrap.all.histogram <- make.bootstrap.ancestry.histogram.plot(
 
 # save every bootstrap plot before explicit printing at the script end
 dir.create(OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
-saveRDS(ancestry.bootstrap.focused.bar, file.path(
-  OUTPUT.DIR, "ancestry.bootstrap.focused.bar.rds"
+saveRDS(ancestry.bootstrap.tcd.1kg.bar, file.path(
+  OUTPUT.DIR, "ancestry.bootstrap.tcd.1kg.bar.rds"
   ))
-saveRDS(ancestry.bootstrap.all.bar, file.path(
-  OUTPUT.DIR, "ancestry.bootstrap.all.bar.rds"
+saveRDS(ancestry.bootstrap.all.datatypes.adx.asw.bar, file.path(
+  OUTPUT.DIR, "ancestry.bootstrap.all.datatypes.adx.asw.bar.rds"
   ))
-saveRDS(ancestry.bootstrap.focused.histogram, file.path(
-  OUTPUT.DIR, "ancestry.bootstrap.focused.histogram.rds"
+saveRDS(ancestry.bootstrap.tcd.1kg.histogram, file.path(
+  OUTPUT.DIR, "ancestry.bootstrap.tcd.1kg.histogram.rds"
   ))
-saveRDS(ancestry.bootstrap.all.histogram, file.path(
-  OUTPUT.DIR, "ancestry.bootstrap.all.histogram.rds"
+saveRDS(ancestry.bootstrap.all.datatypes.adx.asw.histogram, file.path(
+  OUTPUT.DIR, "ancestry.bootstrap.all.datatypes.adx.asw.histogram.rds"
   ))
 
-print(ancestry.bootstrap.focused.bar)
-print(ancestry.bootstrap.all.bar)
-print(ancestry.bootstrap.focused.histogram)
-print(ancestry.bootstrap.all.histogram)
+print(ancestry.bootstrap.tcd.1kg.bar)
+print(ancestry.bootstrap.all.datatypes.adx.asw.bar)
+print(ancestry.bootstrap.tcd.1kg.histogram)
+print(ancestry.bootstrap.all.datatypes.adx.asw.histogram)

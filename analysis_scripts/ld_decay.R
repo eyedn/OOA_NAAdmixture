@@ -418,28 +418,47 @@ make.ld.plot <- function(
 
 # build one chromosome-1 bootstrap LD view over the requested distance range
 make.bootstrap.ld.plot <- function(data, data.types, view) {
-  source.view <- identical(data.types, SOURCE.LEVELS[1:4])
+  source.view <- grepl("all.datatypes.adx.asw", view)
   plotted <- data %>%
     filter(
       as.character(chrom) == "1",
       as.character(data.type) %in% data.types,
       between(distance_bin_bp, 5000, 250000)
       ) %>%
+    filter(
+      !source.view |
+        (data.type != "Empirical" & pop == "ADX") |
+        (data.type == "Empirical" & pop == "ASW")
+      ) %>%
     mutate(plot.key = if (source.view) as.character(data.type) else pop)
   plot <- ggplot(plotted, aes(distance_bin_bp, mean, color = plot.key,
     fill = plot.key, group = interaction(data.type, pop))) +
-    geom_ribbon(
-      data = filter(plotted, data.type != "Empirical"),
-      aes(ymin = lower, ymax = upper), alpha = 0.2, color = NA
-      ) +
-    geom_line(linewidth = 1) +
     scale_x_continuous(limits = c(5000, 250000)) +
     labs(x = "Distance between SNPs (bp)", y = expression("Mean " * r^2),
       color = NULL, fill = NULL) +
     theme_bw(base_size = PLOT.BASE.SIZE) +
     theme(legend.position = "top", panel.grid.minor = element_blank())
+  if (!grepl("all.lines$", view)) {
+    plot <- plot + geom_ribbon(
+      data = filter(plotted, data.type != "Empirical"),
+      aes(ymin = lower, ymax = upper), alpha = 0.2, color = NA
+      )
+    }
+  plot <- plot + geom_line(linewidth = 1) +
+    scale_color_manual(values = if (source.view) {
+      c(PLOT.STYLES$source.colors, ASW = PLOT.STYLES$population.colors[["ASW"]])
+      } else {
+      PLOT.STYLES$population.colors
+      }) +
+    scale_fill_manual(values = if (source.view) {
+      c(PLOT.STYLES$source.colors, ASW = PLOT.STYLES$population.colors[["ASW"]])
+      } else {
+      PLOT.STYLES$population.colors
+      })
   if (view == "role.interval") plot <- plot + facet_wrap(~role)
-  if (view == "datatype.interval") plot <- plot + facet_wrap(~data.type)
+  if (grepl("datatype.interval$", view)) {
+    plot <- plot + facet_wrap(~data.type)
+    }
   return(plot)
   }
 
@@ -507,44 +526,44 @@ if (FALSE) {
   print(ld.plots$onlyADX)
   }
 
-# save focused and all-source chromosome-1 bootstrap LD views
-bootstrap.focused.ld.all.lines <- make.bootstrap.ld.plot(
+# save TCD/1kG and all-datatype ADX/ASW chromosome-1 bootstrap LD views
+bootstrap.tcd.1kg.ld.all.lines <- make.bootstrap.ld.plot(
   ld.summary, c("Simulation_2T12Consistent_simDown", "Empirical"),
   "all.lines"
   )
-bootstrap.focused.ld.role.interval <- make.bootstrap.ld.plot(
+bootstrap.tcd.1kg.ld.role.interval <- make.bootstrap.ld.plot(
   ld.summary, c("Simulation_2T12Consistent_simDown", "Empirical"),
   "role.interval"
   )
-bootstrap.focused.ld.datatype.interval <- make.bootstrap.ld.plot(
+bootstrap.tcd.1kg.ld.datatype.interval <- make.bootstrap.ld.plot(
   ld.summary, c("Simulation_2T12Consistent_simDown", "Empirical"),
   "datatype.interval"
   )
-bootstrap.all.ld.all.lines <- make.bootstrap.ld.plot(
-  ld.summary, SOURCE.LEVELS[1:4], "all.lines"
+bootstrap.all.datatypes.adx.asw.ld.all.lines <- make.bootstrap.ld.plot(
+  ld.summary, SOURCE.LEVELS, "all.datatypes.adx.asw.all.lines"
   )
-bootstrap.all.ld.datatype.interval <- make.bootstrap.ld.plot(
-  ld.summary, SOURCE.LEVELS[1:4], "datatype.interval"
+bootstrap.all.datatypes.adx.asw.ld.datatype.interval <- make.bootstrap.ld.plot(
+  ld.summary, SOURCE.LEVELS, "all.datatypes.adx.asw.datatype.interval"
   )
 dir.create(OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
-saveRDS(bootstrap.focused.ld.all.lines, file.path(
-  OUTPUT.DIR, "ld.bootstrap.focused.all.lines.rds"
+saveRDS(bootstrap.tcd.1kg.ld.all.lines, file.path(
+  OUTPUT.DIR, "ld.bootstrap.tcd.1kg.all.lines.rds"
   ))
-saveRDS(bootstrap.focused.ld.role.interval, file.path(
-  OUTPUT.DIR, "ld.bootstrap.focused.role.interval.rds"
+saveRDS(bootstrap.tcd.1kg.ld.role.interval, file.path(
+  OUTPUT.DIR, "ld.bootstrap.tcd.1kg.role.interval.rds"
   ))
-saveRDS(bootstrap.focused.ld.datatype.interval, file.path(
-  OUTPUT.DIR, "ld.bootstrap.focused.datatype.interval.rds"
+saveRDS(bootstrap.tcd.1kg.ld.datatype.interval, file.path(
+  OUTPUT.DIR, "ld.bootstrap.tcd.1kg.datatype.interval.rds"
   ))
-saveRDS(bootstrap.all.ld.all.lines, file.path(
-  OUTPUT.DIR, "ld.bootstrap.all.all.lines.rds"
+saveRDS(bootstrap.all.datatypes.adx.asw.ld.all.lines, file.path(
+  OUTPUT.DIR, "ld.bootstrap.all.datatypes.adx.asw.all.lines.rds"
   ))
-saveRDS(bootstrap.all.ld.datatype.interval, file.path(
-  OUTPUT.DIR, "ld.bootstrap.all.datatype.interval.rds"
+saveRDS(bootstrap.all.datatypes.adx.asw.ld.datatype.interval, file.path(
+  OUTPUT.DIR, "ld.bootstrap.all.datatypes.adx.asw.datatype.interval.rds"
   ))
 
-print(bootstrap.focused.ld.all.lines)
-print(bootstrap.focused.ld.role.interval)
-print(bootstrap.focused.ld.datatype.interval)
-print(bootstrap.all.ld.all.lines)
-print(bootstrap.all.ld.datatype.interval)
+print(bootstrap.tcd.1kg.ld.all.lines)
+print(bootstrap.tcd.1kg.ld.role.interval)
+print(bootstrap.tcd.1kg.ld.datatype.interval)
+print(bootstrap.all.datatypes.adx.asw.ld.all.lines)
+print(bootstrap.all.datatypes.adx.asw.ld.datatype.interval)

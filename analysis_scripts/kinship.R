@@ -117,21 +117,29 @@ select.bootstrap.kinship.ids <- function(data, seed) {
   expected <- candidates %>% distinct(data.type, rep, chrom) %>%
     rowwise() %>% mutate(role = list(if (grepl("largeGrowth", data.type)) {
       "ADX" } else { required.roles })) %>% unnest(role)
-  missing <- expected %>%
+  sample.sizes <- expected %>%
     left_join(sizes, by = c("data.type", "rep", "chrom", "role")) %>%
     mutate(available = replace_na(available, 0L),
-      required = KINSHIP.DOWNSAMPLE.SIZES[role])
-  if (any(missing$available < missing$required)) {
-    stop("A kinship simulation group has fewer unique IDs than required")
-    }
+      target = KINSHIP.DOWNSAMPLE.SIZES[role],
+      selected = pmin(available, target),
+      shortfall = target - selected)
   set.seed(seed)
   selected <- candidates %>%
     group_by(data.type, rep, chrom, role) %>%
     group_modify(function(group, key) {
-      target <- KINSHIP.DOWNSAMPLE.SIZES[[key$role]]
-      return(slice_sample(group, n = target, replace = FALSE))
+      selected.size <- sample.sizes %>%
+        filter(
+          data.type == key$data.type,
+          rep == key$rep,
+          chrom == key$chrom,
+          role == key$role
+          ) %>%
+        pull(selected)
+      return(slice_sample(group, n = selected.size, replace = FALSE))
       }) %>%
-    ungroup()
+    ungroup() %>%
+    left_join(sample.sizes, by = c("data.type", "rep", "chrom", "role"))
+  attr(selected, "sample.sizes") <- sample.sizes
   return(selected)
   }
 
@@ -141,11 +149,18 @@ summarize.bootstrap.kinship <- function(data, breaks) {
   selected <- select.bootstrap.kinship.ids(data, RANDOM.SEED)
   selected.pairs <- apply.kinship.selection(data, selected) %>%
     filter(sample.set == "downsampled")
-  histograms <- build.kinship.histograms(selected.pairs, breaks)
+  histograms <- build.kinship.histograms(selected.pairs, breaks) %>%
+    left_join(
+      attr(selected, "sample.sizes"),
+      by = c("data.type", "rep", "chrom", "role")
+      )
   simulation <- histograms %>%
     filter(data.type != "Empirical") %>%
     summarize.simulation.interval(
-      c("data.type", "rep", "pop", "role", "chrom", "xmin", "xmax", "xmid"),
+      c(
+        "data.type", "rep", "pop", "role", "chrom", "xmin", "xmax",
+        "xmid", "target", "available", "selected", "shortfall"
+        ),
       "fraction"
       )
   empirical <- build.kinship.histograms(
@@ -155,15 +170,22 @@ summarize.bootstrap.kinship <- function(data, breaks) {
       data.type, pop, role, chrom, xmin, xmax, xmid,
       mean = fraction, lower = NA_real_, upper = NA_real_, replicate.count = 1L
       )
-  return(bind_rows(simulation, empirical))
+  summary <- bind_rows(simulation, empirical)
+  attr(summary, "sample.sizes") <- attr(selected, "sample.sizes")
+  return(summary)
   }
 
 
-# construct focused and all-source kinship plots with percentile intervals
-make.bootstrap.kinship.plot <- function(data, breaks, data.types, title) {
+# construct TCD/1kG and all-datatype ADX/ASW kinship plots with intervals
+make.bootstrap.kinship.plot <- function(
+    data, breaks, data.types, title, populations = NULL
+  ) {
   plotted <- data %>%
     filter(as.character(data.type) %in% data.types,
       as.character(chrom) %in% SELECTED.CHROMOSOMES)
+  if (!is.null(populations)) {
+    plotted <- plotted %>% filter(pop %in% populations)
+    }
   plot <- ggplot(plotted, aes(xmid, mean, fill = pop, group = pop)) +
     geom_col(position = position_dodge(diff(breaks)[1] * 0.9),
       width = diff(breaks)[1] * 0.85, color = "black", linewidth = 0.1) +
@@ -597,24 +619,28 @@ kinship.breaks <- make.kinship.breaks(
   kinship.data, KINSHIP.BIN.WIDTH
   )
 kinship.summary <- summarize.bootstrap.kinship(kinship.data, kinship.breaks)
-kinship.bootstrap.focused <- make.bootstrap.kinship.plot(
+kinship.bootstrap.tcd.1kg <- make.bootstrap.kinship.plot(
   kinship.summary, kinship.breaks,
   c("Simulation_2T12Consistent_simDown", "Empirical"),
   "Pairwise KING kinship: TCD and 1kG"
   )
-kinship.bootstrap.all <- make.bootstrap.kinship.plot(
+kinship.bootstrap.all.datatypes.adx.asw <- make.bootstrap.kinship.plot(
   kinship.summary, kinship.breaks, c(SOURCE.LEVELS[1:4], "Empirical"),
-  "Pairwise KING kinship: all ADX sources and ASW"
+  "Pairwise KING kinship: all ADX sources and ASW",
+  populations = c("ADX", "ASW")
   )
 
 # persist bootstrap plots before printing figures at the end of the script
 dir.create(OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
-saveRDS(kinship.bootstrap.focused, file.path(
-  OUTPUT.DIR, "kinship.bootstrap.focused.rds"
+write_csv(attr(kinship.summary, "sample.sizes"), file.path(
+  OUTPUT.DIR, "kinship.bootstrap.sample_sizes.csv"
   ))
-saveRDS(kinship.bootstrap.all, file.path(
-  OUTPUT.DIR, "kinship.bootstrap.all.rds"
+saveRDS(kinship.bootstrap.tcd.1kg, file.path(
+  OUTPUT.DIR, "kinship.bootstrap.tcd.1kg.rds"
+  ))
+saveRDS(kinship.bootstrap.all.datatypes.adx.asw, file.path(
+  OUTPUT.DIR, "kinship.bootstrap.all.datatypes.adx.asw.rds"
   ))
 
-print(kinship.bootstrap.focused)
-print(kinship.bootstrap.all)
+print(kinship.bootstrap.tcd.1kg)
+print(kinship.bootstrap.all.datatypes.adx.asw)

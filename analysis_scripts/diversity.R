@@ -31,7 +31,8 @@ PLOT.CONFIGS <- list(
   TC.TCD = SOURCE.LEVELS[c(1, 2)],
   TCD.1kG = SOURCE.LEVELS[c(2, 5)],
   onlyADX = SOURCE.LEVELS[1:4],
-  all.1kG = SOURCE.LEVELS
+  tc.tcd.1kg = SOURCE.LEVELS[c(1, 2, 5)],
+  all.datatypes.adx.asw = SOURCE.LEVELS
   )
 PLOT.BASE.SIZE <- 24
 PLOT.STYLES <- list(
@@ -306,6 +307,11 @@ filter.diversity.plot.view <- function(
   view.points <- points %>%
     filter(as.character(data.type) %in% data.types) %>%
     filter(tag != "onlyADX" | pop == "ADX") %>%
+    filter(
+      tag != "all.datatypes.adx.asw" |
+        (data.type != "Empirical" & pop == "ADX") |
+        (data.type == "Empirical" & pop == "ASW")
+      ) %>%
     mutate(
       data.type = factor(as.character(data.type), levels = data.types),
       fill.key = factor(
@@ -476,32 +482,25 @@ diversity.plot.data <- build.diversity.plot.data(
   SELECTED.CHROMOSOMES
   )
 diversity.bootstrap.plots <- imap(list(
-  tc = c("Simulation_2T12Consistent", "Empirical"),
-  tcd = c("Simulation_2T12Consistent_simDown", "Empirical"),
-  all = c(SOURCE.LEVELS[1:4], "Empirical")
+  tc.tcd.1kg = PLOT.CONFIGS$tc.tcd.1kg,
+  all.datatypes.adx.asw = PLOT.CONFIGS$all.datatypes.adx.asw
   ), function(data.types, tag) {
   return(make.diversity.plot(
     diversity.plot.data$points,
     diversity.plot.data$genome.lines,
     PLOT.STYLES, data.types,
-    if (tag == "tc") "TC.1kG" else if (tag == "tcd") "TCD.1kG" else {
-      "all.1kG"
-      }
+    tag
     ))
   })
 
 # persist every plot before printing figures at the end of the script
 dir.create(OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
-saveRDS(diversity.bootstrap.plots$tc, file.path(
-  OUTPUT.DIR, "diversity.bootstrap.tc.rds"
+saveRDS(diversity.bootstrap.plots$tc.tcd.1kg, file.path(
+  OUTPUT.DIR, "diversity.bootstrap.tc.tcd.1kg.rds"
   ))
-saveRDS(diversity.bootstrap.plots$tcd, file.path(
-  OUTPUT.DIR, "diversity.bootstrap.tcd.rds"
-  ))
-saveRDS(diversity.bootstrap.plots$all, file.path(
-  OUTPUT.DIR, "diversity.bootstrap.all.rds"
+saveRDS(diversity.bootstrap.plots$all.datatypes.adx.asw, file.path(
+  OUTPUT.DIR, "diversity.bootstrap.all.datatypes.adx.asw.rds"
   ))
 
-print(diversity.bootstrap.plots$tc)
-print(diversity.bootstrap.plots$tcd)
-print(diversity.bootstrap.plots$all)
+print(diversity.bootstrap.plots$tc.tcd.1kg)
+print(diversity.bootstrap.plots$all.datatypes.adx.asw)

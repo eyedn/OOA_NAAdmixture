@@ -34,7 +34,8 @@ PLOT.CONFIGS <- list(
   TC.TCD = SOURCE.LEVELS[c(1, 2)],
   TCD.1kG = SOURCE.LEVELS[c(2, 5)],
   onlyADX = SOURCE.LEVELS[1:4],
-  all.1kG = SOURCE.LEVELS
+  tcd.1kg = SOURCE.LEVELS[c(2, 5)],
+  all.datatypes.adx.asw = SOURCE.LEVELS
   )
 SFS.FACET.LEVELS <- SELECTED.CHROMOSOMES
 SFS.SERIES.LEVELS <- c(
@@ -543,6 +544,11 @@ filter.plot.view <- function(data, data.types, tag) {
   filtered <- data %>%
     filter(as.character(data.type) %in% data.types) %>%
     filter(tag != "onlyADX" | pop == "ADX") %>%
+    filter(
+      tag != "all.datatypes.adx.asw" |
+        (data.type != "Empirical" & pop == "ADX") |
+        (data.type == "Empirical" & pop == "ASW")
+      ) %>%
     mutate(
       data.type = factor(as.character(data.type), levels = data.types),
       series = factor(
@@ -591,7 +597,6 @@ make.sfs.plot <- function(
       width = 0.25, linewidth = 0.5,
       na.rm = TRUE
       ) +
-    facet_wrap(~chrom, nrow = 1, drop = TRUE, scales = "free_y") +
     scale_x_continuous(
       breaks = seq_len(DISPLAY.BIN.MAX),
       limits = c(0.5, DISPLAY.BIN.MAX + 0.5)
@@ -831,23 +836,23 @@ singleton.diagnostics <- prepare.singleton.diagnostics(sfs.data)
 population.differences <- prepare.population.differences(sfs.data)
 
 sfs.bootstrap.count.plots <- imap(list(
-  focused = PLOT.CONFIGS$TCD.1kG,
-  all = PLOT.CONFIGS$all.1kG
+  tcd.1kg = PLOT.CONFIGS$tcd.1kg,
+  all.datatypes.adx.asw = PLOT.CONFIGS$all.datatypes.adx.asw
   ), function(data.types, tag) {
   return(make.sfs.plot(
     sfs.summaries$count, "mean", "Projected site count", TRUE,
-    data.types, if (tag == "focused") "TCD.1kG" else "all.1kG",
+    data.types, tag,
     show.all = FALSE
     ))
   })
 sfs.bootstrap.proportion.plots <- imap(list(
-  focused = PLOT.CONFIGS$TCD.1kG,
-  all = PLOT.CONFIGS$all.1kG
+  tcd.1kg = PLOT.CONFIGS$tcd.1kg,
+  all.datatypes.adx.asw = PLOT.CONFIGS$all.datatypes.adx.asw
   ), function(data.types, tag) {
   return(make.sfs.plot(
     sfs.summaries$proportion, "mean",
     "Proportion of segregating sites", FALSE, data.types,
-    if (tag == "focused") "TCD.1kG" else "all.1kG",
+    tag,
     show.all = FALSE
     ))
   })
@@ -862,20 +867,20 @@ population.difference.plot <- make.population.difference.plot(
 # Legacy diagnostics remain available above but are not emitted in this refresh.
 # Persist chromosome-1 bootstrap count and proportion plots before printing.
 dir.create(OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
-saveRDS(sfs.bootstrap.count.plots$focused, file.path(
-  OUTPUT.DIR, "sfs.bootstrap.count.focused.rds"
+saveRDS(sfs.bootstrap.count.plots$tcd.1kg, file.path(
+  OUTPUT.DIR, "sfs.bootstrap.count.tcd.1kg.rds"
   ))
-saveRDS(sfs.bootstrap.count.plots$all, file.path(
-  OUTPUT.DIR, "sfs.bootstrap.count.all.rds"
+saveRDS(sfs.bootstrap.count.plots$all.datatypes.adx.asw, file.path(
+  OUTPUT.DIR, "sfs.bootstrap.count.all.datatypes.adx.asw.rds"
   ))
-saveRDS(sfs.bootstrap.proportion.plots$focused, file.path(
-  OUTPUT.DIR, "sfs.bootstrap.proportion.focused.rds"
+saveRDS(sfs.bootstrap.proportion.plots$tcd.1kg, file.path(
+  OUTPUT.DIR, "sfs.bootstrap.proportion.tcd.1kg.rds"
   ))
-saveRDS(sfs.bootstrap.proportion.plots$all, file.path(
-  OUTPUT.DIR, "sfs.bootstrap.proportion.all.rds"
+saveRDS(sfs.bootstrap.proportion.plots$all.datatypes.adx.asw, file.path(
+  OUTPUT.DIR, "sfs.bootstrap.proportion.all.datatypes.adx.asw.rds"
   ))
 
-print(sfs.bootstrap.count.plots$focused)
-print(sfs.bootstrap.count.plots$all)
-print(sfs.bootstrap.proportion.plots$focused)
-print(sfs.bootstrap.proportion.plots$all)
+print(sfs.bootstrap.count.plots$tcd.1kg)
+print(sfs.bootstrap.count.plots$all.datatypes.adx.asw)
+print(sfs.bootstrap.proportion.plots$tcd.1kg)
+print(sfs.bootstrap.proportion.plots$all.datatypes.adx.asw)
