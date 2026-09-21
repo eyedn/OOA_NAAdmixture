@@ -8,6 +8,9 @@
 # kinship.R
 # ______________________________________________________________________________
 
+# pattern: Mixed (unavoidable)
+# Reason: This analysis script combines pure plot preparation with file I/O.
+
 # set up ----
 library(tidyverse)
 library(glue)
@@ -60,6 +63,30 @@ PLOT.STYLES <- list(
     Empirical = "#B83264"
     ),
   series.labels = SOURCE.LABELS
+  )
+BOOTSTRAP.PLOT.STYLES <- list(
+  tcd.1kg = list(
+    fill.colors = c(
+      "T.C.D. AFR" = "#56B4E9", "T.C.D. ADX" = "#6F55B5",
+      "T.C.D. EUR" = "#FB8072", YRI = "#EEC4DC", ASW = "#E44B8D",
+      CEU = "#BB437E"
+      ),
+    fill.labels = c(
+      "T.C.D. AFR" = "T.C.D. AFR", "T.C.D. ADX" = "T.C.D. ADX",
+      "T.C.D. EUR" = "T.C.D. EUR", YRI = "YRI", ASW = "ASW",
+      CEU = "CEU"
+      )
+    ),
+  all.datatypes.adx.asw = list(
+    fill.colors = c(
+      "T.C." = "#9A83CE", "T.C.D." = "#6F55B5",
+      "L.G." = "#32146F", "L.G.D." = "#4B1FA8", ASW = "#E44B8D"
+      ),
+    fill.labels = c(
+      "T.C." = "T.C.", "T.C.D." = "T.C.D.", "L.G." = "L.G.",
+      "L.G.D." = "L.G.D.", ASW = "ASW"
+      )
+    )
   )
 
 
@@ -238,19 +265,32 @@ summarize.empirical.kinship.interval <- function(
   }
 
 
-# construct TCD/1kG and all-datatype ADX/ASW kinship plots with intervals
-make.bootstrap.kinship.plot <- function(
-    data, breaks, data.types, title, x.limits, populations = NULL
-  ) {
-  if (length(x.limits) != 2L || any(!is.finite(x.limits))) {
-    stop("Kinship x limits must contain two finite values")
+# select the source and population series for one bootstrap kinship view
+filter.bootstrap.kinship.plot.view <- function(data, data.types, tag) {
+  if (!tag %in% names(BOOTSTRAP.PLOT.STYLES)) {
+    stop("Unsupported bootstrap kinship plot tag: ", tag)
+    }
+  if (!identical(data.types, PLOT.CONFIGS[[tag]])) {
+    stop("Kinship data types do not match the configured bootstrap view")
     }
   plotted <- data %>%
-    filter(as.character(data.type) %in% data.types,
-      as.character(chrom) %in% SELECTED.CHROMOSOMES)
-  if (!is.null(populations)) {
-    plotted <- plotted %>% filter(pop %in% populations)
+    filter(
+      as.character(data.type) %in% data.types,
+      as.character(chrom) %in% SELECTED.CHROMOSOMES
+      )
+  plotted <- if (tag == "tcd.1kg") {
+    plotted %>% filter(
+      (data.type == "Simulation_2T12Consistent_simDown" &
+         pop %in% c("AFR", "ADX", "EUR")) |
+        (data.type == "Empirical" & pop %in% c("YRI", "ASW", "CEU"))
+      )
+    } else {
+    plotted %>% filter(
+      (data.type != "Empirical" & pop == "ADX") |
+        (data.type == "Empirical" & pop == "ASW")
+      )
     }
+  styles <- BOOTSTRAP.PLOT.STYLES[[tag]]
   plotted <- plotted %>%
     mutate(
       data.type = factor(
@@ -260,11 +300,35 @@ make.bootstrap.kinship.plot <- function(
       pop = factor(
         as.character(pop),
         levels = order.active.levels(pop, POPULATION.LEVELS)
+        ),
+      plot.key = case_when(
+        tag == "tcd.1kg" & data.type != "Empirical" ~
+          paste("T.C.D.", pop),
+        tag == "tcd.1kg" ~ as.character(pop),
+        data.type == "Empirical" ~ "ASW",
+        TRUE ~ SOURCE.LABELS[as.character(data.type)]
+        ),
+      plot.key = factor(
+        plot.key,
+        levels = order.active.levels(plot.key, names(styles$fill.colors))
         )
       )
+  return(plotted)
+  }
+
+
+# construct TCD/1kG and all-datatype ADX/ASW kinship plots with intervals
+make.bootstrap.kinship.plot <- function(
+    data, breaks, data.types, title, x.limits, tag
+  ) {
+  if (length(x.limits) != 2L || any(!is.finite(x.limits))) {
+    stop("Kinship x limits must contain two finite values")
+    }
+  plotted <- filter.bootstrap.kinship.plot.view(data, data.types, tag)
+  styles <- BOOTSTRAP.PLOT.STYLES[[tag]]
   dodge <- position_dodge(diff(breaks)[1])
   plot <- ggplot(plotted, aes(
-    xmid, mean, fill = data.type, group = data.type
+    xmid, mean, fill = plot.key, group = plot.key
     )) +
     geom_col(
       position = dodge,
@@ -274,15 +338,11 @@ make.bootstrap.kinship.plot <- function(
     geom_errorbar(aes(ymin = lower, ymax = upper),
       position = dodge, width = 0, linewidth = DENSE.BAR.LINEWIDTH,
       na.rm = TRUE) +
-    # facet_grid(
-    #   data.type ~ chrom,
-    #   scales = "free_y",
-    #   labeller = labeller(data.type = PLOT.STYLES$series.labels)
-    #   ) +
     coord_cartesian(xlim = x.limits) +
     scale_fill_manual(
-      values = PLOT.STYLES$source.colors,
-      labels = PLOT.STYLES$series.labels
+      values = styles$fill.colors,
+      breaks = levels(plotted$plot.key),
+      labels = styles$fill.labels[levels(plotted$plot.key)]
       ) +
     labs(title = title, x = "Pairwise KING kinship", y = "Fraction of pairs",
       fill = NULL) +
@@ -704,13 +764,12 @@ kinship.summary <- summarize.bootstrap.kinship(kinship.data, kinship.breaks)
 kinship.bootstrap.tcd.1kg <- make.bootstrap.kinship.plot(
   kinship.summary, kinship.breaks, PLOT.CONFIGS$tcd.1kg,
   "Pairwise KING kinship: chromosome 1 TCD and 1kG",
-  x.limits = c(-0.1, 0.05)
+  x.limits = c(-0.1, 0.05), tag = "tcd.1kg"
   )
 kinship.bootstrap.all.datatypes.adx.asw <- make.bootstrap.kinship.plot(
   kinship.summary, kinship.breaks, PLOT.CONFIGS$all.datatypes.adx.asw,
   "Pairwise KING kinship: chromosome 1 all ADX sources and ASW",
-  x.limits = c(-0.2, 0.05),
-  populations = c("ADX", "ASW")
+  x.limits = c(-0.2, 0.05), tag = "all.datatypes.adx.asw"
   )
 
 # persist bootstrap plots before printing figures at the end of the script
