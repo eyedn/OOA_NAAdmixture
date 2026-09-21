@@ -224,14 +224,14 @@ make.bootstrap.ancestry.bar.plot <- function(data, data.types, title) {
   genome <- data %>%
     filter(data.type == "Empirical", chrom == "all")
   plot <- ggplot(plotted, aes(chrom, mean, fill = data.type)) +
-    geom_hline(data = genome, aes(yintercept = mean), inherit.aes = FALSE,
-      linetype = "dashed", color = PLOT.STYLES$empirical.colors[[
-        PLOT.EMPIRICAL.METHOD
-        ]]) +
-    geom_col(position = position_dodge(width = 0.8), color = "black") +
+    geom_col(position = position_dodge(width = 1), color = "black") +
     geom_errorbar(aes(ymin = lower, ymax = upper),
-      position = position_dodge(width = 0.8), width = 0, na.rm = TRUE) +
-    facet_wrap(~stat, scales = "free_y", labeller = labeller(stat = c(
+      position = position_dodge(width = 1), width = 0, na.rm = TRUE) +
+    geom_hline(data = genome, aes(yintercept = mean), inherit.aes = FALSE,
+               linetype = "dashed", color = PLOT.STYLES$empirical.colors[[
+                 PLOT.EMPIRICAL.METHOD
+               ]]) +
+    facet_wrap(stat ~ ., scales = "free_y", ncol = 1, labeller = labeller(stat = c(
       mean = "Mean", sd = "SD"))) +
     scale_fill_manual(
       values = PLOT.STYLES$colors,
@@ -248,7 +248,7 @@ make.bootstrap.ancestry.bar.plot <- function(data, data.types, title) {
 make.bootstrap.ancestry.histogram.plot <- function(data, data.types, title) {
   plotted <- data %>% filter(
     as.character(data.type) %in% data.types,
-    as.character(chrom) == "1"
+    (as.character(chrom) == "all" & data.type == "Empirical") | (as.character(chrom) == "1" & data.type != "Empirical")
     )
   plot <- ggplot(plotted, aes(xmid, mean, fill = data.type)) +
     geom_col(position = position_dodge(width = 0.045), width = 0.04,
