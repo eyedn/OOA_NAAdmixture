@@ -56,7 +56,8 @@ PLOT.STYLES <- list(
     Simulation_2T12Consistent = "#9A83CE",
     Simulation_2T12Consistent_simDown = "#6F55B5",
     Simulation_largeGrowth = "#32146F",
-    Simulation_largeGrowth_simDown = "#4B1FA8"
+    Simulation_largeGrowth_simDown = "#4B1FA8",
+    Empirical = "#B83264"
     ),
   series.labels = SOURCE.LABELS
   )
@@ -262,7 +263,9 @@ make.bootstrap.kinship.plot <- function(
         )
       )
   dodge <- position_dodge(diff(breaks)[1])
-  plot <- ggplot(plotted, aes(xmid, mean, fill = pop, group = pop)) +
+  plot <- ggplot(plotted, aes(
+    xmid, mean, fill = data.type, group = data.type
+    )) +
     geom_col(
       position = dodge,
       width = diff(breaks)[1] * DENSE.BAR.WIDTH.MULTIPLIER,
@@ -277,7 +280,10 @@ make.bootstrap.kinship.plot <- function(
     #   labeller = labeller(data.type = PLOT.STYLES$series.labels)
     #   ) +
     coord_cartesian(xlim = x.limits) +
-    scale_fill_manual(values = PLOT.STYLES$population.colors) +
+    scale_fill_manual(
+      values = PLOT.STYLES$source.colors,
+      labels = PLOT.STYLES$series.labels
+      ) +
     labs(title = title, x = "Pairwise KING kinship", y = "Fraction of pairs",
       fill = NULL) +
     theme_bw(base_size = PLOT.BASE.SIZE) +
