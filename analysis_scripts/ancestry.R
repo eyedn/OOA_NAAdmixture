@@ -81,6 +81,173 @@ PLOT.STYLES <- list(
 # internal functions ----
 
 
+# summarize complete simulation replicates with a 95% simulation interval
+summarize.simulation.interval <- function(
+    data, grouping.columns, value.column
+  ) {
+  if (any(!is.finite(data[[value.column]]))) {
+    stop("Simulation values must be finite")
+    }
+  summary <- data %>%
+    group_by(across(all_of(setdiff(grouping.columns, "rep")))) %>%
+    summarise(
+      replicate.count = n_distinct(rep),
+      mean = mean(.data[[value.column]]),
+      lower = quantile(.data[[value.column]], 0.025, names = FALSE),
+      upper = quantile(.data[[value.column]], 0.975, names = FALSE),
+      .groups = "drop"
+      )
+  if (any(summary$replicate.count != 50L)) {
+    stop("Simulation summaries require exactly 50 complete replicates")
+    }
+  return(summary)
+  }
+
+
+# deterministically select empirical-sized ADX samples in each replicate
+select.bootstrap.ancestry.ids <- function(
+    data, downsample.size, sample.id.column, seed
+  ) {
+  candidates <- data %>%
+    filter(data.type != "Empirical", role == "ADX")
+  if ("sample.set" %in% names(candidates)) {
+    candidates <- filter(candidates, sample.set == "full")
+    }
+  candidates <- candidates %>%
+    select(data.type, rep, chrom, all_of(sample.id.column), afr.q)
+  if (any(!is.finite(candidates$afr.q))) {
+    stop("Simulation ancestry values must be finite")
+    }
+  duplicates <- candidates %>%
+    count(data.type, rep, chrom, .data[[sample.id.column]]) %>%
+    filter(n != 1L)
+  if (nrow(duplicates)) stop("Simulation ancestry IDs must be unique")
+  candidates <- distinct(candidates)
+  sizes <- candidates %>% count(data.type, rep, chrom, name = "available")
+  if (any(sizes$available < downsample.size)) {
+    stop(
+      "A simulation ancestry group contains fewer than ", downsample.size,
+      " unique IDs"
+      )
+    }
+  set.seed(seed)
+  selected <- candidates %>%
+    group_by(data.type, rep, chrom) %>%
+    slice_sample(n = downsample.size, replace = FALSE) %>%
+    ungroup() %>%
+    select(data.type, rep, chrom, all_of(sample.id.column))
+  return(selected)
+  }
+
+
+# build direct-replicate mean and SD summaries plus observed empirical values
+summarize.bootstrap.ancestry <- function(data, downsample.size, seed) {
+  selected <- select.bootstrap.ancestry.ids(
+    data, downsample.size, "sample_id", seed
+    )
+  simulation.data <- data %>% filter(data.type != "Empirical", role == "ADX")
+  if ("sample.set" %in% names(simulation.data)) {
+    simulation.data <- filter(simulation.data, sample.set == "full")
+    }
+  simulation <- simulation.data %>%
+    inner_join(selected, by = c("data.type", "rep", "chrom", "sample_id")) %>%
+    group_by(data.type, rep, chrom) %>%
+    summarise(mean = mean(afr.q), sd = sd(afr.q), .groups = "drop") %>%
+    pivot_longer(c(mean, sd), names_to = "stat", values_to = "value") %>%
+    summarize.simulation.interval(c("data.type", "rep", "chrom", "stat"),
+      "value")
+  empirical <- data %>%
+    filter(data.type == "Empirical", role == "ASW") %>%
+    group_by(data.type, chrom) %>%
+    summarise(mean = mean(afr.q), sd = sd(afr.q), .groups = "drop") %>%
+    pivot_longer(c(mean, sd), names_to = "stat", values_to = "mean") %>%
+    mutate(lower = NA_real_, upper = NA_real_, replicate.count = 1L)
+  return(bind_rows(simulation, empirical))
+  }
+
+
+# summarize complete simulated and bootstrap-resampled empirical histograms
+summarize.bootstrap.histograms <- function(data, breaks, seed, replicates) {
+  selected <- select.bootstrap.ancestry.ids(data, 50, "sample_id", seed)
+  simulation.data <- data %>% filter(data.type != "Empirical", role == "ADX")
+  if ("sample.set" %in% names(simulation.data)) {
+    simulation.data <- filter(simulation.data, sample.set == "full")
+    }
+  simulation <- simulation.data %>%
+    inner_join(selected, by = c("data.type", "rep", "chrom", "sample_id")) %>%
+    group_by(data.type, rep, chrom) %>%
+    group_modify(function(group, key) {
+      counts <- hist(group$afr.q, breaks = breaks, plot = FALSE)$counts
+      return(tibble(bin = seq_along(counts), fraction = counts / sum(counts)))
+      }) %>%
+    ungroup() %>%
+    summarize.simulation.interval(c("data.type", "rep", "chrom", "bin"),
+      "fraction")
+  empirical <- data %>%
+    filter(data.type == "Empirical", role == "ASW", chrom == "1") %>%
+    group_by(data.type, chrom) %>%
+    group_modify(function(group, key) {
+      set.seed(seed)
+      draws <- replicate(replicates, {
+        counts <- hist(sample(group$afr.q, nrow(group), replace = TRUE),
+          breaks = breaks, plot = FALSE)$counts
+        counts / sum(counts)
+        })
+      tibble(
+        bin = seq_len(nrow(draws)), mean = rowMeans(draws),
+        lower = apply(draws, 1, quantile, 0.025),
+        upper = apply(draws, 1, quantile, 0.975),
+        replicate.count = replicates
+        )
+      }) %>%
+    ungroup()
+  bins <- tibble(bin = seq_len(length(breaks) - 1L),
+    xmid = head(breaks, -1L) + diff(breaks) / 2)
+  return(bind_rows(simulation, empirical) %>% left_join(bins, by = "bin"))
+  }
+
+
+# construct a compact chromosome bootstrap bar plot without mode summaries
+make.bootstrap.ancestry.bar.plot <- function(data, data.types, title) {
+  plotted <- data %>%
+    filter(as.character(data.type) %in% data.types, chrom %in% SELECTED.CHROMOSOMES)
+  genome <- data %>%
+    filter(data.type == "Empirical", chrom == "all")
+  plot <- ggplot(plotted, aes(chrom, mean, fill = data.type)) +
+    geom_hline(data = genome, aes(yintercept = mean), inherit.aes = FALSE,
+      linetype = "dashed", color = PLOT.STYLES$empirical.colors[[
+        PLOT.EMPIRICAL.METHOD
+        ]]) +
+    geom_col(position = position_dodge(width = 0.8), color = "black") +
+    geom_errorbar(aes(ymin = lower, ymax = upper),
+      position = position_dodge(width = 0.8), width = 0, na.rm = TRUE) +
+    facet_wrap(~stat, scales = "free_y", labeller = labeller(stat = c(
+      mean = "Mean", sd = "SD"))) +
+    scale_fill_manual(values = PLOT.STYLES$colors) +
+    labs(title = title, x = "Chromosome", y = "African ancestry", fill = NULL) +
+    theme_bw(base_size = PLOT.BASE.SIZE) +
+    theme(legend.position = "top", panel.grid.minor = element_blank())
+  return(plot)
+  }
+
+
+# construct a chromosome-1 ancestry histogram with direct simulation intervals
+make.bootstrap.ancestry.histogram.plot <- function(data, data.types, title) {
+  plotted <- data %>% filter(as.character(data.type) %in% data.types)
+  plot <- ggplot(plotted, aes(xmid, mean, fill = data.type)) +
+    geom_col(position = position_dodge(width = 0.045), width = 0.04,
+      color = "black", linewidth = 0.2) +
+    geom_errorbar(aes(ymin = lower, ymax = upper),
+      position = position_dodge(width = 0.045), width = 0, na.rm = TRUE) +
+    scale_fill_manual(values = PLOT.STYLES$colors) +
+    labs(title = title, x = "African ancestry", y = "Fraction of individuals",
+      fill = NULL) +
+    theme_bw(base_size = PLOT.BASE.SIZE) +
+    theme(legend.position = "top", panel.grid.minor = element_blank())
+  return(plot)
+  }
+
+
 # return the configured chromosome-level inference file family
 ancestry.inference.file.family <- function(method) {
   if (!method %in% c("ADMIXTURE", "fastStructure")) {
@@ -1815,6 +1982,9 @@ choose.k.frequency.tables <- list(
 # statistical tests ----
 
 
+# Legacy statistical tests, diagnostics, plot constructors, and output writes
+# are retained below as inactive reference during the bootstrap plotting refresh.
+if (FALSE) {
 # calculate each statistical analysis independently
 ancestry.chromosome.comparison.tests <- test.ancestry.chromosome.comparisons()
 ancestry.genome.reference.tests <- test.ancestry.genome.reference()
@@ -2021,3 +2191,59 @@ print(ancestry.histogram.plots$onlyADX)
 # print(simulation.diagnostic.plots$lg.inference)
 # print(simulation.diagnostic.plots$lg.d.inference)
 # print(empirical.diagnostic.plot)
+  }
+
+
+# bootstrap plotting ----
+
+
+# calculate complete-replicate simulation summaries and empirical histograms
+bootstrap.ancestry.summary <- summarize.bootstrap.ancestry(
+  ancestry.individual.data, DOWNSAMPLE.SIZE, RANDOM.SEED
+  )
+bootstrap.ancestry.histograms <- summarize.bootstrap.histograms(
+  ancestry.individual.data, HISTOGRAM.BREAKS, RANDOM.SEED,
+  BOOTSTRAP.REPLICATES
+  )
+
+# construct focused TCD/ASW and all-source ADX/ASW bootstrap views
+ancestry.bootstrap.focused.bar <- make.bootstrap.ancestry.bar.plot(
+  bootstrap.ancestry.summary,
+  c("Simulation_2T12Consistent_simDown", "Empirical"),
+  "African ancestry: TCD and ASW"
+  )
+ancestry.bootstrap.all.bar <- make.bootstrap.ancestry.bar.plot(
+  bootstrap.ancestry.summary,
+  c(SOURCE.LEVELS[1:4], "Empirical"),
+  "African ancestry: all ADX sources and ASW"
+  )
+ancestry.bootstrap.focused.histogram <- make.bootstrap.ancestry.histogram.plot(
+  bootstrap.ancestry.histograms,
+  c("Simulation_2T12Consistent_simDown", "Empirical"),
+  "Chromosome 1 African ancestry: TCD and ASW"
+  )
+ancestry.bootstrap.all.histogram <- make.bootstrap.ancestry.histogram.plot(
+  bootstrap.ancestry.histograms,
+  c(SOURCE.LEVELS[1:4], "Empirical"),
+  "Chromosome 1 African ancestry: all ADX sources and ASW"
+  )
+
+# save every bootstrap plot before explicit printing at the script end
+dir.create(OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
+saveRDS(ancestry.bootstrap.focused.bar, file.path(
+  OUTPUT.DIR, "ancestry.bootstrap.focused.bar.rds"
+  ))
+saveRDS(ancestry.bootstrap.all.bar, file.path(
+  OUTPUT.DIR, "ancestry.bootstrap.all.bar.rds"
+  ))
+saveRDS(ancestry.bootstrap.focused.histogram, file.path(
+  OUTPUT.DIR, "ancestry.bootstrap.focused.histogram.rds"
+  ))
+saveRDS(ancestry.bootstrap.all.histogram, file.path(
+  OUTPUT.DIR, "ancestry.bootstrap.all.histogram.rds"
+  ))
+
+print(ancestry.bootstrap.focused.bar)
+print(ancestry.bootstrap.all.bar)
+print(ancestry.bootstrap.focused.histogram)
+print(ancestry.bootstrap.all.histogram)

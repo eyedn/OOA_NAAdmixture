@@ -33,7 +33,8 @@ PLOT.CONFIGS <- list(
   TC.1kG = SOURCE.LEVELS[c(1, 5)],
   TC.TCD = SOURCE.LEVELS[c(1, 2)],
   TCD.1kG = SOURCE.LEVELS[c(2, 5)],
-  onlyADX = SOURCE.LEVELS[1:4]
+  onlyADX = SOURCE.LEVELS[1:4],
+  all.1kG = SOURCE.LEVELS
   )
 SFS.FACET.LEVELS <- SELECTED.CHROMOSOMES
 SFS.SERIES.LEVELS <- c(
@@ -79,6 +80,29 @@ PLOT.STYLES <- list(series.labels = c(
 
 
 # internal functions ----
+
+
+# summarize complete folded spectrum vectors with percentile intervals
+summarize.simulation.interval <- function(
+    data, grouping.columns, value.column
+  ) {
+  if (any(!is.finite(data[[value.column]]))) {
+    stop("Simulation values must be finite")
+    }
+  summary <- data %>%
+    group_by(across(all_of(setdiff(grouping.columns, "rep")))) %>%
+    summarise(
+      replicate.count = n_distinct(rep),
+      mean = mean(.data[[value.column]]),
+      lower = quantile(.data[[value.column]], 0.025, names = FALSE),
+      upper = quantile(.data[[value.column]], 0.975, names = FALSE),
+      .groups = "drop"
+      )
+  if (any(summary$replicate.count != 50L)) {
+    stop("Simulation summaries require exactly 50 complete replicates")
+    }
+  return(summary)
+  }
 
 
 # retain source-specific populations before SFS normalization
@@ -470,22 +494,27 @@ prepare.population.differences <- function(data) {
 
 # summarize simulation replicates and retain empirical NA intervals
 summarize.one.sfs.value <- function(data, value.column) {
-  summary <- data %>%
+  simulation <- data %>%
+    filter(data.set != "empirical") %>%
+    summarize.simulation.interval(
+      c("data.set", "data.type", "rep", "chrom", "pop", "series",
+        "minor.allele.count"),
+      value.column
+      )
+  empirical <- data %>%
+    filter(data.set == "empirical") %>%
     group_by(
       data.set, data.type, chrom, pop, series, minor.allele.count
       ) %>%
     summarize(
       mean = mean(.data[[value.column]]),
-      sd = if_else(
-        first(data.set) == "empirical",
-        NA_real_,
-        sd(.data[[value.column]])
-        ),
       .groups = "drop"
-      ) %>%
+    ) %>%
     mutate(
-      lower = pmax(0, mean - 2 * sd),
-      upper = mean + 2 * sd,
+      lower = NA_real_, upper = NA_real_, replicate.count = 1L
+      )
+  summary <- bind_rows(simulation, empirical) %>%
+    mutate(
       chrom = factor(chrom, levels = SFS.FACET.LEVELS),
       series = factor(series, levels = SFS.SERIES.LEVELS)
       )
@@ -801,16 +830,24 @@ sfs.summaries <- summarize.sfs.analysis(sfs.data)
 singleton.diagnostics <- prepare.singleton.diagnostics(sfs.data)
 population.differences <- prepare.population.differences(sfs.data)
 
-sfs.count.plots <- imap(PLOT.CONFIGS, function(data.types, tag) {
+sfs.bootstrap.count.plots <- imap(list(
+  focused = PLOT.CONFIGS$TCD.1kG,
+  all = PLOT.CONFIGS$all.1kG
+  ), function(data.types, tag) {
   return(make.sfs.plot(
     sfs.summaries$count, "mean", "Projected site count", TRUE,
-    data.types, tag, show.all = FALSE
+    data.types, if (tag == "focused") "TCD.1kG" else "all.1kG",
+    show.all = FALSE
     ))
   })
-sfs.proportion.plots <- imap(PLOT.CONFIGS, function(data.types, tag) {
+sfs.bootstrap.proportion.plots <- imap(list(
+  focused = PLOT.CONFIGS$TCD.1kG,
+  all = PLOT.CONFIGS$all.1kG
+  ), function(data.types, tag) {
   return(make.sfs.plot(
     sfs.summaries$proportion, "mean",
-    "Proportion of segregating sites", FALSE, data.types, tag,
+    "Proportion of segregating sites", FALSE, data.types,
+    if (tag == "focused") "TCD.1kG" else "all.1kG",
     show.all = FALSE
     ))
   })
@@ -822,35 +859,23 @@ population.difference.plot <- make.population.difference.plot(
   population.differences
   )
 
-# persist primary and diagnostic plots before printing at the script end
+# Legacy diagnostics remain available above but are not emitted in this refresh.
+# Persist chromosome-1 bootstrap count and proportion plots before printing.
 dir.create(OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
-iwalk(sfs.count.plots, function(plot, tag) {
-  saveRDS(plot, file.path(
-    OUTPUT.DIR,
-    str_replace("sfs.count.{tag}.rds", fixed("{tag}"), tag)
-    ))
-  })
-iwalk(sfs.proportion.plots, function(plot, tag) {
-  saveRDS(plot, file.path(
-    OUTPUT.DIR,
-    str_replace("sfs.proportion.{tag}.rds", fixed("{tag}"), tag)
-    ))
-  })
-diagnostic.plots <- list(
-  singleton.composition = singleton.composition.plot,
-  population.difference = population.difference.plot
-  )
-iwalk(diagnostic.plots, function(plot, name) {
-  saveRDS(plot, file.path(OUTPUT.DIR, paste0("sfs.", name, ".rds")))
-  })
+saveRDS(sfs.bootstrap.count.plots$focused, file.path(
+  OUTPUT.DIR, "sfs.bootstrap.count.focused.rds"
+  ))
+saveRDS(sfs.bootstrap.count.plots$all, file.path(
+  OUTPUT.DIR, "sfs.bootstrap.count.all.rds"
+  ))
+saveRDS(sfs.bootstrap.proportion.plots$focused, file.path(
+  OUTPUT.DIR, "sfs.bootstrap.proportion.focused.rds"
+  ))
+saveRDS(sfs.bootstrap.proportion.plots$all, file.path(
+  OUTPUT.DIR, "sfs.bootstrap.proportion.all.rds"
+  ))
 
-print(sfs.count.plots$TC.1kG)
-print(sfs.count.plots$TC.TCD)
-print(sfs.count.plots$TCD.1kG)
-print(sfs.count.plots$onlyADX)
-print(sfs.proportion.plots$TC.1kG)
-print(sfs.proportion.plots$TC.TCD)
-print(sfs.proportion.plots$TCD.1kG)
-print(sfs.proportion.plots$onlyADX)
-print(singleton.composition.plot)
-print(population.difference.plot)
+print(sfs.bootstrap.count.plots$focused)
+print(sfs.bootstrap.count.plots$all)
+print(sfs.bootstrap.proportion.plots$focused)
+print(sfs.bootstrap.proportion.plots$all)

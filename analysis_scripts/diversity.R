@@ -30,7 +30,8 @@ PLOT.CONFIGS <- list(
   TC.1kG = SOURCE.LEVELS[c(1, 5)],
   TC.TCD = SOURCE.LEVELS[c(1, 2)],
   TCD.1kG = SOURCE.LEVELS[c(2, 5)],
-  onlyADX = SOURCE.LEVELS[1:4]
+  onlyADX = SOURCE.LEVELS[1:4],
+  all.1kG = SOURCE.LEVELS
   )
 PLOT.BASE.SIZE <- 24
 PLOT.STYLES <- list(
@@ -69,6 +70,29 @@ PLOT.STYLES <- list(
 
 
 # internal functions ----
+
+
+# summarize complete simulation replicates with direct percentile intervals
+summarize.simulation.interval <- function(
+    data, grouping.columns, value.column
+  ) {
+  if (any(!is.finite(data[[value.column]]))) {
+    stop("Simulation values must be finite")
+    }
+  summary <- data %>%
+    group_by(across(all_of(setdiff(grouping.columns, "rep")))) %>%
+    summarise(
+      replicate.count = n_distinct(rep),
+      mean = mean(.data[[value.column]]),
+      lower = quantile(.data[[value.column]], 0.025, names = FALSE),
+      upper = quantile(.data[[value.column]], 0.975, names = FALSE),
+      .groups = "drop"
+      )
+  if (any(summary$replicate.count != 50L)) {
+    stop("Simulation summaries require exactly 50 complete replicates")
+    }
+  return(summary)
+  }
 
 
 # retain source-specific populations before any replicate summaries
@@ -181,16 +205,18 @@ read.diversity.genome <- function(
 # calculate replicate means and standard deviations for simulations
 summarize.simulation.diversity <- function(data) {
   if (!"role" %in% names(data)) data <- add.population.roles(data)
-  summary <- data %>%
+  replicate.summary <- data %>%
     filter(stat %in% c("pi", "theta")) %>%
-    group_by(data.type, pop, role, stat, chrom, mask) %>%
+    group_by(data.type, rep, pop, role, stat, chrom, mask) %>%
     summarise(
-      mean = mean(value, na.rm = TRUE),
-      sd = sd(value, na.rm = TRUE),
-      replicate.count = n_distinct(rep),
+      value = mean(value),
       .groups = "drop"
       )
-
+  summary <- summarize.simulation.interval(
+    replicate.summary,
+    c("data.type", "rep", "pop", "role", "stat", "chrom", "mask"),
+    "value"
+    )
   return(summary)
   }
 
@@ -228,13 +254,13 @@ build.diversity.plot.data <- function(
     duplicate.simulation.masks() %>%
     transmute(
       data.type, pop, role, stat, chrom, mask,
-      estimate = mean, sd, replicate.count
+      estimate = mean, lower, upper, replicate.count
       )
   empirical.points <- empirical.chromosome %>%
     filter(chrom %in% chromosomes, stat %in% c("pi", "theta")) %>%
     transmute(
       data.type, pop, role, stat, chrom, mask,
-      estimate = value, sd = NA_real_, replicate.count = 1L
+      estimate = value, lower = NA_real_, upper = NA_real_, replicate.count = 1L
       )
   points <- bind_rows(simulation.points, empirical.points) %>%
     mutate(
@@ -307,6 +333,8 @@ make.diversity.plot <- function(
     )
   points <- view$points
   genome.lines <- view$genome.lines
+  points <- filter(points, mask == "Intergenic")
+  genome.lines <- filter(genome.lines, mask == "Intergenic")
   dodge <- position_dodge(width = 0.75)
   fill.keys <- names(styles$fill.colors)[
     names(styles$fill.colors) %in% as.character(points$fill.key)
@@ -329,7 +357,7 @@ make.diversity.plot <- function(
       ) +
     geom_errorbar(
       data = points,
-      aes(ymin = estimate - 2 * sd, ymax = estimate + 2 * sd),
+      aes(ymin = lower, ymax = upper),
       position = dodge, width = 0.15, linewidth = 0.8,
       na.rm = TRUE
       ) +
@@ -447,24 +475,33 @@ diversity.plot.data <- build.diversity.plot.data(
   bind_rows(emp.intergenic.genome, emp.full.callable.genome),
   SELECTED.CHROMOSOMES
   )
-diversity.plots <- imap(PLOT.CONFIGS, function(data.types, tag) {
+diversity.bootstrap.plots <- imap(list(
+  tc = c("Simulation_2T12Consistent", "Empirical"),
+  tcd = c("Simulation_2T12Consistent_simDown", "Empirical"),
+  all = c(SOURCE.LEVELS[1:4], "Empirical")
+  ), function(data.types, tag) {
   return(make.diversity.plot(
     diversity.plot.data$points,
     diversity.plot.data$genome.lines,
-    PLOT.STYLES, data.types, tag
+    PLOT.STYLES, data.types,
+    if (tag == "tc") "TC.1kG" else if (tag == "tcd") "TCD.1kG" else {
+      "all.1kG"
+      }
     ))
   })
 
 # persist every plot before printing figures at the end of the script
 dir.create(OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
-iwalk(diversity.plots, function(plot, tag) {
-  saveRDS(plot, file.path(
-    OUTPUT.DIR,
-    str_replace("diversity.{tag}.rds", fixed("{tag}"), tag)
-    ))
-  })
+saveRDS(diversity.bootstrap.plots$tc, file.path(
+  OUTPUT.DIR, "diversity.bootstrap.tc.rds"
+  ))
+saveRDS(diversity.bootstrap.plots$tcd, file.path(
+  OUTPUT.DIR, "diversity.bootstrap.tcd.rds"
+  ))
+saveRDS(diversity.bootstrap.plots$all, file.path(
+  OUTPUT.DIR, "diversity.bootstrap.all.rds"
+  ))
 
-print(diversity.plots$TC.1kG)
-print(diversity.plots$TC.TCD)
-print(diversity.plots$TCD.1kG)
-print(diversity.plots$onlyADX)
+print(diversity.bootstrap.plots$tc)
+print(diversity.bootstrap.plots$tcd)
+print(diversity.bootstrap.plots$all)

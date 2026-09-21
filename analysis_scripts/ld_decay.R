@@ -61,6 +61,29 @@ PLOT.STYLES <- list(
 # internal functions ----
 
 
+# summarize complete pooled replicate curves with percentile intervals
+summarize.simulation.interval <- function(
+    data, grouping.columns, value.column
+  ) {
+  if (any(!is.finite(data[[value.column]]))) {
+    stop("Simulation values must be finite")
+    }
+  summary <- data %>%
+    group_by(across(all_of(setdiff(grouping.columns, "rep")))) %>%
+    summarise(
+      replicate.count = n_distinct(rep),
+      mean = mean(.data[[value.column]]),
+      lower = quantile(.data[[value.column]], 0.025, names = FALSE),
+      upper = quantile(.data[[value.column]], 0.975, names = FALSE),
+      .groups = "drop"
+      )
+  if (any(summary$replicate.count != 50L)) {
+    stop("Simulation summaries require exactly 50 complete replicates")
+    }
+  return(summary)
+  }
+
+
 # retain source-specific populations before pooling sufficient statistics
 apply.ld.source.contract <- function(data) {
   retained <- data %>%
@@ -205,23 +228,15 @@ summarize.ld.curves <- function(data, chromosomes) {
     }
   simulation <- scoped %>%
     filter(data.type != "Empirical") %>%
-    group_by(data.type, pop, role, chrom, distance_bin_bp) %>%
-    summarise(
-      mean = mean(mean.r2, na.rm = TRUE),
-      sd = sd(mean.r2, na.rm = TRUE),
-      replicate.count = n_distinct(rep),
-      chromosome.count = if (all(is.na(chromosome.count))) {
-        NA_integer_
-        } else {
-        max(chromosome.count, na.rm = TRUE)
-        },
-      .groups = "drop"
+    summarize.simulation.interval(
+      c("data.type", "rep", "pop", "role", "chrom", "distance_bin_bp"),
+      "mean.r2"
       )
   empirical <- scoped %>%
     filter(data.type == "Empirical") %>%
     transmute(
       data.type, pop, role, chrom, distance_bin_bp,
-      mean = mean.r2, sd = NA_real_, replicate.count = 1L,
+      mean = mean.r2, lower = NA_real_, upper = NA_real_, replicate.count = 1L,
       chromosome.count
       ) %>%
     distinct()
@@ -229,7 +244,7 @@ summarize.ld.curves <- function(data, chromosomes) {
     filter(data.type == "Empirical", as.character(chrom) == "all") %>%
     transmute(
       data.type, pop, role, chrom, distance_bin_bp,
-      mean = mean.r2, sd = NA_real_, replicate.count = 1L,
+      mean = mean.r2, lower = NA_real_, upper = NA_real_, replicate.count = 1L,
       chromosome.count
       ) %>%
     distinct()
@@ -310,8 +325,8 @@ add.ld.geometries <- function(plot, data) {
     geom_ribbon(
       data = simulation,
       aes(
-        ymin = pmax(0, mean - 2 * sd),
-        ymax = mean + 2 * sd,
+        ymin = lower,
+        ymax = upper,
         group = interaction(data.type, pop)
         ),
       alpha = 0.2, color = NA
@@ -401,6 +416,34 @@ make.ld.plot <- function(
   }
 
 
+# build one chromosome-1 bootstrap LD view over the requested distance range
+make.bootstrap.ld.plot <- function(data, data.types, view) {
+  source.view <- identical(data.types, SOURCE.LEVELS[1:4])
+  plotted <- data %>%
+    filter(
+      as.character(chrom) == "1",
+      as.character(data.type) %in% data.types,
+      between(distance_bin_bp, 5000, 250000)
+      ) %>%
+    mutate(plot.key = if (source.view) as.character(data.type) else pop)
+  plot <- ggplot(plotted, aes(distance_bin_bp, mean, color = plot.key,
+    fill = plot.key, group = interaction(data.type, pop))) +
+    geom_ribbon(
+      data = filter(plotted, data.type != "Empirical"),
+      aes(ymin = lower, ymax = upper), alpha = 0.2, color = NA
+      ) +
+    geom_line(linewidth = 1) +
+    scale_x_continuous(limits = c(5000, 250000)) +
+    labs(x = "Distance between SNPs (bp)", y = expression("Mean " * r^2),
+      color = NULL, fill = NULL) +
+    theme_bw(base_size = PLOT.BASE.SIZE) +
+    theme(legend.position = "top", panel.grid.minor = element_blank())
+  if (view == "role.interval") plot <- plot + facet_wrap(~role)
+  if (view == "datatype.interval") plot <- plot + facet_wrap(~data.type)
+  return(plot)
+  }
+
+
 # analysis ----
 
 
@@ -449,15 +492,59 @@ ld.plots <- imap(PLOT.CONFIGS, function(data.types, tag) {
   })
 
 # persist every plot before printing figures at the end of the script
-dir.create(OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
-iwalk(ld.plots, function(plot, tag) {
-  saveRDS(plot, file.path(
-    OUTPUT.DIR,
-    str_replace("ld.decay.{tag}.rds", fixed("{tag}"), tag)
-    ))
-  })
+# Legacy plot writes are retained as inactive reference code.
+if (FALSE) {
+  dir.create(OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
+  iwalk(ld.plots, function(plot, tag) {
+    saveRDS(plot, file.path(
+      OUTPUT.DIR,
+      str_replace("ld.decay.{tag}.rds", fixed("{tag}"), tag)
+      ))
+    })
+  print(ld.plots$TC.1kG)
+  print(ld.plots$TC.TCD)
+  print(ld.plots$TCD.1kG)
+  print(ld.plots$onlyADX)
+  }
 
-print(ld.plots$TC.1kG)
-print(ld.plots$TC.TCD)
-print(ld.plots$TCD.1kG)
-print(ld.plots$onlyADX)
+# save focused and all-source chromosome-1 bootstrap LD views
+bootstrap.focused.ld.all.lines <- make.bootstrap.ld.plot(
+  ld.summary, c("Simulation_2T12Consistent_simDown", "Empirical"),
+  "all.lines"
+  )
+bootstrap.focused.ld.role.interval <- make.bootstrap.ld.plot(
+  ld.summary, c("Simulation_2T12Consistent_simDown", "Empirical"),
+  "role.interval"
+  )
+bootstrap.focused.ld.datatype.interval <- make.bootstrap.ld.plot(
+  ld.summary, c("Simulation_2T12Consistent_simDown", "Empirical"),
+  "datatype.interval"
+  )
+bootstrap.all.ld.all.lines <- make.bootstrap.ld.plot(
+  ld.summary, SOURCE.LEVELS[1:4], "all.lines"
+  )
+bootstrap.all.ld.datatype.interval <- make.bootstrap.ld.plot(
+  ld.summary, SOURCE.LEVELS[1:4], "datatype.interval"
+  )
+dir.create(OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
+saveRDS(bootstrap.focused.ld.all.lines, file.path(
+  OUTPUT.DIR, "ld.bootstrap.focused.all.lines.rds"
+  ))
+saveRDS(bootstrap.focused.ld.role.interval, file.path(
+  OUTPUT.DIR, "ld.bootstrap.focused.role.interval.rds"
+  ))
+saveRDS(bootstrap.focused.ld.datatype.interval, file.path(
+  OUTPUT.DIR, "ld.bootstrap.focused.datatype.interval.rds"
+  ))
+saveRDS(bootstrap.all.ld.all.lines, file.path(
+  OUTPUT.DIR, "ld.bootstrap.all.all.lines.rds"
+  ))
+saveRDS(bootstrap.all.ld.datatype.interval, file.path(
+  OUTPUT.DIR, "ld.bootstrap.all.datatype.interval.rds"
+  ))
+
+print(bootstrap.focused.ld.all.lines)
+print(bootstrap.focused.ld.role.interval)
+print(bootstrap.focused.ld.datatype.interval)
+print(bootstrap.all.ld.all.lines)
+print(bootstrap.all.ld.datatype.interval)
