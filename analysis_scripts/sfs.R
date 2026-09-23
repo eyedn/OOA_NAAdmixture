@@ -657,7 +657,7 @@ make.sfs.plot <- function(
         ),
       fill = NULL
       ) +
-    guides(fill = guide_legend(order = 1, nrow = 2, byrow = TRUE)) +
+    guides(fill = guide_legend(order = 1, nrow = 1, byrow = TRUE)) +
     theme_bw(base_size = PLOT.BASE.SIZE) +
     theme(
       legend.position = "top", legend.direction = "horizontal", 

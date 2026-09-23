@@ -415,15 +415,9 @@ make.diversity.plot <- function(
       x = chrom, y = estimate, fill = fill.key,
       group = interaction(pop, data.type)
       )
-    ) +
-    ggfx::with_outer_glow(
-      geom_hline(
-        data = genome.lines,
-        aes(yintercept = estimate, color = pop),
-        linetype = "longdash", linewidth = CATEGORICAL.BAR.LINEWIDTH
-        ),
-      colour = "black", sigma = 0, expand = 3
-      ) +
+    )
+    
+  plot <- plot +
     geom_col(
       position = dodge, width = CATEGORICAL.BAR.WIDTH,
       color = "black", linewidth = CATEGORICAL.BAR.LINEWIDTH
@@ -436,7 +430,7 @@ make.diversity.plot <- function(
       na.rm = TRUE
       ) +
     facet_grid(
-      stat ~ mask, scales = "free_y",
+      stat ~ ., scales = "free_y",
       labeller = labeller(
         stat = c(pi = "π", theta = "θ[w]")
         )
@@ -448,10 +442,30 @@ make.diversity.plot <- function(
       labels = styles$fill.labels[fill.keys],
       limits = fill.keys,
       drop = TRUE
+      )
+  
+  if (value.view == "normalized") {
+    plot <- plot + 
+      ggfx::with_outer_glow(
+        geom_hline(
+          data = genome.lines,
+          aes(yintercept = estimate, color = pop),
+          linetype = "longdash",
+          linewidth = CATEGORICAL.BAR.LINEWIDTH
+        ),
+        colour = "black",
+        sigma = 0,
+        expand = 3
       ) +
-    scale_y_continuous(
-      labels = scales::label_number(accuracy = 0.00001)
-      ) +
+      scale_y_continuous(
+        labels = scales::label_number(accuracy = 0.00001)
+      )
+  } else {
+    plot <- plot +
+      scale_y_log10()
+  }
+  
+  plot <- plot +
     labs(
       x = "Chromosome", y = NULL,
       title = if (value.view == "normalized") {
@@ -463,7 +477,7 @@ make.diversity.plot <- function(
       ) +
     guides(
       color = "none",
-      fill = guide_legend(order = 1, nrow = 2, byrow = TRUE)
+      fill = guide_legend(order = 1, nrow = 1, byrow = TRUE)
       ) +
     theme_bw(base_size = PLOT.BASE.SIZE) +
     theme(
@@ -593,5 +607,5 @@ saveRDS(diversity.bootstrap.unscaled.plots$all.datatypes.adx.asw, file.path(
 
 print(diversity.bootstrap.plots$tcd.1kg)
 print(diversity.bootstrap.plots$all.datatypes.adx.asw)
-print(diversity.bootstrap.unscaled.plots$tcd.1kg)
-print(diversity.bootstrap.unscaled.plots$all.datatypes.adx.asw)
+# print(diversity.bootstrap.unscaled.plots$tcd.1kg)
+# print(diversity.bootstrap.unscaled.plots$all.datatypes.adx.asw)

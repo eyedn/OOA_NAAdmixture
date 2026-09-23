@@ -346,8 +346,9 @@ make.bootstrap.kinship.plot <- function(
       ) +
     labs(title = title, x = "Pairwise KING kinship", y = "Fraction of pairs",
       fill = NULL) +
+    guides(fill = guide_legend(order = 1, nrow = 1, byrow = TRUE)) +
     theme_bw(base_size = PLOT.BASE.SIZE) +
-    theme(legend.position = "top", panel.grid.minor = element_blank())
+    theme(legend.position = "top", panel.grid.minor = element_blank(),)
   return(plot)
   }
 
