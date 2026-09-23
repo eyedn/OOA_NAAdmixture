@@ -36,6 +36,7 @@ PLOT.CONFIGS <- list(
   TCD.1kG = SOURCE.LEVELS[c(2, 5)],
   onlyADX = SOURCE.LEVELS[1:4],
   tcd.1kg = SOURCE.LEVELS[c(2, 5)],
+  tc.tcd.1kg = SOURCE.LEVELS[c(1, 2, 5)],
   all.datatypes.adx.asw = SOURCE.LEVELS
   )
 LD.X.LOWER <- 0
