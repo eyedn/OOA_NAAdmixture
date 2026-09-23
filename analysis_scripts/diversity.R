@@ -8,6 +8,7 @@
 # diversity.R
 # ______________________________________________________________________________
 
+
 # set up ----
 library(tidyverse)
 library(nanoparquet)
@@ -608,10 +609,5 @@ saveRDS(diversity.bootstrap.unscaled.plots$all.datatypes.adx.asw, file.path(
 
 print(diversity.bootstrap.plots$tc.tcd.1kg)
 print(diversity.bootstrap.plots$all.datatypes.adx.asw)
-<<<<<<< HEAD
-# print(diversity.bootstrap.unscaled.plots$tcd.1kg)
-# print(diversity.bootstrap.unscaled.plots$all.datatypes.adx.asw)
-=======
 print(diversity.bootstrap.unscaled.plots$tc.tcd.1kg)
 print(diversity.bootstrap.unscaled.plots$all.datatypes.adx.asw)
->>>>>>> 76d5adf1cdeda9f1ef30d09263a0217227a48cae

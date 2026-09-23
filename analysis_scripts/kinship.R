@@ -8,8 +8,6 @@
 # kinship.R
 # ______________________________________________________________________________
 
-# pattern: Mixed (unavoidable)
-# Reason: This analysis script combines pure plot preparation with file I/O.
 
 # set up ----
 library(tidyverse)
