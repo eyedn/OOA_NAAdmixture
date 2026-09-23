@@ -35,6 +35,7 @@ PLOT.CONFIGS <- list(
   TCD.1kG = SOURCE.LEVELS[c(2, 5)],
   onlyADX = SOURCE.LEVELS[1:4],
   tcd.1kg = SOURCE.LEVELS[c(2, 5)],
+  tc.tcd.1kg = SOURCE.LEVELS[c(1, 2, 5)],
   all.datatypes.adx.asw = SOURCE.LEVELS
   )
 RANDOM.SEED <- 123L
@@ -554,7 +555,7 @@ diversity.plot.data <- build.diversity.plot.data(
   SELECTED.CHROMOSOMES
   )
 diversity.bootstrap.plots <- imap(list(
-  tcd.1kg = PLOT.CONFIGS$tcd.1kg,
+  tc.tcd.1kg = PLOT.CONFIGS$tc.tcd.1kg,
   all.datatypes.adx.asw = PLOT.CONFIGS$all.datatypes.adx.asw
   ), function(data.types, tag) {
   return(make.diversity.plot(
@@ -565,7 +566,7 @@ diversity.bootstrap.plots <- imap(list(
     ))
   })
 diversity.bootstrap.unscaled.plots <- imap(list(
-  tcd.1kg = PLOT.CONFIGS$tcd.1kg,
+  tc.tcd.1kg = PLOT.CONFIGS$tc.tcd.1kg,
   all.datatypes.adx.asw = PLOT.CONFIGS$all.datatypes.adx.asw
   ), function(data.types, tag) {
   return(make.diversity.plot(
@@ -578,20 +579,20 @@ diversity.bootstrap.unscaled.plots <- imap(list(
 
 # persist every plot before printing figures at the end of the script
 dir.create(OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
-saveRDS(diversity.bootstrap.plots$tcd.1kg, file.path(
-  OUTPUT.DIR, "diversity.bootstrap.tcd.1kg.rds"
+saveRDS(diversity.bootstrap.plots$tc.tcd.1kg, file.path(
+  OUTPUT.DIR, "diversity.bootstrap.tc.tcd.1kg.rds"
   ))
 saveRDS(diversity.bootstrap.plots$all.datatypes.adx.asw, file.path(
   OUTPUT.DIR, "diversity.bootstrap.all.datatypes.adx.asw.rds"
   ))
-saveRDS(diversity.bootstrap.unscaled.plots$tcd.1kg, file.path(
-  OUTPUT.DIR, "diversity.bootstrap.tcd.1kg.unscaled.rds"
+saveRDS(diversity.bootstrap.unscaled.plots$tc.tcd.1kg, file.path(
+  OUTPUT.DIR, "diversity.bootstrap.tc.tcd.1kg.unscaled.rds"
   ))
 saveRDS(diversity.bootstrap.unscaled.plots$all.datatypes.adx.asw, file.path(
   OUTPUT.DIR, "diversity.bootstrap.all.datatypes.adx.asw.unscaled.rds"
   ))
 
-print(diversity.bootstrap.plots$tcd.1kg)
+print(diversity.bootstrap.plots$tc.tcd.1kg)
 print(diversity.bootstrap.plots$all.datatypes.adx.asw)
-print(diversity.bootstrap.unscaled.plots$tcd.1kg)
+print(diversity.bootstrap.unscaled.plots$tc.tcd.1kg)
 print(diversity.bootstrap.unscaled.plots$all.datatypes.adx.asw)
