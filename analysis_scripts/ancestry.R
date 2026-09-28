@@ -872,9 +872,6 @@ prepare.ancestry.bootstrap.contrast.plot.data <- function(
 
 # construct a faceted bootstrap contrast plot from prepared comparison data.
 make.ancestry.bootstrap.contrast.plot <- function(data, title) {
-  hide.chromosome.axis <- all(
-    as.character(data$reference.scope) == "genome"
-    )
   plot <- ggplot(
     data,
     aes(plot.x, difference, color = contrast, group = contrast)
@@ -882,7 +879,7 @@ make.ancestry.bootstrap.contrast.plot <- function(data, title) {
     geom_hline(yintercept = 0, linetype = "dashed") +
     geom_errorbar(
       aes(ymin = ci.lower, ymax = ci.upper),
-      width = CATEGORICAL.BAR.WIDTH * 0.45,
+      width = CATEGORICAL.BAR.WIDTH * 0.2,
       linewidth = CATEGORICAL.BAR.LINEWIDTH
       ) +
     geom_point(size = 2.2) +
@@ -894,10 +891,8 @@ make.ancestry.bootstrap.contrast.plot <- function(data, title) {
       color = "red", inherit.aes = FALSE, size = 5
       ) +
     scale_x_continuous(
-      breaks = if (hide.chromosome.axis) NULL else {
-        seq_along(levels(data$chromosome))
-        },
-      labels = if (hide.chromosome.axis) NULL else levels(data$chromosome)
+      breaks = seq_along(levels(data$chromosome)),
+      labels = levels(data$chromosome)
       ) +
     scale_color_manual(
       values = PLOT.STYLES$contrast.colors,
@@ -905,7 +900,7 @@ make.ancestry.bootstrap.contrast.plot <- function(data, title) {
       ) +
     scale_y_continuous(expand = expansion(mult = c(0.05, 0.15))) +
     labs(
-      x = if (hide.chromosome.axis) NULL else "Chromosome",
+      x = "Chromosome",
       y = "Difference", color = "Contrast",
       title = title
       ) +
