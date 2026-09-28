@@ -795,13 +795,17 @@ write.ancestry.bootstrap.comparison.tables <- function(
 
 # prepare one contrast family for nominal or Bonferroni interval plotting.
 prepare.ancestry.bootstrap.contrast.plot.data <- function(
-    tables, contrast.family, interval.type = c("95", "bonferroni")
+    tables, contrast.family, interval.type = c("95", "bonferroni"),
+    reference.scope = c("chromosome", "genome")
   ) {
   interval.type <- match.arg(interval.type)
+  if (contrast.family == "empirical") {
+    reference.scope <- match.arg(reference.scope)
+    }
   contrast.config <- list(
     empirical = list(
       contrasts = c("TC-Emp", "TCD-Emp", "LG-Emp", "LGD-Emp"),
-      chromosome.levels = c(CHROMOSOMES, "all")
+      chromosome.levels = CHROMOSOMES
       ),
     simulation = list(
       contrasts = c("TC-TCD", "LG-LGD", "TC-LG"),
@@ -823,10 +827,11 @@ prepare.ancestry.bootstrap.contrast.plot.data <- function(
     "bonferroni.ci.upper"
     }
   data <- if (contrast.family == "empirical") {
-    bind_rows(
-      tables$chromosome.comparisons,
+    if (reference.scope == "chromosome") {
+      tables$chromosome.comparisons
+      } else {
       tables$chromosome.vs.genome.asw
-      )
+      }
     } else {
     tables$chromosome.comparisons
     }
@@ -842,26 +847,7 @@ prepare.ancestry.bootstrap.contrast.plot.data <- function(
       contrast.color = unname(PLOT.STYLES$contrast.colors[as.character(
         contrast
         )]),
-      facet.label = if (contrast.family == "empirical") {
-        factor(
-          paste(
-            if_else(statistic == "mean", "Mean", "SD"),
-            if_else(
-              reference.scope == "chromosome", "chromosome by chromosome",
-              "chromosome by whole genome"
-              ),
-            sep = ": "
-            ),
-          levels = c(
-            "Mean: chromosome by chromosome",
-            "Mean: chromosome by whole genome",
-            "SD: chromosome by chromosome",
-            "SD: chromosome by whole genome"
-            )
-          )
-        } else {
-        factor(NA_character_)
-        }
+      facet.label = factor(NA_character_)
       ) %>%
     group_by(chromosome) %>%
     mutate(
@@ -886,6 +872,9 @@ prepare.ancestry.bootstrap.contrast.plot.data <- function(
 
 # construct a faceted bootstrap contrast plot from prepared comparison data.
 make.ancestry.bootstrap.contrast.plot <- function(data, title) {
+  hide.chromosome.axis <- all(
+    as.character(data$reference.scope) == "genome"
+    )
   plot <- ggplot(
     data,
     aes(plot.x, difference, color = contrast, group = contrast)
@@ -905,8 +894,10 @@ make.ancestry.bootstrap.contrast.plot <- function(data, title) {
       color = "red", inherit.aes = FALSE, size = 5
       ) +
     scale_x_continuous(
-      breaks = seq_along(levels(data$chromosome)),
-      labels = levels(data$chromosome)
+      breaks = if (hide.chromosome.axis) NULL else {
+        seq_along(levels(data$chromosome))
+        },
+      labels = if (hide.chromosome.axis) NULL else levels(data$chromosome)
       ) +
     scale_color_manual(
       values = PLOT.STYLES$contrast.colors,
@@ -914,7 +905,8 @@ make.ancestry.bootstrap.contrast.plot <- function(data, title) {
       ) +
     scale_y_continuous(expand = expansion(mult = c(0.05, 0.15))) +
     labs(
-      x = "Chromosome", y = "Difference", color = "Contrast",
+      x = if (hide.chromosome.axis) NULL else "Chromosome",
+      y = "Difference", color = "Contrast",
       title = title
       ) +
     theme_bw(base_size = PLOT.BASE.SIZE) +
@@ -1031,19 +1023,35 @@ ancestry.bootstrap.all.datatypes.adx.asw.histogram <-
     bootstrap.ancestry.histograms, SOURCE.LEVELS,
     "Chromosome 1 simulations and genome-wide ASW: all ADX sources and ASW"
     )
-ancestry.bootstrap.empirical.95.comparisons <-
+ancestry.bootstrap.empirical.95.chromosome.comparisons <-
   make.ancestry.bootstrap.contrast.plot(
     prepare.ancestry.bootstrap.contrast.plot.data(
-      ancestry.bootstrap.comparison.tables, "empirical", "95"
+      ancestry.bootstrap.comparison.tables, "empirical", "95", "chromosome"
       ),
-    "Bootstrap ancestry differences: simulations versus ASW"
+    "Bootstrap ancestry differences: chromosome by chromosome"
     )
-ancestry.bootstrap.empirical.bonferroni.comparisons <-
+ancestry.bootstrap.empirical.95.genome.comparisons <-
   make.ancestry.bootstrap.contrast.plot(
     prepare.ancestry.bootstrap.contrast.plot.data(
-      ancestry.bootstrap.comparison.tables, "empirical", "bonferroni"
+      ancestry.bootstrap.comparison.tables, "empirical", "95", "genome"
       ),
-    "Bonferroni bootstrap ancestry differences: simulations versus ASW"
+    "Bootstrap ancestry differences: chromosome by whole-genome ASW"
+    )
+ancestry.bootstrap.empirical.bonferroni.chromosome.comparisons <-
+  make.ancestry.bootstrap.contrast.plot(
+    prepare.ancestry.bootstrap.contrast.plot.data(
+      ancestry.bootstrap.comparison.tables, "empirical", "bonferroni",
+      "chromosome"
+      ),
+    "Bonferroni bootstrap ancestry differences: chromosome by chromosome"
+    )
+ancestry.bootstrap.empirical.bonferroni.genome.comparisons <-
+  make.ancestry.bootstrap.contrast.plot(
+    prepare.ancestry.bootstrap.contrast.plot.data(
+      ancestry.bootstrap.comparison.tables, "empirical", "bonferroni",
+      "genome"
+      ),
+    "Bonferroni bootstrap ancestry differences: chromosome by whole-genome ASW"
     )
 ancestry.bootstrap.simulation.95.comparisons <-
   make.ancestry.bootstrap.contrast.plot(
@@ -1074,11 +1082,20 @@ saveRDS(ancestry.bootstrap.tcd.1kg.histogram, file.path(
 saveRDS(ancestry.bootstrap.all.datatypes.adx.asw.histogram, file.path(
   OUTPUT.DIR, "ancestry.bootstrap.all.datatypes.adx.asw.histogram.rds"
   ))
-saveRDS(ancestry.bootstrap.empirical.95.comparisons, file.path(
-  OUTPUT.DIR, "ancestry.bootstrap.empirical.95.comparisons.rds"
+saveRDS(ancestry.bootstrap.empirical.95.chromosome.comparisons, file.path(
+  OUTPUT.DIR, "ancestry.bootstrap.empirical.95.chromosome.comparisons.rds"
   ))
-saveRDS(ancestry.bootstrap.empirical.bonferroni.comparisons, file.path(
-  OUTPUT.DIR, "ancestry.bootstrap.empirical.bonferroni.comparisons.rds"
+saveRDS(ancestry.bootstrap.empirical.95.genome.comparisons, file.path(
+  OUTPUT.DIR, "ancestry.bootstrap.empirical.95.genome.comparisons.rds"
+  ))
+saveRDS(ancestry.bootstrap.empirical.bonferroni.chromosome.comparisons,
+  file.path(
+    OUTPUT.DIR,
+    "ancestry.bootstrap.empirical.bonferroni.chromosome.comparisons.rds"
+    )
+  )
+saveRDS(ancestry.bootstrap.empirical.bonferroni.genome.comparisons, file.path(
+  OUTPUT.DIR, "ancestry.bootstrap.empirical.bonferroni.genome.comparisons.rds"
   ))
 saveRDS(ancestry.bootstrap.simulation.95.comparisons, file.path(
   OUTPUT.DIR, "ancestry.bootstrap.simulation.95.comparisons.rds"
@@ -1090,7 +1107,9 @@ print(ancestry.bootstrap.tcd.1kg.bar)
 print(ancestry.bootstrap.all.datatypes.adx.asw.bar)
 print(ancestry.bootstrap.tcd.1kg.histogram)
 print(ancestry.bootstrap.all.datatypes.adx.asw.histogram)
-print(ancestry.bootstrap.empirical.95.comparisons)
-print(ancestry.bootstrap.empirical.bonferroni.comparisons)
+print(ancestry.bootstrap.empirical.95.chromosome.comparisons)
+print(ancestry.bootstrap.empirical.95.genome.comparisons)
+print(ancestry.bootstrap.empirical.bonferroni.chromosome.comparisons)
+print(ancestry.bootstrap.empirical.bonferroni.genome.comparisons)
 print(ancestry.bootstrap.simulation.95.comparisons)
 print(ancestry.bootstrap.simulation.bonferroni.comparisons)
