@@ -31,22 +31,14 @@ SOURCE.DISPLAY.LEVELS <- c("T.C.", "T.C.D.", "L.G.", "L.G.D.", "Emp.")
 SOURCE.LABELS <- setNames(SOURCE.DISPLAY.LEVELS, SOURCE.LEVELS)
 POPULATION.LEVELS <- c("AFR", "ADX", "EUR", "YRI", "ASW", "CEU")
 PLOT.CONFIGS <- list(
-  TC.1kG = SOURCE.LEVELS[c(1, 5)],
-  TC.TCD = SOURCE.LEVELS[c(1, 2)],
-  TCD.1kG = SOURCE.LEVELS[c(2, 5)],
-  onlyADX = SOURCE.LEVELS[1:4],
   tcd.1kg = SOURCE.LEVELS[c(2, 5)],
   tc.tcd.1kg = SOURCE.LEVELS[c(1, 2, 5)],
   all.datatypes.adx.asw = SOURCE.LEVELS
   )
-RANDOM.SEED <- 123L
-BOOTSTRAP.REPLICATES <- 1000L
 PLOT.BASE.SIZE <- 24
 CATEGORICAL.BAR.DODGE <- 0.9
 CATEGORICAL.BAR.WIDTH <- 0.8
 CATEGORICAL.BAR.LINEWIDTH <- 1
-DENSE.BAR.WIDTH.MULTIPLIER <- 0.8
-DENSE.BAR.LINEWIDTH <- 0.75
 PLOT.STYLES <- list(
   population.colors = c(
     AFR = "#56B4E9", ADX = "#4B1FA8", EUR = "#fb8072",
@@ -361,7 +353,6 @@ filter.diversity.plot.view <- function(
     }
   view.points <- points %>%
     filter(as.character(data.type) %in% data.types) %>%
-    filter(tag != "onlyADX" | pop == "ADX") %>%
     filter(
       tag != "all.datatypes.adx.asw" |
         (data.type != "Empirical" & pop == "ADX") |

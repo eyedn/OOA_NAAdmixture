@@ -32,26 +32,12 @@ SOURCE.DISPLAY.LEVELS <- c("T.C.", "T.C.D.", "L.G.", "L.G.D.", "Emp.")
 SOURCE.LABELS <- setNames(SOURCE.DISPLAY.LEVELS, SOURCE.LEVELS)
 POPULATION.LEVELS <- c("AFR", "ADX", "EUR", "YRI", "ASW", "CEU")
 PLOT.CONFIGS <- list(
-  TC.1kG = SOURCE.LEVELS[c(1, 5)],
-  TC.TCD = SOURCE.LEVELS[c(1, 2)],
-  TCD.1kG = SOURCE.LEVELS[c(2, 5)],
-  onlyADX = SOURCE.LEVELS[1:4],
   tcd.1kg = SOURCE.LEVELS[c(2, 5)],
   tc.tcd.1kg = SOURCE.LEVELS[c(1, 2, 5)],
   all.datatypes.adx.asw = SOURCE.LEVELS
   )
-LD.X.LOWER <- 0
-LD.X.UPPER <- 250000
-LD.X.BREAKS <- seq(LD.X.LOWER, LD.X.UPPER, by = 50000)
 BOOTSTRAP.LEGEND.VIEWS <- c("all.lines", "role.interval")
-RANDOM.SEED <- 123L
-BOOTSTRAP.REPLICATES <- 1000L
 PLOT.BASE.SIZE <- 24
-CATEGORICAL.BAR.DODGE <- 0.9
-CATEGORICAL.BAR.WIDTH <- 0.8
-CATEGORICAL.BAR.LINEWIDTH <- 1
-DENSE.BAR.WIDTH.MULTIPLIER <- 0.8
-DENSE.BAR.LINEWIDTH <- 0.75
 PLOT.STYLES <- list(
   population.colors = c(
     AFR = "#56B4E9", ADX = "#4B1FA8", EUR = "#fb8072",
@@ -281,167 +267,6 @@ summarize.ld.curves <- function(data, chromosomes) {
   }
 
 
-# add shared scales, labels, guides, and theme to one LD plot
-style.ld.plot <- function(plot, title, subtitle, styles, tag, active.keys) {
-  source.view <- tag == "onlyADX"
-  plot <- plot +
-    scale_color_manual(
-      values = if (source.view) {
-        styles$source.colors
-        } else {
-        styles$population.colors
-        },
-      breaks = active.keys,
-      labels = if (source.view) {
-        styles$series.labels[active.keys]
-        } else {
-        waiver()
-        }
-      ) +
-    scale_fill_manual(values = if (source.view) {
-      styles$source.colors
-      } else {
-      styles$population.colors
-      }) +
-    scale_x_continuous(
-      limits = c(LD.X.LOWER, LD.X.UPPER), breaks = LD.X.BREAKS
-      ) +
-    labs(
-      x = "Distance Between SNPs (bp)",
-      y = expression("Mean " * r^2),
-      title = title, subtitle = subtitle,
-      color = NULL, fill = NULL
-      ) +
-    guides(
-      color = guide_legend(order = 1, nrow = 1, byrow = TRUE),
-      fill = "none"
-      ) +
-    theme_bw(base_size = PLOT.BASE.SIZE) +
-    theme(
-      legend.position = "top",
-      legend.direction = "horizontal",
-      legend.box = "horizontal",
-      legend.title = element_blank(),
-      legend.key.width = unit(42, "pt"),
-      panel.grid.minor = element_blank(),
-      strip.background = element_blank(),
-      strip.text = element_text(face = "bold")
-      )
-
-  return(plot)
-  }
-
-
-# add simulation uncertainty ribbons and all source lines
-add.ld.geometries <- function(plot, data) {
-  simulation <- data %>% filter(data.type != "Empirical")
-  plot <- plot +
-    geom_ribbon(
-      data = simulation,
-      aes(
-        ymin = lower,
-        ymax = upper,
-        group = interaction(data.type, pop)
-        ),
-      alpha = 0.2, color = NA
-      ) +
-    geom_line(
-      data = data,
-      aes(
-        group = interaction(data.type, pop)
-        ),
-      linewidth = 1.25
-      )
-
-  return(plot)
-  }
-
-
-# retain one configured source view
-filter.plot.view <- function(data, data.types, tag) {
-  if (!tag %in% names(PLOT.CONFIGS)) {
-    stop("Unsupported LD plot tag: ", tag)
-    }
-  if (!identical(data.types, PLOT.CONFIGS[[tag]])) {
-    stop("LD data types do not match the configured tag")
-    }
-  filtered <- data %>%
-    filter(as.character(data.type) %in% data.types) %>%
-    filter(tag != "onlyADX" | pop == "ADX")
-  active.sources <- order.active.levels(filtered$data.type, SOURCE.LEVELS)
-  active.populations <- order.active.levels(
-    filtered$pop, POPULATION.LEVELS
-    )
-  filtered <- filtered %>%
-    mutate(
-      data.type = factor(as.character(data.type), levels = active.sources),
-      pop = factor(as.character(pop), levels = active.populations)
-      ) %>%
-    arrange(data.type) %>%
-    droplevels()
-  return(filtered)
-  }
-
-
-# construct one scoped LD view for selected chromosomes
-make.ld.plot <- function(
-    data, chromosomes, styles, data.types, tag, show.all = FALSE
-  ) {
-  chromosomes <- as.character(chromosomes)
-  if (!length(chromosomes) || any(!chromosomes %in% CHROMOSOMES)) {
-    stop("LD plotting requires autosomal chromosomes")
-    }
-  source.view <- tag == "onlyADX"
-  plot.data <- filter.plot.view(data, data.types, tag) %>%
-    filter(
-      as.character(chrom) %in% chromosomes |
-        (show.all & data.type == "Empirical" & chrom == "all")
-      ) %>%
-    mutate(
-      chrom = factor(
-        as.character(chrom),
-        levels = c(chromosomes, if (show.all) "all")
-        ),
-      plot.key = if (source.view) {
-        factor(
-          as.character(data.type),
-          levels = order.active.levels(data.type, SOURCE.LEVELS)
-          )
-        } else {
-        factor(
-          as.character(pop),
-          levels = order.active.levels(pop, POPULATION.LEVELS)
-          )
-        }
-      )
-  if (!nrow(plot.data)) {
-    stop("LD data do not contain any selected chromosomes")
-    }
-  plot <- ggplot(
-    plot.data,
-    aes(
-      x = distance_bin_bp, y = mean,
-      color = plot.key, fill = plot.key
-      )
-    )
-  plot <- add.ld.geometries(plot, plot.data) +
-    facet_grid(
-      chrom ~ data.type, drop = TRUE,
-      scales = "free_y",
-      labeller = labeller(data.type = styles$series.labels)
-      )
-  plot <- style.ld.plot(
-    plot, paste("LD Decay:", tag),
-    paste0(
-      "Rogers–Huff r²; chrom.", paste(chromosomes, collapse = ", ")
-      ),
-    styles, tag, levels(plot.data$plot.key)
-    )
-
-  return(plot)
-  }
-
-
 # build one chromosome-1 bootstrap LD view over the requested distance range
 make.bootstrap.ld.plot <- function(data, data.types, view, title = view) {
   source.view <- grepl("all.datatypes.adx.asw", view)
@@ -581,34 +406,11 @@ empirical.ld.selected <- read.ld.chromosomes(
 empirical.ld.genome <- read.empirical.ld.genome(EMPIRICAL.DATA.DIR) %>%
   pool.ld.curves(include.chromosome = TRUE)
 
-# summarize curves and construct all configured source views
+# summarize curves for the active bootstrap views
 ld.summary <- bind_rows(
   simulation.ld.selected, empirical.ld.selected, empirical.ld.genome
   ) %>%
   summarize.ld.curves(SELECTED.CHROMOSOMES)
-ld.plots <- imap(PLOT.CONFIGS, function(data.types, tag) {
-  return(make.ld.plot(
-    ld.summary, SELECTED.CHROMOSOMES, PLOT.STYLES, data.types, tag,
-    show.all = FALSE
-    ))
-  })
-
-# persist every plot before printing figures at the end of the script
-# Legacy plot writes are retained as inactive reference code.
-if (FALSE) {
-  dir.create(OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
-  iwalk(ld.plots, function(plot, tag) {
-    saveRDS(plot, file.path(
-      OUTPUT.DIR,
-      str_replace("ld.decay.{tag}.rds", fixed("{tag}"), tag)
-      ))
-    })
-  print(ld.plots$TC.1kG)
-  print(ld.plots$TC.TCD)
-  print(ld.plots$TCD.1kG)
-  print(ld.plots$onlyADX)
-  }
-
 # save TCD/1kG and all-datatype ADX/ASW chromosome-1 bootstrap LD views
 bootstrap.tcd.1kg.ld.all.lines <- make.bootstrap.ld.plot(
   ld.summary, c("Simulation_2T12Consistent_simDown", "Empirical"),

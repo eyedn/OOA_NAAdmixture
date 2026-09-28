@@ -31,10 +31,6 @@ SOURCE.DISPLAY.LEVELS <- c("T.C.", "T.C.D.", "L.G.", "L.G.D.", "Emp.")
 SOURCE.LABELS <- setNames(SOURCE.DISPLAY.LEVELS, SOURCE.LEVELS)
 POPULATION.LEVELS <- c("AFR", "ADX", "EUR", "YRI", "ASW", "CEU")
 PLOT.CONFIGS <- list(
-  TC.1kG = SOURCE.LEVELS[c(1, 5)],
-  TC.TCD = SOURCE.LEVELS[c(1, 2)],
-  TCD.1kG = SOURCE.LEVELS[c(2, 5)],
-  onlyADX = SOURCE.LEVELS[1:4],
   tcd.1kg = SOURCE.LEVELS[c(2, 5)],
   tc.tcd.1kg = SOURCE.LEVELS[c(1, 2, 5)],
   all.datatypes.adx.asw = SOURCE.LEVELS
@@ -44,25 +40,8 @@ KINSHIP.DOWNSAMPLE.SIZES <- c(AFR = 118L, ADX = 50L, EUR = 119L)
 BOOTSTRAP.REPLICATES <- 1000L
 RANDOM.SEED <- 123L
 PLOT.BASE.SIZE <- 24
-CATEGORICAL.BAR.DODGE <- 0.9
-CATEGORICAL.BAR.WIDTH <- 0.8
-CATEGORICAL.BAR.LINEWIDTH <- 1
 DENSE.BAR.WIDTH.MULTIPLIER <- 0.8
 DENSE.BAR.LINEWIDTH <- 0.75
-PLOT.STYLES <- list(
-  population.colors = c(
-    AFR = "#56B4E9", ADX = "#4B1FA8", EUR = "#fb8072",
-    YRI = "#eec4dc", ASW = "#e44b8d", CEU = "#bb437e"
-    ),
-  source.colors = c(
-    Simulation_2T12Consistent = "#9A83CE",
-    Simulation_2T12Consistent_simDown = "#6F55B5",
-    Simulation_largeGrowth = "#32146F",
-    Simulation_largeGrowth_simDown = "#4B1FA8",
-    Empirical = "#B83264"
-    ),
-  series.labels = SOURCE.LABELS
-  )
 BOOTSTRAP.PLOT.STYLES <- list(
   tcd.1kg = list(
     fill.colors = c(
@@ -448,43 +427,6 @@ read.kinship.chromosomes <- function(
   }
 
 
-# select a reproducible fixed number of simulation identifiers per group
-select.kinship.ids <- function(data, downsample.size, seed) {
-  candidates <- data %>%
-    filter(data.type != "Empirical") %>%
-    select(data.type, rep, role, chrom, endpoint.1, endpoint.2) %>%
-    pivot_longer(
-      c(endpoint.1, endpoint.2), values_to = "sample.id"
-      ) %>%
-    distinct(data.type, rep, role, chrom, sample.id)
-  expected.groups <- data %>%
-    filter(data.type != "Empirical") %>%
-    distinct(data.type, rep, chrom) %>%
-    crossing(role = c("AFR", "ADX", "EUR"))
-  sizes <- candidates %>%
-    count(data.type, rep, role, chrom, name = "available")
-  sizes <- expected.groups %>%
-    left_join(
-      sizes, by = c("data.type", "rep", "role", "chrom")
-      ) %>%
-    mutate(available = replace_na(available, 0L))
-  if (any(sizes$available < downsample.size)) {
-    stop(glue(
-      "A simulation kinship group contains fewer than ",
-      "{downsample.size} unique IDs"
-      ))
-    }
-  set.seed(seed)
-  selected <- candidates %>%
-    group_by(data.type, rep, role, chrom) %>%
-    slice_sample(n = downsample.size, replace = FALSE) %>%
-    ungroup() %>%
-    arrange(data.type, rep, role, chrom, sample.id)
-
-  return(selected)
-  }
-
-
 # retain pairs only when both endpoints are in the selected identifier set
 apply.kinship.selection <- function(data, selected.ids) {
   keys <- c("data.type", "rep", "role", "chrom")
@@ -569,160 +511,6 @@ build.kinship.histograms <- function(data, breaks) {
     ungroup()
 
   return(histograms)
-  }
-
-
-# summarize simulation replicate histograms and retain empirical estimates
-summarize.kinship.histograms <- function(data) {
-  simulation <- data %>%
-    filter(data.type != "Empirical") %>%
-    group_by(
-      data.type, pop, role, chrom, xmin, xmax, xmid
-      ) %>%
-    summarise(
-      mean.fraction = mean(fraction),
-      sd.fraction = sd(fraction),
-      replicate.count = n_distinct(rep),
-      sample.size.min = min(sample.size),
-      sample.size.max = max(sample.size),
-      .groups = "drop"
-      )
-  empirical <- data %>%
-    filter(data.type == "Empirical") %>%
-    transmute(
-      data.type, pop, role, chrom, xmin, xmax, xmid,
-      mean.fraction = fraction,
-      sample.size.min = sample.size,
-      sample.size.max = sample.size
-      ) %>%
-    distinct() %>%
-    mutate(sd.fraction = NA_real_, replicate.count = 1L)
-  summary <- bind_rows(simulation, empirical) %>%
-    mutate(
-      pop = factor(pop, levels = POPULATION.LEVELS),
-      chrom = factor(
-        chrom, levels = c(SELECTED.CHROMOSOMES, "all")
-        ),
-      data.type = factor(
-        data.type,
-        levels = SOURCE.LEVELS
-        )
-      )
-
-  return(summary)
-  }
-
-
-# retain one configured pairwise kinship view
-filter.plot.view <- function(data, data.types, tag) {
-  if (!tag %in% names(PLOT.CONFIGS)) {
-    stop("Unsupported kinship plot tag: ", tag)
-    }
-  if (!identical(data.types, PLOT.CONFIGS[[tag]])) {
-    stop("Kinship data types do not match the configured tag")
-    }
-  filtered <- data %>%
-    filter(as.character(data.type) %in% data.types) %>%
-    filter(tag != "onlyADX" | pop == "ADX")
-  active.sources <- order.active.levels(filtered$data.type, SOURCE.LEVELS)
-  active.populations <- order.active.levels(
-    filtered$pop, POPULATION.LEVELS
-    )
-  filtered <- filtered %>%
-    mutate(
-      data.type = factor(as.character(data.type), levels = active.sources),
-      pop = factor(as.character(pop), levels = active.populations)
-      ) %>%
-    arrange(data.type) %>%
-    droplevels()
-  return(filtered)
-  }
-
-
-# construct one scoped pairwise kinship distribution plot
-make.kinship.plot <- function(
-    data, breaks, styles, data.types, tag, show.all = TRUE
-  ) {
-  source.view <- tag == "onlyADX"
-  plot.data <- filter.plot.view(data, data.types, tag) %>%
-    filter(
-      as.character(chrom) %in% SELECTED.CHROMOSOMES |
-        (show.all & data.type == "Empirical" & chrom == "all")
-      ) %>%
-    mutate(chrom = factor(
-      as.character(chrom),
-      levels = c(SELECTED.CHROMOSOMES, if (show.all) "all")
-      )) %>%
-    mutate(
-      plot.key = if (source.view) {
-        factor(
-          as.character(data.type),
-          levels = order.active.levels(data.type, SOURCE.LEVELS)
-          )
-        } else {
-        factor(
-          as.character(pop),
-          levels = order.active.levels(pop, POPULATION.LEVELS)
-          )
-        }
-      )
-  dodge <- position_dodge(width = diff(breaks)[1] * 0.9)
-  plot <- ggplot(
-    plot.data,
-    aes(
-      x = xmid, y = mean.fraction, fill = plot.key,
-      group = plot.key
-      )
-    ) +
-    geom_col(
-      position = dodge, width = diff(breaks)[1] * 0.85,
-      color = "black", linewidth = 0.1
-      ) +
-    geom_errorbar(
-      data = plot.data,
-      aes(
-        ymin = pmax(0, mean.fraction - 2 * sd.fraction),
-        ymax = mean.fraction + 2 * sd.fraction
-        ),
-      position = dodge, width = 0, linewidth = 0.45,
-      color = "black", na.rm = TRUE
-      ) +
-    facet_grid(
-      chrom ~ data.type, drop = TRUE, scales = "free_y",
-      labeller = labeller(
-        data.type = as_labeller(styles$series.labels)
-        )
-      ) +
-    scale_fill_manual(
-      values = if (source.view) styles$source.colors else {
-        styles$population.colors
-        },
-      breaks = levels(plot.data$plot.key),
-      labels = if (source.view) {
-        styles$series.labels[levels(plot.data$plot.key)]
-        } else {
-        waiver()
-        }
-      ) +
-    labs(
-      x = "Pairwise KING Kinship", y = "Fraction of pairs",
-      title = paste("Pairwise KING Kinship Distributions:", tag),
-      fill = NULL
-      ) +
-    xlim(-0.2, 0.0442) +
-    guides(fill = guide_legend(order = 1, nrow = 1, byrow = TRUE)) +
-    theme_bw(base_size = PLOT.BASE.SIZE) +
-    theme(
-      legend.position = "top",
-      legend.direction = "horizontal",
-      legend.box = "horizontal",
-      legend.title = element_blank(),
-      panel.grid.minor = element_blank(),
-      strip.background = element_blank(),
-      strip.text = element_text(face = "bold")
-      )
-
-  return(plot)
   }
 
 
