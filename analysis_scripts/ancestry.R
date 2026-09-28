@@ -47,6 +47,8 @@ PLOT.CONFIGS <- list(
   all.datatypes.adx.asw = SOURCE.LEVELS
   )
 BOOTSTRAP.REPLICATES <- 1000L
+ANCESTRY.BOOTSTRAP.CHROMOSOME.FAMILY.SIZE <- 308L
+ANCESTRY.BOOTSTRAP.GENOME.ASW.FAMILY.SIZE <- 176L
 HISTOGRAM.BREAKS <- seq(0, 1, by = 0.05)
 ADMIXED.ROLES <- c("ADX", "ASW")
 PLOT.EMPIRICAL.METHOD <- "ADMIXTURE"
@@ -77,6 +79,16 @@ PLOT.STYLES <- list(
     fastStructure = "fastStructure"
     ),
   empirical.colors = c(ADMIXTURE = "#B83264", fastStructure = "#B9584A")
+  )
+ANCESTRY.BOOTSTRAP.CONTRASTS <- tribble(
+  ~contrast, ~left.source, ~right.source, ~paired,
+  "TC-TCD", "TC", "TCD", TRUE,
+  "LG-LGD", "LG", "LGD", TRUE,
+  "TC-LG", "TC", "LG", FALSE,
+  "TC-Emp", "TC", "Emp", FALSE,
+  "LG-Emp", "LG", "Emp", FALSE,
+  "TCD-Emp", "TCD", "Emp", FALSE,
+  "LGD-Emp", "LGD", "Emp", FALSE
   )
 
 
@@ -1970,6 +1982,310 @@ fit.ancestry.chromosome.length.models <- function(
   }
 
 
+# validate summary and ASW values used by bootstrap difference tables
+prepare.ancestry.bootstrap.comparison.data <- function(
+    summary.data, individual.data, empirical.method, sample.set.input,
+    chromosomes
+  ) {
+  chromosomes <- as.character(chromosomes)
+  if (!setequal(chromosomes, as.character(1:22)) ||
+      length(unique(chromosomes)) != 22L) {
+    stop("Bootstrap ancestry comparisons require chromosomes 1-22")
+    }
+  required.summary <- c(
+    "data.type", "method", "sample.set", "chrom", "rep", "mean", "sd"
+    )
+  missing.summary <- setdiff(required.summary, names(summary.data))
+  if (length(missing.summary)) {
+    stop(
+      "Bootstrap ancestry summaries are missing columns: ",
+      paste(missing.summary, collapse = ", ")
+      )
+    }
+  source.config <- tribble(
+    ~source, ~data.type, ~method,
+    "TC", "Simulation_2T12Consistent", "tspop",
+    "TCD", "Simulation_2T12Consistent_simDown", empirical.method,
+    "LG", "Simulation_largeGrowth", "tspop",
+    "LGD", "Simulation_largeGrowth_simDown", empirical.method
+    )
+  simulation <- summary.data %>%
+    mutate(chrom = as.character(chrom)) %>%
+    inner_join(source.config, by = c("data.type", "method")) %>%
+    filter(sample.set == sample.set.input, chrom %in% chromosomes) %>%
+    select(source, chrom, rep, mean, sd)
+  if (any(!is.finite(unlist(simulation[c("mean", "sd")]))) ||
+      any(!is.finite(simulation$rep))) {
+    stop("Bootstrap ancestry comparison summaries must be finite")
+    }
+  duplicates <- simulation %>%
+    count(source, chrom, rep, name = "rows") %>%
+    filter(rows != 1L)
+  if (nrow(duplicates)) {
+    first.duplicate <- duplicates[1, ]
+    stop(
+      "Bootstrap ancestry comparison summaries contain duplicated replicate ",
+      "IDs for ", first.duplicate$source, " chromosome ",
+      first.duplicate$chrom
+      )
+    }
+  counts <- simulation %>%
+    count(source, chrom, name = "replicate.count") %>%
+    complete(
+      source = source.config$source, chrom = chromosomes,
+      fill = list(replicate.count = 0L)
+      ) %>%
+    filter(replicate.count != 50L)
+  if (nrow(counts)) {
+    first.count <- counts[1, ]
+    stop(
+      "Each bootstrap ancestry comparison source and chromosome must contain ",
+      "exactly 50 replicate IDs; found ", first.count$replicate.count,
+      " for ", first.count$source, " chromosome ", first.count$chrom
+      )
+    }
+  paired.contrasts <- ANCESTRY.BOOTSTRAP.CONTRASTS %>%
+    filter(paired)
+  pwalk(
+    paired.contrasts,
+    function(contrast, left.source, right.source, paired) {
+      for (chromosome in chromosomes) {
+        left.ids <- simulation %>%
+          filter(source == left.source, chrom == chromosome) %>%
+          pull(rep)
+        right.ids <- simulation %>%
+          filter(source == right.source, chrom == chromosome) %>%
+          pull(rep)
+        if (!setequal(left.ids, right.ids)) {
+          stop(
+            contrast, " chromosome ", chromosome,
+            " requires matching replicate IDs",
+            call. = FALSE
+            )
+          }
+        }
+      }
+    )
+  required.individual <- c("data.type", "role", "method", "chrom", "afr.q")
+  missing.individual <- setdiff(required.individual, names(individual.data))
+  if (length(missing.individual)) {
+    stop(
+      "Bootstrap empirical ancestry data are missing columns: ",
+      paste(missing.individual, collapse = ", ")
+      )
+    }
+  empirical <- individual.data %>%
+    mutate(chrom = as.character(chrom)) %>%
+    filter(
+      data.type == "Empirical", role == "ASW", method == empirical.method,
+      chrom %in% c(chromosomes, "all")
+      )
+  if ("sample.set" %in% names(empirical)) {
+    empirical <- filter(empirical, sample.set == "full")
+    }
+  if (any(!is.finite(empirical$afr.q))) {
+    stop("Bootstrap empirical ASW ancestry values must be finite")
+    }
+  empirical.counts <- empirical %>%
+    count(chrom, name = "individual.count") %>%
+    complete(
+      chrom = c(chromosomes, "all"), fill = list(individual.count = 0L)
+      ) %>%
+    filter(individual.count < 2L)
+  if (nrow(empirical.counts)) {
+    first.count <- empirical.counts[1, ]
+    stop(
+      "Bootstrap empirical ASW ancestry requires at least two individuals ",
+      "for chromosome ", first.count$chrom
+      )
+    }
+  if ("sample_id" %in% names(empirical)) {
+    duplicates <- empirical %>%
+      count(chrom, sample_id, name = "rows") %>%
+      filter(rows != 1L)
+    if (nrow(duplicates)) {
+      stop("Bootstrap empirical ASW sample IDs must be unique")
+      }
+    }
+
+  return(list(simulation = simulation, empirical = empirical))
+  }
+
+
+# summarize one observed difference and its nominal and corrected intervals
+summarize.ancestry.bootstrap.difference <- function(
+    draws, difference, family.size
+  ) {
+  if (any(!is.finite(draws)) || !is.finite(difference)) {
+    stop("Bootstrap ancestry comparison differences must be finite")
+    }
+  nominal <- quantile(draws, c(0.025, 0.975), names = FALSE)
+  corrected.probabilities <- c(
+    0.05 / (2 * family.size), 1 - 0.05 / (2 * family.size)
+    )
+  corrected <- quantile(draws, corrected.probabilities, names = FALSE)
+
+  return(tibble(
+    difference = difference,
+    ci.95.lower = nominal[[1]],
+    ci.95.upper = nominal[[2]],
+    bonferroni.ci.lower = corrected[[1]],
+    bonferroni.ci.upper = corrected[[2]]
+    ))
+  }
+
+
+# resample replicate-level simulation differences for one contrast
+bootstrap.ancestry.simulation.difference <- function(
+    left.values, right.values, paired, bootstrap.replicates
+  ) {
+  if (paired) {
+    draws <- replicate(bootstrap.replicates, {
+      indices <- sample(seq_along(left.values), length(left.values),
+        replace = TRUE)
+      mean(left.values[indices] - right.values[indices])
+      })
+    } else {
+    draws <- replicate(bootstrap.replicates, {
+      mean(sample(left.values, length(left.values), replace = TRUE)) -
+        mean(sample(right.values, length(right.values), replace = TRUE))
+      })
+    }
+  difference <- mean(left.values) - mean(right.values)
+
+  return(list(draws = draws, difference = difference))
+  }
+
+
+# resample simulation replicates and ASW individuals for one contrast
+bootstrap.ancestry.empirical.difference <- function(
+    simulation.values, empirical.values, statistic, bootstrap.replicates
+  ) {
+  statistic.function <- match.fun(statistic)
+  draws <- replicate(bootstrap.replicates, {
+    mean(sample(simulation.values, length(simulation.values), replace = TRUE)) -
+      statistic.function(sample(
+        empirical.values, length(empirical.values), replace = TRUE
+        ))
+    })
+  difference <- mean(simulation.values) - statistic.function(empirical.values)
+
+  return(list(draws = draws, difference = difference))
+  }
+
+
+# build one bootstrap comparison table against a chromosome or genome ASW scope
+make.ancestry.bootstrap.comparison.table <- function(
+    simulation, empirical, contrasts, chromosomes, statistic, reference.chrom,
+    reference.scope, family.size, bootstrap.replicates
+  ) {
+  table <- map_dfr(chromosomes, function(chromosome) {
+    map_dfr(seq_len(nrow(contrasts)), function(index) {
+      contrast <- contrasts[index, ]
+      left.values <- simulation %>%
+        filter(source == contrast$left.source, chrom == chromosome) %>%
+        arrange(rep) %>%
+        pull(all_of(statistic))
+      if (contrast$right.source == "Emp") {
+        empirical.values <- empirical %>%
+          filter(chrom == reference.chrom(chromosome)) %>%
+          pull(afr.q)
+        bootstrap <- bootstrap.ancestry.empirical.difference(
+          left.values, empirical.values, statistic, bootstrap.replicates
+          )
+        } else {
+        right.values <- simulation %>%
+          filter(source == contrast$right.source, chrom == chromosome) %>%
+          arrange(rep) %>%
+          pull(all_of(statistic))
+        bootstrap <- bootstrap.ancestry.simulation.difference(
+          left.values, right.values, contrast$paired, bootstrap.replicates
+          )
+        }
+      return(bind_cols(
+        tibble(
+          statistic = statistic,
+          contrast = contrast$contrast,
+          chromosome = chromosome,
+          reference.scope = reference.scope
+          ),
+        summarize.ancestry.bootstrap.difference(
+          bootstrap$draws, bootstrap$difference, family.size
+          )
+        ))
+      })
+    })
+  return(table)
+  }
+
+
+# make both deterministic African-ancestry bootstrap comparison tables
+make.ancestry.bootstrap.comparison.tables <- function(
+    summary.data, individual.data, empirical.method = PLOT.EMPIRICAL.METHOD,
+    sample.set.input = PLOT.SAMPLE.SET, chromosomes = CHROMOSOMES,
+    bootstrap.replicates = BOOTSTRAP.REPLICATES, seed = RANDOM.SEED
+  ) {
+  if (!is.numeric(bootstrap.replicates) || length(bootstrap.replicates) != 1L ||
+      !is.finite(bootstrap.replicates) || bootstrap.replicates < 1L ||
+      bootstrap.replicates %% 1L != 0) {
+    stop("Bootstrap comparison replicate count must be a positive integer")
+    }
+  data <- prepare.ancestry.bootstrap.comparison.data(
+    summary.data, individual.data, empirical.method, sample.set.input,
+    chromosomes
+    )
+  chromosomes <- as.character(chromosomes)
+  chromosome.contrasts <- ANCESTRY.BOOTSTRAP.CONTRASTS
+  genome.contrasts <- filter(chromosome.contrasts, right.source == "Emp")
+  set.seed(seed)
+  chromosome.tables <- map_dfr(c("mean", "sd"), function(statistic) {
+    make.ancestry.bootstrap.comparison.table(
+      data$simulation, data$empirical, chromosome.contrasts, chromosomes,
+      statistic, identity, "chromosome",
+      ANCESTRY.BOOTSTRAP.CHROMOSOME.FAMILY.SIZE, bootstrap.replicates
+      )
+    })
+  genome.tables <- map_dfr(c("mean", "sd"), function(statistic) {
+    make.ancestry.bootstrap.comparison.table(
+      data$simulation, data$empirical, genome.contrasts, chromosomes,
+      statistic, function(chromosome) "all", "genome",
+      ANCESTRY.BOOTSTRAP.GENOME.ASW.FAMILY.SIZE, bootstrap.replicates
+      )
+    })
+  if (nrow(chromosome.tables) != ANCESTRY.BOOTSTRAP.CHROMOSOME.FAMILY.SIZE ||
+      nrow(genome.tables) != ANCESTRY.BOOTSTRAP.GENOME.ASW.FAMILY.SIZE) {
+    stop("Bootstrap ancestry comparison family size does not match its table")
+    }
+
+  return(list(
+    chromosome.comparisons = chromosome.tables,
+    chromosome.vs.genome.asw = genome.tables
+    ))
+  }
+
+
+# persist the two deterministic bootstrap comparison tables
+write.ancestry.bootstrap.comparison.tables <- function(
+    tables, output.directory
+  ) {
+  dir.create(output.directory, recursive = TRUE, showWarnings = FALSE)
+  readr::write_csv(
+    tables$chromosome.comparisons,
+    file.path(
+      output.directory,
+      "ancestry.statistics.bootstrap.chromosome.comparisons.csv"
+      )
+    )
+  readr::write_csv(
+    tables$chromosome.vs.genome.asw,
+    file.path(
+      output.directory,
+      "ancestry.statistics.bootstrap.chromosome_vs_genome_asw.csv"
+      )
+    )
+  }
+
+
 # analysis data prep ----
 
 
@@ -2068,6 +2384,19 @@ ancestry.summary.data <- summarize.ancestry(
     ),
   BOOTSTRAP.REPLICATES, RANDOM.SEED, ADMIXED.ROLES
   )
+
+# calculate and write deterministic bootstrap ancestry comparison tables
+ancestry.bootstrap.comparison.tables <-
+  make.ancestry.bootstrap.comparison.tables(
+    ancestry.summary.data, ancestry.individual.data,
+    empirical.method = PLOT.EMPIRICAL.METHOD,
+    sample.set.input = PLOT.SAMPLE.SET, chromosomes = CHROMOSOMES,
+    bootstrap.replicates = BOOTSTRAP.REPLICATES, seed = RANDOM.SEED
+    )
+write.ancestry.bootstrap.comparison.tables(
+  ancestry.bootstrap.comparison.tables, OUTPUT.DIR
+  )
+
 ancestry.histogram.data <- summarize.histograms(
   ancestry.individual.data, HISTOGRAM.BREAKS, SELECTED.CHROMOSOMES,
   ADMIXED.ROLES
@@ -2106,32 +2435,9 @@ choose.k.frequency.tables <- list(
 # statistical tests ----
 
 
-# Legacy statistical tests, diagnostics, plot constructors, and output writes
-# are retained below as inactive reference during the bootstrap plotting refresh.
+# Legacy diagnostics and plot constructors are retained below as inactive
+# reference during the bootstrap plotting refresh.
 if (FALSE) {
-# calculate each statistical analysis independently
-ancestry.chromosome.comparison.tests <- test.ancestry.chromosome.comparisons()
-ancestry.genome.reference.tests <- test.ancestry.genome.reference()
-ancestry.chromosome.length.models <- fit.ancestry.chromosome.length.models()
-
-# persist statistical result tables after creating the output directory
-dir.create(OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
-readr::write_csv(
-  ancestry.chromosome.comparison.tests,
-  file.path(
-    OUTPUT.DIR, "ancestry.statistics.chromosome.comparisons.csv"
-    )
-  )
-readr::write_csv(
-  ancestry.genome.reference.tests,
-  file.path(OUTPUT.DIR, "ancestry.statistics.genome.reference.csv")
-  )
-readr::write_csv(
-  ancestry.chromosome.length.models,
-  file.path(OUTPUT.DIR, "ancestry.statistics.chromosome.length.csv")
-  )
-
-
 # plotting ----
 
 
