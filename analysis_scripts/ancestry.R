@@ -583,7 +583,9 @@ prepare.ancestry.bootstrap.comparison.data <- function(
       paste(missing.individual, collapse = ", "))
     }
   empirical <- individual.data %>%
-    mutate(chrom = as.character(chrom), sample_id = as.character(sample_id)) %>%
+    mutate(
+      chrom = as.character(chrom), 
+      sample_id = as.character(vcf_sample_id)) %>%
     filter(
       data.type == "Empirical", role == "ASW", method == empirical.method,
       chrom %in% c(chromosomes, "all")
@@ -928,7 +930,7 @@ make.ancestry.bootstrap.contrast.plot <- function(data, title) {
       )
     } else {
     plot <- plot + facet_wrap(
-      vars(facet.label), ncol = 1, scales = "free_y"
+      vars(facet.label), ncol = 1, scales = "free_y", strip.position = "right"
       )
     }
   return(plot)
