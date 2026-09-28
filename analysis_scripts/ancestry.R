@@ -779,6 +779,121 @@ write.ancestry.bootstrap.comparison.tables <- function(
   }
 
 
+# prepare one contrast family for nominal or Bonferroni interval plotting.
+prepare.ancestry.bootstrap.contrast.plot.data <- function(
+    tables, contrast.family, interval.type = c("95", "bonferroni")
+  ) {
+  interval.type <- match.arg(interval.type)
+  contrast.config <- list(
+    empirical = list(
+      contrasts = c("TC-Emp", "TCD-Emp", "LG-Emp", "LGD-Emp"),
+      color.sources = c(
+        `TC-Emp` = "Simulation_2T12Consistent",
+        `TCD-Emp` = "Simulation_2T12Consistent_simDown",
+        `LG-Emp` = "Simulation_largeGrowth",
+        `LGD-Emp` = "Simulation_largeGrowth_simDown"
+        ),
+      chromosome.levels = c(CHROMOSOMES, "all")
+      ),
+    simulation = list(
+      contrasts = c("TC-TCD", "LG-LGD", "TC-LG"),
+      color.sources = c(
+        `TC-TCD` = "Simulation_2T12Consistent_simDown",
+        `LG-LGD` = "Simulation_largeGrowth_simDown",
+        `TC-LG` = "Simulation_2T12Consistent"
+        ),
+      chromosome.levels = CHROMOSOMES
+      )
+    )
+  if (!contrast.family %in% names(contrast.config)) {
+    stop("Unsupported bootstrap contrast family: ", contrast.family)
+    }
+  config <- contrast.config[[contrast.family]]
+  lower.column <- if (interval.type == "95") {
+    "ci.95.lower"
+    } else {
+    "bonferroni.ci.lower"
+    }
+  upper.column <- if (interval.type == "95") {
+    "ci.95.upper"
+    } else {
+    "bonferroni.ci.upper"
+    }
+  data <- if (contrast.family == "empirical") {
+    bind_rows(
+      tables$chromosome.comparisons,
+      tables$chromosome.vs.genome.asw
+      )
+    } else {
+    tables$chromosome.comparisons
+    }
+  plotted <- data %>%
+    filter(contrast %in% config$contrasts) %>%
+    mutate(
+      ci.lower = .data[[lower.column]],
+      ci.upper = .data[[upper.column]],
+      color.source = unname(config$color.sources[contrast]),
+      chromosome = factor(chromosome, levels = config$chromosome.levels),
+      contrast = factor(contrast, levels = config$contrasts),
+      statistic = factor(statistic, levels = c("mean", "sd")),
+      significant = ci.lower > 0 | ci.upper < 0
+      ) %>%
+    group_by(statistic) %>%
+    mutate(
+      interval.span = pmax(
+        max(ci.upper) - min(ci.lower), max(abs(c(ci.lower, ci.upper))) * 0.05,
+        0.01
+        ),
+      marker.position = ci.upper + interval.span * 0.06
+      ) %>%
+    ungroup() %>%
+    arrange(statistic, chromosome, contrast)
+  return(plotted)
+  }
+
+
+# construct a faceted bootstrap contrast plot from prepared comparison data.
+make.ancestry.bootstrap.contrast.plot <- function(data, title) {
+  dodge <- position_dodge(width = CATEGORICAL.BAR.DODGE)
+  plot <- ggplot(
+    data,
+    aes(chromosome, difference, color = color.source, group = contrast)
+    ) +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    geom_errorbar(
+      aes(ymin = ci.lower, ymax = ci.upper), position = dodge,
+      width = CATEGORICAL.BAR.WIDTH * 0.45,
+      linewidth = CATEGORICAL.BAR.LINEWIDTH
+      ) +
+    geom_point(position = dodge, size = 2.2) +
+    geom_text(
+      data = filter(data, significant),
+      aes(
+        x = chromosome, y = marker.position, label = "*", group = contrast
+        ),
+      color = "red", position = dodge, inherit.aes = FALSE, size = 5
+      ) +
+    facet_grid(
+      rows = vars(statistic), scales = "free_y",
+      labeller = as_labeller(c(mean = "Mean", sd = "SD"))
+      ) +
+    scale_color_manual(values = PLOT.STYLES$colors,
+      labels = PLOT.STYLES$labels) +
+    scale_y_continuous(expand = expansion(mult = c(0.05, 0.15))) +
+    labs(
+      x = "Chromosome", y = "Difference", color = "Simulation",
+      title = title
+      ) +
+    theme_bw(base_size = PLOT.BASE.SIZE) +
+    theme(
+      legend.position = "bottom",
+      strip.background = element_rect(fill = "grey92"),
+      panel.grid.minor = element_blank()
+      )
+  return(plot)
+  }
+
+
 # analysis data prep ----
 
 
@@ -873,6 +988,34 @@ ancestry.bootstrap.all.datatypes.adx.asw.histogram <-
     bootstrap.ancestry.histograms, SOURCE.LEVELS,
     "Chromosome 1 simulations and genome-wide ASW: all ADX sources and ASW"
     )
+ancestry.bootstrap.empirical.95.comparisons <-
+  make.ancestry.bootstrap.contrast.plot(
+    prepare.ancestry.bootstrap.contrast.plot.data(
+      ancestry.bootstrap.comparison.tables, "empirical", "95"
+      ),
+    "Bootstrap ancestry differences: simulations versus ASW"
+    )
+ancestry.bootstrap.empirical.bonferroni.comparisons <-
+  make.ancestry.bootstrap.contrast.plot(
+    prepare.ancestry.bootstrap.contrast.plot.data(
+      ancestry.bootstrap.comparison.tables, "empirical", "bonferroni"
+      ),
+    "Bonferroni bootstrap ancestry differences: simulations versus ASW"
+    )
+ancestry.bootstrap.simulation.95.comparisons <-
+  make.ancestry.bootstrap.contrast.plot(
+    prepare.ancestry.bootstrap.contrast.plot.data(
+      ancestry.bootstrap.comparison.tables, "simulation", "95"
+      ),
+    "Bootstrap ancestry differences: simulation contrasts"
+    )
+ancestry.bootstrap.simulation.bonferroni.comparisons <-
+  make.ancestry.bootstrap.contrast.plot(
+    prepare.ancestry.bootstrap.contrast.plot.data(
+      ancestry.bootstrap.comparison.tables, "simulation", "bonferroni"
+      ),
+    "Bonferroni bootstrap ancestry differences: simulation contrasts"
+    )
 
 # save each active figure before explicit printing at the script end.
 dir.create(OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
@@ -888,7 +1031,23 @@ saveRDS(ancestry.bootstrap.tcd.1kg.histogram, file.path(
 saveRDS(ancestry.bootstrap.all.datatypes.adx.asw.histogram, file.path(
   OUTPUT.DIR, "ancestry.bootstrap.all.datatypes.adx.asw.histogram.rds"
   ))
+saveRDS(ancestry.bootstrap.empirical.95.comparisons, file.path(
+  OUTPUT.DIR, "ancestry.bootstrap.empirical.95.comparisons.rds"
+  ))
+saveRDS(ancestry.bootstrap.empirical.bonferroni.comparisons, file.path(
+  OUTPUT.DIR, "ancestry.bootstrap.empirical.bonferroni.comparisons.rds"
+  ))
+saveRDS(ancestry.bootstrap.simulation.95.comparisons, file.path(
+  OUTPUT.DIR, "ancestry.bootstrap.simulation.95.comparisons.rds"
+  ))
+saveRDS(ancestry.bootstrap.simulation.bonferroni.comparisons, file.path(
+  OUTPUT.DIR, "ancestry.bootstrap.simulation.bonferroni.comparisons.rds"
+  ))
 print(ancestry.bootstrap.tcd.1kg.bar)
 print(ancestry.bootstrap.all.datatypes.adx.asw.bar)
 print(ancestry.bootstrap.tcd.1kg.histogram)
 print(ancestry.bootstrap.all.datatypes.adx.asw.histogram)
+print(ancestry.bootstrap.empirical.95.comparisons)
+print(ancestry.bootstrap.empirical.bonferroni.comparisons)
+print(ancestry.bootstrap.simulation.95.comparisons)
+print(ancestry.bootstrap.simulation.bonferroni.comparisons)
