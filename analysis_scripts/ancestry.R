@@ -57,7 +57,19 @@ PLOT.STYLES <- list(
     Simulation_largeGrowth_simDown = "#4B1FA8", Empirical = "#B83264"
     ),
   labels = SOURCE.LABELS,
-  empirical.colors = c(ADMIXTURE = "#B83264", fastStructure = "#B9584A")
+  empirical.colors = c(ADMIXTURE = "#B83264", fastStructure = "#B9584A"),
+  contrast.colors = c(
+    `TC-Emp` = "#9A83CE", `TCD-Emp` = "#6F55B5",
+    `LG-Emp` = "#32146F", `LGD-Emp` = "#4B1FA8",
+    `TC-TCD` = "#6F55B5", `LG-LGD` = "#4B1FA8",
+    `TC-LG` = "#9A83CE"
+    ),
+  contrast.labels = c(
+    `TC-Emp` = "T.C. - ASW", `TCD-Emp` = "T.C.D. - ASW",
+    `LG-Emp` = "L.G. - ASW", `LGD-Emp` = "L.G.D. - ASW",
+    `TC-TCD` = "T.C. - T.C.D.", `LG-LGD` = "L.G. - L.G.D.",
+    `TC-LG` = "T.C. - L.G."
+    )
   )
 ANCESTRY.BOOTSTRAP.CONTRASTS <- tribble(
   ~contrast, ~left.source, ~right.source, ~paired,
@@ -571,7 +583,7 @@ prepare.ancestry.bootstrap.comparison.data <- function(
       paste(missing.individual, collapse = ", "))
     }
   empirical <- individual.data %>%
-    mutate(chrom = as.character(chrom), sample_id = vcf_sample_id) %>%
+    mutate(chrom = as.character(chrom), sample_id = as.character(sample_id)) %>%
     filter(
       data.type == "Empirical", role == "ASW", method == empirical.method,
       chrom %in% c(chromosomes, "all")
@@ -787,21 +799,10 @@ prepare.ancestry.bootstrap.contrast.plot.data <- function(
   contrast.config <- list(
     empirical = list(
       contrasts = c("TC-Emp", "TCD-Emp", "LG-Emp", "LGD-Emp"),
-      color.sources = c(
-        `TC-Emp` = "Simulation_2T12Consistent",
-        `TCD-Emp` = "Simulation_2T12Consistent_simDown",
-        `LG-Emp` = "Simulation_largeGrowth",
-        `LGD-Emp` = "Simulation_largeGrowth_simDown"
-        ),
       chromosome.levels = c(CHROMOSOMES, "all")
       ),
     simulation = list(
       contrasts = c("TC-TCD", "LG-LGD", "TC-LG"),
-      color.sources = c(
-        `TC-TCD` = "Simulation_2T12Consistent_simDown",
-        `LG-LGD` = "Simulation_largeGrowth_simDown",
-        `TC-LG` = "Simulation_2T12Consistent"
-        ),
       chromosome.levels = CHROMOSOMES
       )
     )
@@ -832,12 +833,41 @@ prepare.ancestry.bootstrap.contrast.plot.data <- function(
     mutate(
       ci.lower = .data[[lower.column]],
       ci.upper = .data[[upper.column]],
-      color.source = unname(config$color.sources[contrast]),
       chromosome = factor(chromosome, levels = config$chromosome.levels),
       contrast = factor(contrast, levels = config$contrasts),
       statistic = factor(statistic, levels = c("mean", "sd")),
-      significant = ci.lower > 0 | ci.upper < 0
+      significant = ci.lower > 0 | ci.upper < 0,
+      contrast.color = unname(PLOT.STYLES$contrast.colors[as.character(
+        contrast
+        )]),
+      facet.label = if (contrast.family == "empirical") {
+        factor(
+          paste(
+            if_else(statistic == "mean", "Mean", "SD"),
+            if_else(
+              reference.scope == "chromosome", "chromosome by chromosome",
+              "chromosome by whole genome"
+              ),
+            sep = ": "
+            ),
+          levels = c(
+            "Mean: chromosome by chromosome",
+            "Mean: chromosome by whole genome",
+            "SD: chromosome by chromosome",
+            "SD: chromosome by whole genome"
+            )
+          )
+        } else {
+        factor(NA_character_)
+        }
       ) %>%
+    group_by(chromosome) %>%
+    mutate(
+      plot.x = as.numeric(chromosome) +
+        (as.numeric(contrast) - (n_distinct(contrast) + 1) / 2) *
+          CATEGORICAL.BAR.DODGE / n_distinct(contrast)
+      ) %>%
+    ungroup() %>%
     group_by(statistic) %>%
     mutate(
       interval.span = pmax(
@@ -854,34 +884,35 @@ prepare.ancestry.bootstrap.contrast.plot.data <- function(
 
 # construct a faceted bootstrap contrast plot from prepared comparison data.
 make.ancestry.bootstrap.contrast.plot <- function(data, title) {
-  dodge <- position_dodge(width = CATEGORICAL.BAR.DODGE)
   plot <- ggplot(
     data,
-    aes(chromosome, difference, color = color.source, group = contrast)
+    aes(plot.x, difference, color = contrast, group = contrast)
     ) +
     geom_hline(yintercept = 0, linetype = "dashed") +
     geom_errorbar(
-      aes(ymin = ci.lower, ymax = ci.upper), position = dodge,
+      aes(ymin = ci.lower, ymax = ci.upper),
       width = CATEGORICAL.BAR.WIDTH * 0.45,
       linewidth = CATEGORICAL.BAR.LINEWIDTH
       ) +
-    geom_point(position = dodge, size = 2.2) +
+    geom_point(size = 2.2) +
     geom_text(
       data = filter(data, significant),
       aes(
-        x = chromosome, y = marker.position, label = "*", group = contrast
+        x = plot.x, y = marker.position, label = "*", group = contrast
         ),
-      color = "red", position = dodge, inherit.aes = FALSE, size = 5
+      color = "red", inherit.aes = FALSE, size = 5
       ) +
-    facet_grid(
-      rows = vars(statistic), scales = "free_y",
-      labeller = as_labeller(c(mean = "Mean", sd = "SD"))
+    scale_x_continuous(
+      breaks = seq_along(levels(data$chromosome)),
+      labels = levels(data$chromosome)
       ) +
-    scale_color_manual(values = PLOT.STYLES$colors,
-      labels = PLOT.STYLES$labels) +
+    scale_color_manual(
+      values = PLOT.STYLES$contrast.colors,
+      labels = PLOT.STYLES$contrast.labels
+      ) +
     scale_y_continuous(expand = expansion(mult = c(0.05, 0.15))) +
     labs(
-      x = "Chromosome", y = "Difference", color = "Simulation",
+      x = "Chromosome", y = "Difference", color = "Contrast",
       title = title
       ) +
     theme_bw(base_size = PLOT.BASE.SIZE) +
@@ -890,6 +921,16 @@ make.ancestry.bootstrap.contrast.plot <- function(data, title) {
       strip.background = element_rect(fill = "grey92"),
       panel.grid.minor = element_blank()
       )
+  if (all(is.na(data$facet.label))) {
+    plot <- plot + facet_grid(
+      rows = vars(statistic), scales = "free_y",
+      labeller = as_labeller(c(mean = "Mean", sd = "SD"))
+      )
+    } else {
+    plot <- plot + facet_wrap(
+      vars(facet.label), ncol = 1, scales = "free_y"
+      )
+    }
   return(plot)
   }
 
