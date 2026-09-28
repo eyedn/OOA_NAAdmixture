@@ -17,40 +17,23 @@ library(nanoparquet)
 
 
 SIM.TC.DATA.DIR <- "~/scratch/OOA_NAAdmixture_2T12Consistent/stats"
-SIMDOWN.TC.DATA.DIR <- "~/scratch/OOA_NAAdmixture_2T12ConsistentOnekgDownsample/stats"
+SIMDOWN.TC.DATA.DIR <-
+  "~/scratch/OOA_NAAdmixture_2T12ConsistentOnekgDownsample/stats"
 SIM.LG.DATA.DIR <- "~/scratch/OOA_NAAdmixture_largeGrowth/stats"
-SIMDOWN.LG.DATA.DIR <- "~/scratch/OOA_NAAdmixture_largeGrowthOnekgDownsample/stats"
+SIMDOWN.LG.DATA.DIR <-
+  "~/scratch/OOA_NAAdmixture_largeGrowthOnekgDownsample/stats"
 EMPIRICAL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_1kG/stats"
 OUTPUT.DIR <- "/home1/karatas/proj/OOA_NAAdmixture_data"
-CHROMOSOME.LENGTHS.PATH <- "~/proj/1000GenomeNYGC_hg38_karatas/ONEKG_chr_lens.tsv"
 CHROMOSOMES <- as.character(1:22)
 SELECTED.CHROMOSOMES <- c("1", "10", "20")
-SIMULATION.K <- 2
-EMPIRICAL.K <- 2
+SIMULATION.K <- 2L
+EMPIRICAL.K <- 2L
 RANDOM.SEED <- 123L
-DOWNSAMPLE.SIZE <- 50
-SOURCE.LEVELS <- c(
-  "Simulation_2T12Consistent", "Simulation_2T12Consistent_simDown",
-  "Simulation_largeGrowth", "Simulation_largeGrowth_simDown",
-  "Empirical"
-  )
-SOURCE.DISPLAY.LEVELS <- c("T.C.", "T.C.D.", "L.G.", "L.G.D.", "Emp.")
-SOURCE.LABELS <- setNames(SOURCE.DISPLAY.LEVELS, SOURCE.LEVELS)
-POPULATION.LEVELS <- c("AFR", "ADX", "EUR", "YRI", "ASW", "CEU")
-PLOT.CONFIGS <- list(
-  TC.1kG = SOURCE.LEVELS[c(1, 5)],
-  TC.TCD = SOURCE.LEVELS[c(1, 2)],
-  TCD.1kG = SOURCE.LEVELS[c(2, 5)],
-  onlyADX = SOURCE.LEVELS[1:4],
-  tcd.1kg = SOURCE.LEVELS[c(2, 5)],
-  tc.tcd.1kg = SOURCE.LEVELS[c(1, 2, 5)],
-  all.datatypes.adx.asw = SOURCE.LEVELS
-  )
+DOWNSAMPLE.SIZE <- 50L
 BOOTSTRAP.REPLICATES <- 1000L
 ANCESTRY.BOOTSTRAP.CHROMOSOME.FAMILY.SIZE <- 308L
 ANCESTRY.BOOTSTRAP.GENOME.ASW.FAMILY.SIZE <- 176L
 HISTOGRAM.BREAKS <- seq(0, 1, by = 0.05)
-ADMIXED.ROLES <- c("ADX", "ASW")
 PLOT.EMPIRICAL.METHOD <- "ADMIXTURE"
 PLOT.SAMPLE.SET <- "downsampled"
 PLOT.BASE.SIZE <- 24
@@ -59,25 +42,21 @@ CATEGORICAL.BAR.WIDTH <- 0.8
 CATEGORICAL.BAR.LINEWIDTH <- 1
 DENSE.BAR.WIDTH.MULTIPLIER <- 0.8
 DENSE.BAR.LINEWIDTH <- 0.75
-ANCESTRY.COMPONENT.COLORS <- c(
-  component_1_q = "#0072B2", component_2_q = "#D55E00"
+SOURCE.LEVELS <- c(
+  "Simulation_2T12Consistent", "Simulation_2T12Consistent_simDown",
+  "Simulation_largeGrowth", "Simulation_largeGrowth_simDown", "Empirical"
+  )
+SOURCE.LABELS <- setNames(
+  c("T.C.", "T.C.D.", "L.G.", "L.G.D.", "Emp."), SOURCE.LEVELS
   )
 PLOT.STYLES <- list(
   colors = c(
     Simulation_2T12Consistent = "#9A83CE",
     Simulation_2T12Consistent_simDown = "#6F55B5",
     Simulation_largeGrowth = "#32146F",
-    Simulation_largeGrowth_simDown = "#4B1FA8",
-    Empirical = "#B83264"
+    Simulation_largeGrowth_simDown = "#4B1FA8", Empirical = "#B83264"
     ),
   labels = SOURCE.LABELS,
-  series.labels = SOURCE.LABELS,
-  shapes = c(full = 21, downsampled = 24),
-  linetypes = c(full = "solid", downsampled = "dashed"),
-  simulation.labels = c(
-    tspop = "tspop", ADMIXTURE = "ADMIXTURE",
-    fastStructure = "fastStructure"
-    ),
   empirical.colors = c(ADMIXTURE = "#B83264", fastStructure = "#B9584A")
   )
 ANCESTRY.BOOTSTRAP.CONTRASTS <- tribble(
@@ -95,19 +74,180 @@ ANCESTRY.BOOTSTRAP.CONTRASTS <- tribble(
 # internal functions ----
 
 
-# return the canonical levels represented by a filtered plot view
+# return active sources in their canonical display order.
 order.active.levels <- function(values, canonical.levels) {
-  active.levels <- canonical.levels[
-    canonical.levels %in% as.character(values)
-    ]
-  return(active.levels)
+  return(canonical.levels[canonical.levels %in% as.character(values)])
   }
 
 
-# summarize complete simulation replicates with a 95% bootstrap interval
-summarize.bootstrap.interval <- function(
-    data, grouping.columns, value.column
+# return the configured chromosome-level inference filename family.
+ancestry.inference.file.family <- function(method) {
+  if (!method %in% c("ADMIXTURE", "fastStructure")) {
+    stop("Unsupported ancestry inference method: ", method)
+    }
+  return(paste0("ancestry_", method, "_multik.chr{chrom}.parquet"))
+  }
+
+
+# retain the sole adx simulation and asw empirical populations.
+apply.ancestry.source.contract <- function(data) {
+  retained <- data %>%
+    filter(
+      (data.type %in% SOURCE.LEVELS[1:4] & pop == "ADX") |
+        (data.type == "Empirical" & pop == "ASW")
+      ) %>%
+    mutate(data.type = factor(data.type, levels = SOURCE.LEVELS))
+  return(retained)
+  }
+
+
+# standardize a source table to the shared ancestry schema.
+normalize.ancestry.table <- function(
+    data, data.type.input, method, simulation.source.input, k,
+    sample.id.column = "sample_id"
   ) {
+  data$chrom <- as.character(data$chrom)
+  data$sample_id <- as.character(data[[sample.id.column]])
+  data$rep <- if ("rep" %in% names(data)) as.numeric(data$rep) else 0
+  data$data.type <- data.type.input
+  data$method <- method
+  data$simulation.source <- simulation.source.input
+  if (!"pop" %in% names(data)) data$pop <- NA_character_
+  if (!"role" %in% names(data)) data$role <- data$pop
+  if (method == "tspop") {
+    data$component_1_q <- as.numeric(data$afr_tspop)
+    data$component_2_q <- as.numeric(data$eur_tspop)
+    data <- select(data, -afr_tspop, -eur_tspop)
+    data$k <- 0L
+    } else {
+    if (!"k" %in% names(data)) data$k <- k
+    data <- filter(data, .data$k == .env$k)
+    }
+  data <- data %>% mutate(
+    component_1_q = as.numeric(component_1_q),
+    component_2_q = as.numeric(component_2_q)
+    )
+  return(data)
+  }
+
+
+# read available chromosome files and an optional whole-genome empirical file.
+read.ancestry.family <- function(
+    data.directory, file.family, chromosomes, data.type.input, method, k,
+    simulation.source.input, include.genome = FALSE, genome.file.family = NULL
+  ) {
+  paths <- file.path(
+    path.expand(data.directory),
+    vapply(
+      chromosomes,
+      function(chromosome) gsub("\\{chrom\\}", chromosome, file.family),
+      character(1)
+      )
+    )
+  missing <- chromosomes != "all" & !file.exists(paths)
+  if (any(missing)) {
+    warning(
+      paste0(
+        data.type.input, " ", file.family,
+        " is unavailable for chromosomes: ",
+        paste(chromosomes[missing], collapse = ", ")
+        ),
+      call. = FALSE
+      )
+    }
+  chromosomes <- chromosomes[!missing]
+  paths <- paths[!missing]
+  if (include.genome) {
+    chromosomes <- c(chromosomes, "all")
+    paths <- c(
+      paths,
+      file.path(path.expand(data.directory), genome.file.family)
+      )
+    }
+  data <- map2_dfr(paths, chromosomes, function(path, chrom) {
+    table <- read_parquet(path)
+    table$chrom <- chrom
+    return(normalize.ancestry.table(
+      table, data.type.input, method, simulation.source.input, k
+      ))
+    })
+  return(data)
+  }
+
+
+# orient k = 2 components so afr.q consistently represents African ancestry.
+orient.ancestry.components <- function(data, grouping.columns) {
+  component.map <- data %>%
+    group_by(across(all_of(grouping.columns))) %>%
+    summarise(
+      component.1 = mean(component_1_q, na.rm = TRUE),
+      component.2 = mean(component_2_q, na.rm = TRUE), .groups = "drop"
+      ) %>%
+    mutate(afr.component = if_else(
+      component.1 >= component.2, "component_1_q", "component_2_q"
+      ))
+  oriented <- data %>%
+    left_join(component.map, by = grouping.columns) %>%
+    mutate(afr.q = if_else(
+      afr.component == "component_1_q", component_1_q, component_2_q
+      )) %>%
+    select(-component.1, -component.2, -afr.component)
+  return(oriented)
+  }
+
+
+# select reproducible simulation ids within each source, replicate, chromosome.
+select.downsample.ids <- function(
+    data, downsample.size, sample.id.column, grouping.columns, seed
+  ) {
+  candidates <- data %>%
+    filter(data.type != "Empirical") %>%
+    distinct(across(all_of(c(grouping.columns, sample.id.column))))
+  sizes <- candidates %>% count(across(all_of(grouping.columns)), name = "n")
+  if (any(sizes$n < downsample.size)) {
+    stop("A simulation group contains fewer than ", downsample.size,
+      " candidates")
+    }
+  set.seed(seed)
+  selected.ids <- candidates %>%
+    group_by(across(all_of(grouping.columns))) %>%
+    slice_sample(n = downsample.size, replace = FALSE) %>%
+    ungroup() %>%
+    arrange(across(all_of(grouping.columns)), .data[[sample.id.column]])
+  return(selected.ids)
+  }
+
+
+# add complete and selected simulation sample sets without duplicating
+# empirical rows.
+apply.downsample.ids <- function(
+    data, selected.ids, sample.id.column, grouping.columns
+  ) {
+  duplicates <- selected.ids %>%
+    count(across(all_of(c(grouping.columns, sample.id.column)))) %>%
+    filter(n != 1L)
+  if (nrow(duplicates)) stop("Selected sample IDs are not unique")
+  full <- mutate(data, sample.set = "full")
+  downsampled <- data %>%
+    filter(data.type != "Empirical") %>%
+    inner_join(selected.ids, by = c(grouping.columns, sample.id.column)) %>%
+    mutate(sample.set = "downsampled")
+  return(bind_rows(full, downsampled))
+  }
+
+
+# create mean and sd inputs for bootstrap comparison tables.
+summarize.ancestry.comparison <- function(data) {
+  summary <- data %>%
+    filter(!is.na(afr.q)) %>%
+    group_by(rep, chrom, data.type, method, sample.set) %>%
+    summarise(mean = mean(afr.q), sd = sd(afr.q), .groups = "drop")
+  return(summary)
+  }
+
+
+# summarize complete simulation replicates with percentile intervals.
+summarize.bootstrap.interval <- function(data, grouping.columns, value.column) {
   if (any(!is.finite(data[[value.column]]))) {
     stop("Simulation values must be finite")
     }
@@ -127,32 +267,24 @@ summarize.bootstrap.interval <- function(
   }
 
 
-# retain the sole analysis method for each simulated ancestry source
+# retain one active ancestry method for each simulation source.
 filter.bootstrap.ancestry.simulation <- function(data) {
   simulation <- data %>%
-    filter(data.type != "Empirical", role == "ADX") %>%
     filter(
-      (data.type %in% c(
-        "Simulation_2T12Consistent", "Simulation_largeGrowth"
-        ) & method == "tspop") |
-        (data.type %in% c(
-          "Simulation_2T12Consistent_simDown",
-          "Simulation_largeGrowth_simDown"
-          ) & method == PLOT.EMPIRICAL.METHOD)
+      data.type != "Empirical", sample.set == "full",
+      (data.type %in% SOURCE.LEVELS[c(1, 3)] & method == "tspop") |
+        (data.type %in% SOURCE.LEVELS[c(2, 4)] &
+          method == PLOT.EMPIRICAL.METHOD)
       )
-  if ("sample.set" %in% names(simulation)) {
-    simulation <- filter(simulation, sample.set == "full")
-    }
   return(simulation)
   }
 
 
-# deterministically select empirical-sized ADX samples in each replicate
+# select empirical-sized adx samples independently per simulation group.
 select.bootstrap.ancestry.ids <- function(
     data, downsample.size, sample.id.column, seed
   ) {
-  candidates <- filter.bootstrap.ancestry.simulation(data)
-  candidates <- candidates %>%
+  candidates <- filter.bootstrap.ancestry.simulation(data) %>%
     select(data.type, rep, chrom, all_of(sample.id.column), afr.q)
   if (any(!is.finite(candidates$afr.q))) {
     stop("Simulation ancestry values must be finite")
@@ -161,13 +293,10 @@ select.bootstrap.ancestry.ids <- function(
     count(data.type, rep, chrom, .data[[sample.id.column]]) %>%
     filter(n != 1L)
   if (nrow(duplicates)) stop("Simulation ancestry IDs must be unique")
-  candidates <- distinct(candidates)
   sizes <- candidates %>% count(data.type, rep, chrom, name = "available")
   if (any(sizes$available < downsample.size)) {
-    stop(
-      "A simulation ancestry group contains fewer than ", downsample.size,
-      " unique IDs"
-      )
+    stop("A simulation ancestry group contains fewer than ", downsample.size,
+      " unique IDs")
     }
   set.seed(seed)
   selected <- candidates %>%
@@ -179,63 +308,56 @@ select.bootstrap.ancestry.ids <- function(
   }
 
 
-# build simulation intervals and bootstrap-resampled empirical summaries
+# build simulation intervals and empirical bootstrap mean and sd summaries.
 summarize.bootstrap.ancestry <- function(
     data, downsample.size, seed, replicates
   ) {
-  if (!is.numeric(replicates) || length(replicates) != 1L ||
-      !is.finite(replicates) || replicates < 1L || replicates %% 1L != 0) {
-    stop("Bootstrap replicate count must be a positive integer")
-    }
   selected <- select.bootstrap.ancestry.ids(
     data, downsample.size, "sample_id", seed
     )
-  simulation.data <- filter.bootstrap.ancestry.simulation(data)
-  simulation <- simulation.data %>%
+  simulation <- filter.bootstrap.ancestry.simulation(data) %>%
     inner_join(selected, by = c("data.type", "rep", "chrom", "sample_id")) %>%
     group_by(data.type, rep, chrom) %>%
     summarise(mean = mean(afr.q), sd = sd(afr.q), .groups = "drop") %>%
     pivot_longer(c(mean, sd), names_to = "stat", values_to = "value") %>%
     summarize.bootstrap.interval(c("data.type", "rep", "chrom", "stat"),
       "value")
-  empirical.data <- data %>%
+  empirical <- data %>%
     filter(
-      data.type == "Empirical", role == "ASW",
+      data.type == "Empirical", sample.set == "full",
       method == PLOT.EMPIRICAL.METHOD
       )
-  if (any(!is.finite(empirical.data$afr.q))) {
+  if (any(!is.finite(empirical$afr.q))) {
     stop("Empirical ancestry values must be finite")
     }
   set.seed(seed)
-  empirical <- empirical.data %>%
+  empirical <- empirical %>%
     group_by(data.type, chrom) %>%
     group_modify(function(group, key) {
       observed <- c(mean = mean(group$afr.q), sd = sd(group$afr.q))
-      bootstrap <- map_dfr(names(observed), function(statistic) {
-        estimates <- replicate(replicates, {
-          values <- sample(group$afr.q, nrow(group), replace = TRUE)
-          return(match.fun(statistic)(values))
+      estimates <- map_dfr(names(observed), function(statistic) {
+        values <- replicate(replicates, {
+          match.fun(statistic)(sample(group$afr.q, nrow(group), replace = TRUE))
           })
-        return(tibble(
-          stat = statistic,
-          mean = observed[[statistic]],
-          lower = quantile(estimates, 0.025, names = FALSE),
-          upper = quantile(estimates, 0.975, names = FALSE),
+        tibble(
+          stat = statistic, mean = observed[[statistic]],
+          lower = quantile(values, 0.025, names = FALSE),
+          upper = quantile(values, 0.975, names = FALSE),
           replicate.count = as.integer(replicates)
-          ))
+          )
         })
-      return(bootstrap)
+      return(estimates)
       }) %>%
     ungroup()
   return(bind_rows(simulation, empirical))
   }
 
 
-# summarize complete simulated and bootstrap-resampled empirical histograms
+# summarize simulation and genome-wide asw bootstrap histogram fractions.
 summarize.bootstrap.histograms <- function(data, breaks, seed, replicates) {
-  selected <- select.bootstrap.ancestry.ids(data, 50, "sample_id", seed)
-  simulation.data <- filter.bootstrap.ancestry.simulation(data)
-  simulation <- simulation.data %>%
+  selected <- select.bootstrap.ancestry.ids(data, DOWNSAMPLE.SIZE,
+    "sample_id", seed)
+  simulation <- filter.bootstrap.ancestry.simulation(data) %>%
     inner_join(selected, by = c("data.type", "rep", "chrom", "sample_id")) %>%
     group_by(data.type, rep, chrom) %>%
     group_modify(function(group, key) {
@@ -247,7 +369,7 @@ summarize.bootstrap.histograms <- function(data, breaks, seed, replicates) {
       "fraction")
   empirical <- data %>%
     filter(
-      data.type == "Empirical", role == "ASW", chrom == "all",
+      data.type == "Empirical", sample.set == "full", chrom == "all",
       method == PLOT.EMPIRICAL.METHOD
       ) %>%
     group_by(data.type, chrom) %>%
@@ -258,21 +380,23 @@ summarize.bootstrap.histograms <- function(data, breaks, seed, replicates) {
           breaks = breaks, plot = FALSE)$counts
         counts / sum(counts)
         })
-      tibble(
+      return(tibble(
         bin = seq_len(nrow(draws)), mean = rowMeans(draws),
         lower = apply(draws, 1, quantile, 0.025),
         upper = apply(draws, 1, quantile, 0.975),
         replicate.count = replicates
-        )
+        ))
       }) %>%
     ungroup()
-  bins <- tibble(bin = seq_len(length(breaks) - 1L),
-    xmid = head(breaks, -1L) + diff(breaks) / 2)
+  bins <- tibble(
+    bin = seq_len(length(breaks) - 1L),
+    xmid = head(breaks, -1L) + diff(breaks) / 2
+    )
   return(bind_rows(simulation, empirical) %>% left_join(bins, by = "bin"))
   }
 
 
-# construct compact chromosome bootstrap bars with genome-wide ASW intervals
+# construct selected-chromosome bars with a genome-wide asw reference.
 make.bootstrap.ancestry.bar.plot <- function(data, data.types, title) {
   plotted <- data %>%
     filter(
@@ -284,15 +408,11 @@ make.bootstrap.ancestry.bar.plot <- function(data, data.types, title) {
       levels = order.active.levels(data.type, SOURCE.LEVELS)
       ))
   genome <- data %>%
-    filter(
-      data.type == "Empirical", chrom == "all",
-      stat %in% unique(plotted$stat)
-      )
+    filter(data.type == "Empirical", chrom == "all", stat %in% plotted$stat)
   dodge <- position_dodge(width = CATEGORICAL.BAR.DODGE)
   plot <- ggplot(plotted, aes(chrom, mean, fill = data.type)) +
     geom_rect(
-      data = genome,
-      aes(ymin = lower, ymax = upper),
+      data = genome, aes(ymin = lower, ymax = upper),
       xmin = -Inf, xmax = Inf, inherit.aes = FALSE,
       fill = PLOT.STYLES$empirical.colors[[PLOT.EMPIRICAL.METHOD]],
       alpha = 0.15
@@ -301,31 +421,30 @@ make.bootstrap.ancestry.bar.plot <- function(data, data.types, title) {
       position = dodge, width = CATEGORICAL.BAR.WIDTH,
       linewidth = CATEGORICAL.BAR.LINEWIDTH, color = "black"
       ) +
-    geom_errorbar(aes(ymin = lower, ymax = upper),
-      position = dodge, width = 0,
-      linewidth = CATEGORICAL.BAR.LINEWIDTH, na.rm = TRUE) +
+    geom_errorbar(
+      aes(ymin = lower, ymax = upper), position = dodge, width = 0,
+      linewidth = CATEGORICAL.BAR.LINEWIDTH, na.rm = TRUE
+      ) +
     with_outer_glow(
       geom_hline(
         data = genome, aes(yintercept = mean), linetype = "longdash",
         color = PLOT.STYLES$empirical.colors[[PLOT.EMPIRICAL.METHOD]],
-        linewidth = 1,
-      ),
-      colour = "black",
-      sigma = 0,
-      expand = 3
-    ) +
-    facet_wrap(vars(stat), scales = "free_y", nrow = 1,
-      labeller = labeller(stat = c(mean = "Mean", sd = "SD"))) +
+        linewidth = 1
+        ),
+      colour = "black", sigma = 0, expand = 3
+      ) +
+    facet_wrap(
+      vars(stat), scales = "free_y", nrow = 1,
+      labeller = labeller(stat = c(mean = "Mean", sd = "SD"))
+      ) +
     facetted_pos_scales(
       y = list(
         stat == "mean" ~ scale_y_continuous(limits = c(0.70, 0.95)),
-        stat == "sd"   ~ scale_y_continuous(limits = c(0, 0.25))
-      )
-    ) +
-    scale_fill_manual(
-      values = PLOT.STYLES$colors,
-      labels = PLOT.STYLES$labels
+        stat == "sd" ~ scale_y_continuous(limits = c(0, 0.25))
+        )
       ) +
+    scale_fill_manual(values = PLOT.STYLES$colors,
+      labels = PLOT.STYLES$labels) +
     labs(title = title, x = "Chromosome", y = "African ancestry", fill = NULL) +
     theme_bw(base_size = PLOT.BASE.SIZE) +
     theme(legend.position = "top", panel.grid.minor = element_blank())
@@ -333,16 +452,14 @@ make.bootstrap.ancestry.bar.plot <- function(data, data.types, title) {
   }
 
 
-# construct chromosome-1 simulation and genome-wide ASW ancestry histograms
+# construct chromosome-1 simulation and genome-wide asw histograms.
 make.bootstrap.ancestry.histogram.plot <- function(data, data.types, title) {
-  plotted <- data %>% filter(
-    as.character(data.type) %in% data.types,
-    (
-      as.character(chrom) == "all" & data.type == "Empirical"
-      ) | (
-        as.character(chrom) == "1" & data.type != "Empirical"
-        )
-    ) %>%
+  plotted <- data %>%
+    filter(
+      as.character(data.type) %in% data.types,
+      (as.character(chrom) == "all" & data.type == "Empirical") |
+        (as.character(chrom) == "1" & data.type != "Empirical")
+      ) %>%
     mutate(data.type = factor(
       as.character(data.type),
       levels = order.active.levels(data.type, SOURCE.LEVELS)
@@ -354,1635 +471,23 @@ make.bootstrap.ancestry.histogram.plot <- function(data, data.types, title) {
       width = diff(HISTOGRAM.BREAKS)[1] * DENSE.BAR.WIDTH.MULTIPLIER,
       color = "black", linewidth = DENSE.BAR.LINEWIDTH
       ) +
-    geom_errorbar(aes(ymin = lower, ymax = upper),
-      position = dodge, width = 0, linewidth = DENSE.BAR.LINEWIDTH,
-      na.rm = TRUE) +
-    scale_fill_manual(
-      values = PLOT.STYLES$colors,
-      labels = PLOT.STYLES$labels
+    geom_errorbar(
+      aes(ymin = lower, ymax = upper), position = dodge, width = 0,
+      linewidth = DENSE.BAR.LINEWIDTH, na.rm = TRUE
       ) +
-    labs(title = title, x = "African ancestry", y = "Fraction of individuals",
-      fill = NULL) +
+    scale_fill_manual(values = PLOT.STYLES$colors,
+      labels = PLOT.STYLES$labels) +
+    labs(
+      title = title, x = "African ancestry", y = "Fraction of individuals",
+      fill = NULL
+      ) +
     theme_bw(base_size = PLOT.BASE.SIZE) +
     theme(legend.position = "top", panel.grid.minor = element_blank())
   return(plot)
   }
 
 
-# return the configured chromosome-level inference file family
-ancestry.inference.file.family <- function(method) {
-  if (!method %in% c("ADMIXTURE", "fastStructure")) {
-    stop("Unsupported ancestry inference method: ", method)
-    }
-  file.family <- paste0(
-    "ancestry_", method, "_multik.chr{chrom}.parquet"
-    )
-  return(file.family)
-  }
-
-
-# retain only ADX for simulations and ASW for empirical ancestry plots
-apply.ancestry.source.contract <- function(data) {
-  retained <- data %>%
-    filter(
-      (data.type %in% c(
-        "Simulation_2T12Consistent", "Simulation_largeGrowth",
-        "Simulation_2T12Consistent_simDown", "Simulation_largeGrowth_simDown"
-        ) & pop == "ADX") |
-        (data.type == "Empirical" & pop == "ASW")
-      ) %>%
-    mutate(data.type = factor(data.type, levels = SOURCE.LEVELS))
-  return(retained)
-}
-
-
-# standardize one ancestry table to the shared analysis schema
-normalize.ancestry.table <- function(
-    data, data.type.input, method, simulation.source.input, k,
-    population.mapping = NULL, sample.id.column = "sample_id"
-    ) {
-  # add shared identifiers, metadata, and optional population annotations
-  data$chrom <- as.character(data$chrom)
-  data$sample_id <- as.character(data[[sample.id.column]])
-  data$rep <- if ("rep" %in% names(data)) as.numeric(data$rep) else 0
-  data$data.type <- data.type.input
-  data$method <- method
-  data$simulation.source <- simulation.source.input
-  if (!is.null(population.mapping)) {
-    data <- left_join(data, population.mapping, by = "sample_id")
-    }
-  if (!"pop" %in% names(data)) data$pop <- NA_character_
-  if (!"role" %in% names(data)) data$role <- data$pop
-  if (!"vcf_sample_id" %in% names(data)) {
-    data$vcf_sample_id <- data$sample_id
-    }
-  if (!"span" %in% names(data)) data$span <- NA_real_
-
-  # normalize tspop truth or retain only the requested inference K
-  if (method == "tspop") {
-    data$component_1_q <- as.numeric(data$afr_tspop)
-    data$component_2_q <- as.numeric(data$eur_tspop)
-    data <- select(data, -afr_tspop, -eur_tspop)
-    data$k <- 0
-    } else {
-    components <- paste0("component_", seq_len(k), "_q")
-    if (!"k" %in% names(data)) data$k <- k
-    data <- filter(data, k == !!k)
-    }
-  # pad unused components and enforce numeric ancestry columns
-  for (component in paste0("component_", 3:5, "_q")) {
-    if (!component %in% names(data)) data[[component]] <- NA_real_
-    }
-  data <- data %>% mutate(
-    component_1_q = as.numeric(component_1_q),
-    component_2_q = as.numeric(component_2_q), span = as.numeric(span)
-    )
-
-  return(data)
-}
-
-
-# read chromosome or genome files for one ancestry source and normalize them
-read.ancestry.family <- function(
-    data.directory, file.family, chromosomes, data.type.input, method, k,
-    simulation.source.input, population.mapping = NULL,
-    sample.id.column = "sample_id", include.genome = FALSE,
-    genome.file.family = NULL
-    ) {
-  # expand the filename pattern into concrete chromosome paths
-  paths <- file.path(
-    path.expand(data.directory),
-    vapply(chromosomes, function(x) {
-      return(gsub("\\{chrom\\}", x, file.family))
-      }, character(1))
-    )
-  # warn once and retain every available chromosome file
-  skippable <- chromosomes != "all"
-  missing <- skippable & !file.exists(paths)
-  if (any(missing)) {
-    warning(
-      paste0(
-        data.type.input, " ", file.family,
-        " is unavailable for chromosomes: ",
-        paste(chromosomes[missing], collapse = ", ")
-        ),
-      call. = FALSE
-      )
-    }
-  chromosomes <- chromosomes[!missing]
-  paths <- paths[!missing]
-  # append the required whole-genome file when requested for empirical data
-  if (include.genome) {
-    chromosomes <- c(chromosomes, "all")
-    paths <- c(paths, file.path(
-      path.expand(data.directory), genome.file.family
-      ))
-    }
-  # read, label, normalize, and combine every requested table
-  data <- map2_dfr(paths, chromosomes, function(path, chrom) {
-    table <- read_parquet(path)
-    table$chrom <- chrom
-    return(normalize.ancestry.table(
-      table, data.type.input, method, simulation.source.input, k,
-      population.mapping, sample.id.column
-      ))
-    })
-
-  return(data)
-  }
-
-
-# orient K=2 components so afr.q consistently represents African ancestry
-orient.ancestry.components <- function(
-    data, admixed.roles, grouping.columns
-    ) {
-  # retain tspop truth and the configured K for inference methods
-  filtered <- filter(
-    data, method == "tspop" | k == SIMULATION.K | k == EMPIRICAL.K
-    )
-  # determine the African component within each analysis group
-  component.map <- filtered %>%
-    filter(role %in% admixed.roles) %>%
-    group_by(across(all_of(grouping.columns))) %>%
-    summarise(
-      component.1 = mean(component_1_q, na.rm = TRUE),
-      component.2 = mean(component_2_q, na.rm = TRUE), .groups = "drop"
-      ) %>%
-    mutate(afr.component = if_else(
-      component.1 >= component.2, "component_1_q", "component_2_q"
-      ))
-  # apply the orientation and discard the temporary component map
-  data <- filtered %>%
-    left_join(component.map, by = grouping.columns) %>%
-    mutate(
-      afr.q = if_else(
-        afr.component == "component_1_q", component_1_q, component_2_q
-        ),
-      eur.q = if_else(
-        afr.component == "component_1_q", component_2_q, component_1_q
-        )
-      ) %>%
-    select(-component.1, -component.2, -afr.component)
-
-  return(data)
-  }
-
-
-# select reproducible IDs per simulation size, replicate, and chromosome
-select.downsample.ids <- function(
-    data, downsample.size, sample.id.column, grouping.columns, seed,
-    empirical.method
-  ) {
-  # use truth for original simulations and inference for simDown sources
-  candidates <- data %>%
-    filter(
-      (data.type %in% c("Simulation_2T12Consistent", "Simulation_largeGrowth") &
-        method == "tspop") |
-        (data.type %in% c(
-          "Simulation_2T12Consistent_simDown", "Simulation_largeGrowth_simDown"
-          ) & method == empirical.method)
-      ) %>%
-    distinct(across(all_of(c(grouping.columns, sample.id.column))))
-  # verify only simulation groups represented by files that were read
-  expected.groups <- candidates %>%
-    distinct(across(all_of(grouping.columns)))
-  sizes <- candidates %>%
-    count(across(all_of(grouping.columns)), name = "available")
-  sizes <- expected.groups %>%
-    left_join(sizes, by = grouping.columns) %>%
-    mutate(available = replace_na(available, 0L))
-  if (any(sizes$available < downsample.size)) {
-    stop(paste0(
-      "A simulation group contains fewer than ", downsample.size,
-      " candidates"
-      ))
-    }
-  # draw reproducibly while allowing selections to vary by replicate
-  set.seed(seed)
-  selected.ids <- candidates %>%
-    group_by(across(all_of(grouping.columns))) %>%
-    mutate(.draw.group = cur_group_id(), .random.order = runif(n())) %>%
-    arrange(.random.order, .by_group = TRUE) %>%
-    group_modify(function(group, key) {
-      start <- ((first(group$.draw.group) - 1) %% nrow(group)) + 1
-      indices <- ((start - 1 + seq_len(downsample.size) - 1) %%
-        nrow(group)) + 1
-      return(slice(group, indices))
-      }) %>%
-    ungroup() %>%
-    select(-.draw.group, -.random.order) %>%
-    select(all_of(c(grouping.columns, sample.id.column))) %>%
-    arrange(across(all_of(grouping.columns)), .data[[sample.id.column]])
-
-  return(selected.ids)
-  }
-
-
-# add full and downsampled rows using the shared selected identifiers
-apply.downsample.ids <- function(
-    data, selected.ids, sample.id.column, grouping.columns
-  ) {
-  # reject duplicate selections that would multiply joined observations
-  duplicates <- selected.ids %>%
-    count(across(all_of(c(grouping.columns, sample.id.column)))) %>%
-    filter(n != 1)
-  if (nrow(duplicates)) stop("Selected sample IDs are not unique")
-  # retain all rows as full and duplicate selected simulation rows only
-  full <- mutate(data, sample.set = "full")
-  downsampled <- data %>%
-    filter(data.type != "Empirical") %>%
-    inner_join(selected.ids, by = c(grouping.columns, sample.id.column)) %>%
-    mutate(sample.set = "downsampled")
-  data <- bind_rows(full, downsampled)
-
-  return(data)
-  }
-
-
-# calculate a percentile bootstrap interval for a supplied statistic.
-bootstrap.interval <- function(values, statistic, replicates, seed) {
-  # calculate the interval from the configured deterministic resamples.
-  estimates <- bootstrap.estimates(values, statistic, replicates, seed)
-  if (all(is.na(estimates))) return(c(NA_real_, NA_real_))
-  interval <- as.numeric(
-    quantile(estimates, c(0.025, 0.975), names = FALSE)
-    )
-
-  return(interval)
-  }
-
-
-# return deterministic bootstrap estimates for one supplied statistic
-bootstrap.estimates <- function(values, statistic, replicates, seed) {
-  # return undefined estimates when the sample or bootstrap is too small.
-  if (length(values) < 2 || replicates < 2) return(NA_real_)
-  # resample deterministically to retain the full bootstrap distribution.
-  set.seed(seed)
-  estimates <- replicate(replicates, {
-    statistic(sample(values, length(values), replace = TRUE))
-    })
-
-  return(estimates)
-  }
-
-
-# estimate the ancestry mode on a fixed, bounded Gaussian KDE grid
-estimate.ancestry.mode <- function(values) {
-  # return the observation directly when bandwidth estimation is undefined
-  if (length(unique(values)) == 1) return(values[[1]])
-  estimate <- density(
-    values, kernel = "gaussian", from = 0, to = 1
-    )
-  mode <- estimate$x[which.max(estimate$y)]
-
-  return(mode)
-  }
-
-
-# summarize ancestry and add empirical bootstrap uncertainty intervals
-summarize.ancestry <- function(
-    data, grouping.columns, bootstrap.replicates, bootstrap.seed,
-    admixed.roles = "ADX"
-  ) {
-  # compute descriptive statistics within each requested analysis group
-  result <- data %>%
-    filter(role %in% admixed.roles, !is.na(afr.q)) %>%
-    group_by(across(all_of(grouping.columns))) %>%
-    group_modify(function(group, key) {
-      x <- group$afr.q
-      empirical <- key$data.type[[1]] == "Empirical"
-      mean.estimates <- if (empirical) bootstrap.estimates(
-        x, mean, bootstrap.replicates, bootstrap.seed
-        ) else NA_real_
-      sd.estimates <- if (empirical) bootstrap.estimates(
-        x, sd, bootstrap.replicates, bootstrap.seed + 1
-        ) else NA_real_
-      mode.estimates <- if (empirical) bootstrap.estimates(
-        x, estimate.ancestry.mode, bootstrap.replicates,
-        bootstrap.seed + 2
-        ) else NA_real_
-      mean.ci <- if (empirical) as.numeric(
-        quantile(mean.estimates, c(0.025, 0.975), names = FALSE)
-        ) else c(NA_real_, NA_real_)
-      sd.ci <- if (empirical) as.numeric(
-        quantile(sd.estimates, c(0.025, 0.975), names = FALSE)
-        ) else c(NA_real_, NA_real_)
-      mode.ci <- if (empirical) as.numeric(
-        quantile(mode.estimates, c(0.025, 0.975), names = FALSE)
-        ) else c(NA_real_, NA_real_)
-      return(tibble(
-        mean = mean(x), mode = estimate.ancestry.mode(x), sd = sd(x),
-        median = median(x),
-        q25 = quantile(x, 0.25, names = FALSE),
-        q75 = quantile(x, 0.75, names = FALSE), n = length(x),
-        mean.boot = if (empirical) mean(x) else NA_real_,
-        mean.boot.lower = mean.ci[1], mean.boot.upper = mean.ci[2],
-        mean.boot.estimates = list(mean.estimates),
-        sd.boot = if (empirical) sd(x) else NA_real_,
-        sd.boot.lower = sd.ci[1], sd.boot.upper = sd.ci[2],
-        sd.boot.estimates = list(sd.estimates),
-        mode.boot = if (empirical) estimate.ancestry.mode(x) else NA_real_,
-        mode.boot.lower = mode.ci[1], mode.boot.upper = mode.ci[2],
-        mode.boot.estimates = list(mode.estimates)
-        ))
-      }) %>%
-    ungroup()
-  # reshape downsampled statistics for side-by-side inspection
-  downsampled <- result %>%
-    filter(sample.set == "downsampled") %>%
-    select(-sample.set, -contains("boot")) %>%
-    rename(
-      mean.rand.downsample = mean, mode.rand.downsample = mode,
-      sd.rand.downsample = sd,
-      median.rand.downsample = median, q25.rand.downsample = q25,
-      q75.rand.downsample = q75, n.rand.downsample = n
-      )
-  # join downsampled values onto their corresponding summary groups
-  result <- left_join(result, downsampled,
-    by = setdiff(grouping.columns, "sample.set")
-    )
-
-  return(result)
-  }
-
-
-# convert ancestry values into replicate-aggregated histogram bins
-summarize.histograms <- function(
-    data, breaks, chromosomes, admixed.roles = "ADX"
-  ) {
-  # keep valid admixed values and empirical-only whole-genome rows
-  histogram.data <- data %>%
-    filter(
-      role %in% admixed.roles, !is.na(afr.q), between(afr.q, 0, 1),
-      chrom %in% c(chromosomes, "all"),
-      !(chrom == "all" & data.type != "Empirical")
-      ) %>%
-    # calculate normalized bin counts independently for each replicate
-    mutate(chrom = factor(chrom, levels = c(chromosomes, "all"))) %>%
-    group_by(chrom, rep, data.type, simulation.source, method, sample.set) %>%
-    group_modify(function(group, key) {
-      h <- hist(group$afr.q, breaks = breaks, plot = FALSE)
-      return(tibble(
-        xmin = head(h$breaks, -1), xmax = tail(h$breaks, -1),
-        xmid = h$mids, fraction = h$counts / sum(h$counts)
-        ))
-      }) %>%
-    ungroup() %>%
-    # aggregate replicate fractions and calculate simulation error bounds
-    group_by(
-      chrom, data.type, simulation.source, method, sample.set,
-      xmin, xmax, xmid
-      ) %>%
-    summarise(
-      mean.frac = mean(fraction),
-      sd.frac = if (n() > 1) sd(fraction) else NA_real_,
-      n.rep = n_distinct(rep), .groups = "drop"
-      ) %>%
-    mutate(
-      ymin = if_else(data.type == "Empirical", NA_real_,
-        pmax(0, mean.frac - 2 * sd.frac)
-        ),
-      ymax = if_else(data.type == "Empirical", NA_real_,
-        mean.frac + 2 * sd.frac
-        )
-      )
-
-  return(histogram.data)
-  }
-
-
-# validate plot choices and resolve inferred simulation ancestry
-resolve.plot.choices <- function(empirical.method, sample.set.input) {
-  # validate each editable top-level choice independently
-  if (!empirical.method %in% c("ADMIXTURE", "fastStructure")) {
-    stop(
-      "Unsupported empirical method: ", empirical.method,
-      ". Use ADMIXTURE or fastStructure."
-      )
-    }
-  if (!sample.set.input %in% c("full", "downsampled")) {
-    stop(
-      "Unsupported sample set: ", sample.set.input,
-      ". Use full or downsampled."
-      )
-    }
-  choices <- list(
-    empirical.method = empirical.method,
-    sample.set = sample.set.input,
-    subtitle = paste0(
-      "TC and LG: tspop; TC D., LG D., and Emp.: ",
-      empirical.method
-      )
-    )
-
-  return(choices)
-  }
-
-
-# select the requested simulation series and empirical references
-prepare.plot.data <- function(
-    summary.data, empirical.method, sample.set.input, chromosomes,
-    data.types, tag
-  ) {
-  # resolve the editable settings before selecting any rows
-  choices <- resolve.plot.choices(
-    empirical.method, sample.set.input
-    )
-  if (!tag %in% names(PLOT.CONFIGS)) {
-    stop("Unsupported ancestry plot tag: ", tag)
-    }
-  if (!identical(data.types, PLOT.CONFIGS[[tag]])) {
-    stop("Ancestry data types do not match the configured tag")
-    }
-  # pair one simulation subset with complete empirical reference data
-  plot.data <- summary.data %>%
-    filter(
-      (data.type %in% c("Simulation_2T12Consistent", "Simulation_largeGrowth") &
-        data.type %in% data.types &
-        method == "tspop" & sample.set == choices$sample.set &
-        chrom %in% chromosomes) |
-        (data.type %in% c(
-          "Simulation_2T12Consistent_simDown", "Simulation_largeGrowth_simDown"
-        ) & data.type %in% data.types &
-          method == choices$empirical.method &
-          sample.set == choices$sample.set & chrom %in% chromosomes) |
-        (data.type == "Empirical" & data.type %in% data.types &
-          method == choices$empirical.method &
-          sample.set == "full" & chrom %in% c(chromosomes, "all"))
-      ) %>%
-    mutate(
-      chrom = factor(chrom, levels = c(chromosomes, "all")),
-      data.type = factor(
-        data.type,
-        levels = order.active.levels(data.type, SOURCE.LEVELS)
-        ),
-      series = factor(
-        data.type,
-        levels = order.active.levels(data.type, SOURCE.LEVELS)
-        )
-      ) %>%
-    droplevels()
-  attr(plot.data, "plot.choices") <- choices
-
-  return(plot.data)
-  }
-
-
-# build a chromosome plot for one ancestry summary statistic
-make.stat.by.chrom.plot <- function(
-    summary.data, empirical.method, sample.set.input, chromosomes, styles,
-    statistic, y.label, data.types, tag
-  ) {
-  # separate simulation distributions from empirical reference values
-  data <- prepare.plot.data(
-    summary.data, empirical.method, sample.set.input, chromosomes,
-    data.types, tag
-    )
-  choices <- attr(data, "plot.choices")
-  simulation <- filter(data, data.type != "Empirical")
-  empirical <- filter(data, data.type == "Empirical")
-  genome <- filter(empirical, chrom == "all")
-  empirical.chrom <- filter(empirical, chrom != "all")
-  lower <- paste0(statistic, ".boot.lower")
-  upper <- paste0(statistic, ".boot.upper")
-  estimate <- paste0(statistic, ".boot")
-  color <- styles$empirical.colors[[choices$empirical.method]]
-  title <- c(
-    mean = "Mean African Ancestry Across Chromosomes",
-    mode = "Mode of African Ancestry Across Chromosomes",
-    sd = "Variation in African Ancestry Across Chromosomes"
-    )[[statistic]]
-  # draw simulation boxes with empirical chromosome and genome uncertainty
-  plot <- ggplot(simulation, aes(chrom, .data[[statistic]], fill = series)) +
-    geom_rect(data = genome,
-      aes(xmin = -Inf, xmax = Inf, ymin = .data[[lower]],
-        ymax = .data[[upper]]),
-      inherit.aes = FALSE, fill = color, alpha = 0.1
-      ) +
-    geom_hline(data = genome, aes(yintercept = .data[[estimate]]),
-      color = color, linetype = "dashed"
-      ) +
-    geom_boxplot(aes(group = interaction(chrom, series)), outlier.shape = NA) +
-    geom_errorbar(data = empirical.chrom,
-      aes(x = chrom, ymin = .data[[lower]], ymax = .data[[upper]]),
-      inherit.aes = FALSE, color = color, linewidth = 0.6, width = 0
-      ) +
-    geom_point(data = empirical.chrom, aes(chrom, .data[[estimate]]),
-      inherit.aes = FALSE, shape = 23, size = 3, fill = color
-      ) +
-    scale_x_discrete(limits = chromosomes, drop = FALSE) +
-    scale_fill_manual(values = styles$colors, labels = styles$labels) +
-    labs(
-      title = title, subtitle = choices$subtitle,
-      x = "Chromosome", y = y.label, fill = NULL
-      ) +
-    theme_bw(base_size = PLOT.BASE.SIZE) +
-    theme(
-      legend.position = "top",
-      legend.direction = "horizontal",
-      legend.box = "horizontal",
-      panel.grid.minor = element_blank()
-      )
-
-  return(plot)
-  }
-
-
-# build the chromosome-level mean ancestry plot
-make.mean.by.chrom.plot <- function(
-    summary.data, empirical.method, sample.set.input, chromosomes, styles,
-    data.types, tag
-  ) {
-  # delegate construction using the mean statistic and axis label
-  plot <- make.stat.by.chrom.plot(
-    summary.data, empirical.method, sample.set.input, chromosomes, styles,
-    "mean",
-    "Mean African ancestry", data.types, tag
-    )
-
-  return(plot)
-  }
-
-
-# build the chromosome-level mode ancestry plot
-make.mode.by.chrom.plot <- function(
-    summary.data, empirical.method, sample.set.input, chromosomes, styles,
-    data.types, tag
-  ) {
-  # delegate construction using the KDE mode statistic and axis label
-  plot <- make.stat.by.chrom.plot(
-    summary.data, empirical.method, sample.set.input, chromosomes, styles,
-    "mode",
-    "Mode of African ancestry", data.types, tag
-    )
-
-  return(plot)
-  }
-
-
-# build the chromosome-level ancestry standard-deviation plot
-make.sd.by.chrom.plot <- function(
-    summary.data, empirical.method, sample.set.input, chromosomes, styles,
-    data.types, tag
-  ) {
-  # delegate construction using the SD statistic and axis label
-  plot <- make.stat.by.chrom.plot(
-    summary.data, empirical.method, sample.set.input, chromosomes, styles,
-    "sd",
-    "Standard deviation of African ancestry", data.types, tag
-    )
-
-  return(plot)
-  }
-
-
-# build vertically faceted chromosome ancestry-summary plots
-make.summary.by.chrom.plot <- function(
-    summary.data, empirical.method, sample.set.input, chromosomes, styles,
-    data.types, tag
-  ) {
-  # reshape simulation summaries into one plotting table
-  data <- prepare.plot.data(
-    summary.data, empirical.method, sample.set.input, chromosomes,
-    data.types, tag
-    )
-  choices <- attr(data, "plot.choices")
-  simulation <- data %>%
-    filter(data.type != "Empirical") %>%
-    pivot_longer(
-      c(mean, mode, sd), names_to = "stat", values_to = "estimate"
-      ) %>%
-    mutate(stat = factor(stat, levels = c("mean", "mode", "sd")))
-  # reshape empirical estimates, bounds, and bootstrap draws by statistic
-  empirical.summary <- data %>%
-    filter(data.type == "Empirical") %>%
-    select(
-      chrom, data.type, simulation.source, method, sample.set, series,
-      starts_with("mean.boot"), starts_with("mode.boot"),
-      starts_with("sd.boot")
-      )
-  empirical <- bind_rows(
-    transmute(
-      empirical.summary, chrom, data.type, simulation.source, method,
-      sample.set,
-      series, stat = "mean", estimate = mean.boot,
-      lower = mean.boot.lower, upper = mean.boot.upper
-      ),
-    transmute(
-      empirical.summary, chrom, data.type, simulation.source, method,
-      sample.set,
-      series, stat = "mode", estimate = mode.boot,
-      lower = mode.boot.lower, upper = mode.boot.upper
-      ),
-    transmute(
-      empirical.summary, chrom, data.type, simulation.source, method,
-      sample.set,
-      series, stat = "sd", estimate = sd.boot,
-      lower = sd.boot.lower, upper = sd.boot.upper
-      )
-    ) %>%
-    mutate(stat = factor(stat, levels = c("mean", "mode", "sd")))
-  empirical.chrom <- empirical.summary %>%
-    filter(chrom != "all") %>%
-    select(
-      chrom, data.type, simulation.source, method, sample.set, series,
-      mean.boot.estimates, mode.boot.estimates, sd.boot.estimates
-      ) %>%
-    pivot_longer(
-      c(mean.boot.estimates, mode.boot.estimates, sd.boot.estimates),
-      names_to = "stat", values_to = "estimate"
-    ) %>%
-    mutate(
-      stat = str_remove(stat, fixed(".boot.estimates")),
-      stat = factor(stat, levels = c("mean", "mode", "sd"))
-      ) %>%
-    unnest(estimate)
-  # combine simulation summaries and empirical bootstrap draws for shared boxes
-  boxplot.data <- bind_rows(
-    simulation %>% select(series, chrom, stat, estimate),
-    empirical.chrom %>% select(series, chrom, stat, estimate)
-    )
-  color <- styles$empirical.colors[[choices$empirical.method]]
-  # draw all summaries with chromosome and genome empirical references
-  plot <- ggplot(boxplot.data, aes(chrom, estimate, fill = series)) +
-    geom_rect(data = filter(empirical, chrom == "all"),
-      aes(xmin = -Inf, xmax = Inf, ymin = lower, ymax = upper),
-      inherit.aes = FALSE, fill = color, alpha = 0.1
-      ) +
-    geom_hline(data = filter(empirical, chrom == "all"),
-      aes(yintercept = estimate),
-      color = color, linetype = "dashed"
-      ) +
-    geom_boxplot(aes(group = interaction(chrom, series)), outliers = FALSE) +
-    facet_grid(
-      rows = vars(stat), scales = "free_y",
-      labeller = labeller(stat = c(
-        mean = "Mean",
-        mode = "Mode",
-        sd = "SD"
-        ))
-      ) +
-    scale_x_discrete(limits = chromosomes, drop = FALSE) +
-    scale_fill_manual(values = styles$colors, labels = styles$labels) +
-    labs(
-      title = "African Ancestry Summaries Across Chromosomes",
-      subtitle = choices$subtitle,
-      x = "Chromosome", y = NULL, fill = NULL
-      ) +
-    theme_bw(base_size = PLOT.BASE.SIZE) +
-    theme(
-      legend.position = "top",
-      legend.direction = "horizontal",
-      legend.box = "horizontal"
-      )
-
-  return(plot)
-  }
-
-
-# relate chromosome length to one ancestry summary statistic
-make.length.stat.plot <- function(
-    summary.data, chromosome.lengths, empirical.method,
-    sample.set.input, chromosomes, styles, statistic, y.label,
-    data.types, tag
-  ) {
-  # aggregate replicates and attach the appropriate chromosome length
-  selected.data <- prepare.plot.data(
-    summary.data, empirical.method, sample.set.input, chromosomes,
-    data.types, tag
-    )
-  choices <- attr(selected.data, "plot.choices")
-  data <- selected.data %>%
-    filter(chrom != "all") %>%
-    mutate(chrom = as.character(chrom)) %>%
-    group_by(
-      chrom, data.type, simulation.source, method, sample.set, series
-      ) %>%
-    summarise(estimate = median(.data[[statistic]]), .groups = "drop") %>%
-    left_join(chromosome.lengths, by = "chrom") %>%
-    mutate(chr.len.mb = chr_len / 1e6)
-  if (any(is.na(data$chr.len.mb))) {
-    stop("Chromosome lengths are unavailable for requested data")
-    }
-  title <- c(
-    mean = "Chromosome Length and Mean African Ancestry Across Autosomes",
-    mode = "Chromosome Length and Mode of African Ancestry Across Autosomes",
-    sd = "Chromosome Length and African Ancestry Variation Across Autosomes"
-    )[[statistic]]
-  # draw per-series linear trends and chromosome-level estimates
-  plot <- ggplot(data, aes(chr.len.mb, estimate, color = series,
-    linetype = sample.set, group = series)) +
-    geom_smooth(method = "lm", formula = y ~ x, se = FALSE) +
-    geom_point(aes(shape = sample.set, fill = series), size = 3) +
-    scale_color_manual(
-      values = styles$colors, labels = styles$labels, name = NULL
-      ) +
-    scale_fill_manual(
-      values = styles$colors, labels = styles$labels, name = NULL
-      ) +
-    scale_shape_manual(values = styles$shapes) +
-    scale_linetype_manual(values = styles$linetypes) +
-    labs(
-      title = title, subtitle = choices$subtitle,
-      x = "Chromosome length (Mb)", y = y.label,
-      color = NULL, fill = NULL, shape = NULL, linetype = NULL
-      ) +
-    guides(shape = "none", linetype = "none") +
-    theme_bw(base_size = PLOT.BASE.SIZE) +
-    theme(
-      legend.position = "top",
-      legend.direction = "horizontal",
-      legend.box = "horizontal"
-      )
-
-  return(plot)
-  }
-
-
-# build the chromosome-length versus mean-ancestry plot
-make.length.mean.plot <- function(
-    summary.data, chromosome.lengths, empirical.method,
-    sample.set.input, chromosomes, styles, data.types, tag
-  ) {
-  # delegate shared length plotting using the mean statistic
-  plot <- make.length.stat.plot(
-    summary.data, chromosome.lengths, empirical.method,
-    sample.set.input, chromosomes, styles, "mean",
-    "Mean African ancestry", data.types, tag
-    )
-
-  return(plot)
-  }
-
-
-# build the chromosome-length versus mode-ancestry plot
-make.length.mode.plot <- function(
-    summary.data, chromosome.lengths, empirical.method,
-    sample.set.input, chromosomes, styles, data.types, tag
-  ) {
-  # delegate shared length plotting using the KDE mode statistic
-  plot <- make.length.stat.plot(
-    summary.data, chromosome.lengths, empirical.method,
-    sample.set.input, chromosomes, styles, "mode",
-    "Mode of African ancestry", data.types, tag
-    )
-
-  return(plot)
-  }
-
-
-# build the chromosome-length versus ancestry-SD plot
-make.length.sd.plot <- function(
-    summary.data, chromosome.lengths, empirical.method,
-    sample.set.input, chromosomes, styles, data.types, tag
-  ) {
-  # delegate shared length plotting using the standard deviation
-  plot <- make.length.stat.plot(
-    summary.data, chromosome.lengths, empirical.method,
-    sample.set.input, chromosomes, styles, "sd",
-    "Standard deviation of African ancestry", data.types, tag
-    )
-
-  return(plot)
-  }
-
-
-# build vertically faceted chromosome-length ancestry-summary plots
-make.summary.by.contig.len.plot <- function(
-    summary.data, chromosome.lengths, empirical.method,
-    sample.set.input, chromosomes, styles, data.types, tag
-  ) {
-  # select plot rows and reshape summaries before replicate aggregation
-  selected.data <- prepare.plot.data(
-    summary.data, empirical.method, sample.set.input, chromosomes,
-    data.types, tag
-    )
-  choices <- attr(selected.data, "plot.choices")
-  data <- selected.data %>%
-    filter(chrom != "all") %>%
-    mutate(chrom = as.character(chrom)) %>%
-    pivot_longer(
-      c(mean, mode, sd), names_to = "stat", values_to = "estimate"
-      ) %>%
-    mutate(stat = factor(stat, levels = c("mean", "mode", "sd"))) %>%
-    group_by(
-      chrom, data.type, simulation.source, method, sample.set, series,
-      stat
-      ) %>%
-    summarise(estimate = median(estimate), .groups = "drop") %>%
-    left_join(chromosome.lengths, by = "chrom") %>%
-    mutate(chr.len.mb = chr_len / 1e6)
-  if (any(is.na(data$chr.len.mb))) {
-    stop("Chromosome lengths are unavailable for requested data")
-    }
-  # preserve per-series trends and points in both statistic panels
-  plot <- ggplot(data, aes(
-    chr.len.mb, estimate, color = series,
-    linetype = sample.set, group = series
-    )) +
-    geom_smooth(method = "lm", formula = y ~ x, se = FALSE) +
-    geom_point(aes(shape = sample.set, fill = series), size = 3) +
-    facet_grid(
-      rows = vars(stat), scales = "free_y",
-      labeller = labeller(stat = c(
-        mean = "Mean",
-        mode = "Mode",
-        sd = "SD"
-        ))
-      ) +
-    scale_color_manual(
-      values = styles$colors, labels = styles$labels, name = NULL
-      ) +
-    scale_fill_manual(
-      values = styles$colors, labels = styles$labels, name = NULL
-      ) +
-    scale_shape_manual(values = styles$shapes) +
-    scale_linetype_manual(values = styles$linetypes) +
-    labs(
-      title = paste(
-        "Chromosome Length and African Ancestry Summaries",
-        "Across Autosomes"
-        ),
-      subtitle = choices$subtitle,
-      x = "Chromosome length (Mb)", y = NULL,
-      color = NULL, fill = NULL, shape = NULL, linetype = NULL
-      ) +
-    guides(shape = "none", linetype = "none") +
-    theme_bw(base_size = PLOT.BASE.SIZE) +
-    theme(
-      legend.position = "top",
-      legend.direction = "horizontal",
-      legend.box = "horizontal"
-      )
-
-  return(plot)
-  }
-
-
-# select histogram rows using the resolved primary plot choices
-prepare.histogram.plot.data <- function(
-    histogram.data, empirical.method, sample.set.input, chromosomes,
-    data.types, tag, show.all = TRUE
-  ) {
-  # resolve choices before selecting simulations and empirical references
-  choices <- resolve.plot.choices(
-    empirical.method, sample.set.input
-    )
-  if (!tag %in% names(PLOT.CONFIGS)) {
-    stop("Unsupported ancestry histogram tag: ", tag)
-    }
-  if (!identical(data.types, PLOT.CONFIGS[[tag]])) {
-    stop("Histogram data types do not match the configured tag")
-    }
-  data <- histogram.data %>%
-    filter(
-      (data.type %in% c("Simulation_2T12Consistent", "Simulation_largeGrowth") &
-        data.type %in% data.types &
-        method == "tspop" & sample.set == choices$sample.set &
-        chrom %in% chromosomes) |
-        (data.type %in% c(
-          "Simulation_2T12Consistent_simDown", "Simulation_largeGrowth_simDown"
-          ) & data.type %in% data.types &
-          method == choices$empirical.method &
-          sample.set == choices$sample.set & chrom %in% chromosomes) |
-        (data.type == "Empirical" & data.type %in% data.types &
-          method == choices$empirical.method &
-          sample.set == "full" & chrom %in% c(
-            chromosomes, if (show.all) "all"
-            ))
-      ) %>%
-    mutate(
-      data.type = factor(
-        data.type,
-        levels = order.active.levels(data.type, SOURCE.LEVELS)
-        ),
-      series = factor(
-        data.type,
-        levels = order.active.levels(data.type, SOURCE.LEVELS)
-        )
-      ) %>%
-    droplevels()
-  attr(data, "plot.choices") <- choices
-
-  return(data)
-  }
-
-
-# build chromosome histograms with replicate uncertainty for simulations
-make.histogram.plot <- function(
-    histogram.data, empirical.method, sample.set.input, chromosomes,
-    breaks, styles, data.types, tag, show.all = TRUE
-  ) {
-  # select one simulation subset plus complete empirical references
-  data <- prepare.histogram.plot.data(
-    histogram.data, empirical.method, sample.set.input, chromosomes,
-    data.types, tag, show.all
-    ) %>%
-    filter(
-      as.character(chrom) %in% chromosomes |
-        (show.all & data.type == "Empirical" & chrom == "all")
-      ) %>%
-    mutate(chrom = factor(
-      as.character(chrom),
-      levels = c(chromosomes, if (show.all) "all")
-      ))
-  choices <- attr(data, "plot.choices")
-  dodge <- position_dodge(width = diff(breaks)[1])
-  # draw aligned bins, simulation errors, and the empirical all facet
-  plot <- ggplot(data, aes(xmid, mean.frac, fill = series, group = series)) +
-    geom_col(
-      position = dodge,
-      width = diff(breaks)[1] * DENSE.BAR.WIDTH.MULTIPLIER,
-      color = "black", linewidth = DENSE.BAR.LINEWIDTH
-      ) +
-    geom_errorbar(
-      aes(ymin = ymin, ymax = ymax), position = dodge,
-      linewidth = DENSE.BAR.LINEWIDTH, width = 0
-      ) +
-    facet_wrap(~ chrom, ncol = 3, drop = TRUE) +
-    scale_x_continuous(limits = c(0, 1), breaks = seq(0, 1, 0.2)) +
-    scale_fill_manual(values = styles$colors, labels = styles$labels) +
-    labs(
-      title = "Distribution of African Ancestry Across Chromosomes",
-      subtitle = choices$subtitle,
-      x = "African ancestry",
-      y = "Mean fraction of individuals per bin", fill = NULL
-      ) +
-    theme_bw(base_size = PLOT.BASE.SIZE) +
-    theme(
-      legend.position = "top",
-      legend.direction = "horizontal",
-      legend.box = "horizontal"
-      )
-
-  return(plot)
-  }
-
-
-# build faceted admixture plot for diagnostic inspection
-make.diagnostic.admixture.plot <- function(
-    individual.data, chromosomes, component.columns, sample.id.column,
-    facet.columns, component.colors
-  ) {
-  # validate identifiers, component columns, and requested facets
-  required <- c(
-    "chrom", "data.type", "method", "sample.set", component.columns,
-    sample.id.column, facet.columns
-    )
-  missing <- setdiff(required, names(individual.data))
-  if (length(missing)) {
-    stop("Diagnostic data are missing: ", paste(missing, collapse = ", "))
-    }
-  # reshape ancestry components into stacked-bar observations
-  data <- individual.data %>%
-    filter(chrom %in% chromosomes) %>%
-    pivot_longer(all_of(component.columns),
-      names_to = "component", values_to = "q")
-  # derive concise diagnostic labels from the supplied data subset
-  data.type.labels <- individual.data %>%
-    filter(chrom %in% chromosomes) %>%
-    pull(data.type) %>%
-    unique() %>%
-    str_replace_all("_", " ") %>%
-    str_to_title()
-  methods <- individual.data %>%
-    filter(chrom %in% chromosomes) %>%
-    pull(method) %>%
-    unique()
-  sample.sets <- individual.data %>%
-    filter(chrom %in% chromosomes) %>%
-    pull(sample.set) %>%
-    unique()
-  title <- paste(
-    paste(data.type.labels, collapse = " / "),
-    "Ancestry Component Profiles"
-    )
-  subtitle <- paste0(
-    "Method: ", paste(sort(methods), collapse = " / "),
-    " · Sample set: ", paste(sort(sample.sets), collapse = " / ")
-    )
-  # draw one free-width panel for every requested diagnostic group
-  plot <- ggplot(data, aes(.data[[sample.id.column]], q, fill = component)) +
-    geom_col() +
-    facet_wrap(vars(!!!rlang::syms(c(facet.columns, "chrom"))),
-      scales = "free_x") +
-    scale_fill_manual(values = component.colors) +
-    labs(
-      title = title, subtitle = subtitle,
-      x = NULL, y = "Ancestry proportion", fill = NULL
-      ) +
-    theme_bw(base_size = PLOT.BASE.SIZE) +
-    theme(
-      legend.position = "top",
-      legend.direction = "horizontal",
-      legend.box = "horizontal",
-      axis.text.x = element_blank(),
-      axis.ticks.x = element_blank()
-      )
-
-  return(plot)
-  }
-
-
-# read all requested empirical ADMIXTURE K values for the diagnostic alone
-read.empirical.admixture.diagnostic <- function(data.directory, ks) {
-  data <- read_parquet(file.path(
-    path.expand(data.directory), "ancestry_ADMIXTURE_multik.parquet"
-    ))
-  required <- c("sample_id", "pop", "k")
-  missing <- setdiff(required, names(data))
-  if (length(missing)) {
-    stop("Empirical ADMIXTURE diagnostic is missing: ",
-         paste(missing, collapse = ", "))
-    }
-  component.columns <- paste0("component_", seq_len(max(ks)), "_q")
-  missing <- setdiff(component.columns, names(data))
-  if (length(missing)) {
-    stop("Empirical ADMIXTURE diagnostic is missing: ",
-         paste(missing, collapse = ", "))
-    }
-  diagnostic <- data %>%
-    filter(k %in% ks, pop %in% c("YRI", "ASW", "CEU")) %>%
-    mutate(
-      pop = factor(pop, levels = POPULATION.LEVELS[4:6]),
-      k = factor(k, levels = ks)
-      ) %>%
-    arrange(pop, sample_id) %>%
-    mutate(sample_id = factor(sample_id, levels = unique(sample_id))) %>%
-    pivot_longer(
-      all_of(component.columns),
-      names_to = "component", values_to = "q"
-      ) %>%
-    mutate(component.number = as.integer(str_extract(component, "[0-9]+"))) %>%
-    filter(component.number <= as.integer(as.character(k)))
-  return(diagnostic)
-  }
-
-
-# build a K-faceted whole-genome empirical ADMIXTURE diagnostic
-make.empirical.admixture.diagnostic.plot <- function(data, component.colors) {
-  plot <- ggplot(data, aes(sample_id, q, fill = component)) +
-    geom_col() +
-    facet_wrap(~ k, nrow = 1, scales = "free_x") +
-    scale_fill_manual(values = component.colors) +
-    labs(
-      title = "Empirical ADMIXTURE Component Profiles",
-      subtitle = "Whole genome; populations ordered YRI, ASW, then CEU",
-      x = NULL, y = "Ancestry proportion", fill = NULL
-      ) +
-    theme_bw(base_size = PLOT.BASE.SIZE) +
-    theme(
-      legend.position = "top",
-      legend.direction = "horizontal",
-      legend.box = "horizontal",
-      axis.text.x = element_blank(),
-      axis.ticks.x = element_blank()
-      )
-  return(plot)
-  }
-
-
-# read and combine chromosome-labelled fastStructure choose-K diagnostics
-read.choose.k.diagnostics <- function(
-    data.directory, file.family, chromosomes
-  ) {
-  # expand paths and warn once before reading the available collection
-  paths <- file.path(path.expand(data.directory), vapply(
-    chromosomes,
-    function(x) return(gsub("\\{chrom\\}", x, file.family)),
-    character(1)
-    ))
-  missing <- chromosomes != "all" & !file.exists(paths)
-  if (any(missing)) {
-    warning(
-      paste0(
-        file.family, " is unavailable for chromosomes: ",
-        paste(chromosomes[missing], collapse = ", ")
-        ),
-      call. = FALSE
-      )
-    }
-  paths <- paths[!missing]
-  chromosomes <- chromosomes[!missing]
-  # read each table and supply its chromosome when absent
-  diagnostics <- map2_dfr(paths, chromosomes, function(path, chrom) {
-    data <- read_parquet(path)
-    if (!"chrom" %in% names(data)) data$chrom <- chrom
-    return(data)
-    })
-
-  return(diagnostics)
-  }
-
-
-# prepare one validated long table for all ancestry statistical analyses
-prepare.ancestry.statistics.data <- function(
-    summary.data = ancestry.summary.data,
-    empirical.method = PLOT.EMPIRICAL.METHOD,
-    sample.set.input = PLOT.SAMPLE.SET,
-    chromosomes = CHROMOSOMES,
-    require.genome = TRUE,
-    require.chromosome.reference = TRUE
-  ) {
-  # validate the autosome request and columns used by every analysis
-  chromosomes <- as.character(chromosomes)
-  if (!setequal(chromosomes, as.character(1:22)) ||
-      length(unique(chromosomes)) != 22) {
-    stop("Ancestry statistics require exactly 22 chromosomes (1-22)")
-    }
-  required <- c(
-    "rep", "chrom", "data.type", "method", "sample.set",
-    "mean", "median", "mode", "sd"
-    )
-  missing <- setdiff(required, names(summary.data))
-  if (length(missing)) {
-    stop(
-      "Ancestry statistics data are missing columns: ",
-      paste(missing, collapse = ", ")
-      )
-    }
-  # select the exact methods and sample sets used by the figures
-  data <- summary.data %>%
-    mutate(chrom = as.character(chrom)) %>%
-    filter(
-      (.data$data.type == "Simulation_2T12Consistent" &
-        .data$method == "tspop" &
-        .data$sample.set == sample.set.input) |
-        (.data$data.type == "Simulation_2T12Consistent_simDown" &
-          .data$method == empirical.method &
-          .data$sample.set == sample.set.input) |
-        (.data$data.type == "Simulation_largeGrowth" &
-          .data$method == "tspop" &
-          .data$sample.set == sample.set.input) |
-        (.data$data.type == "Simulation_largeGrowth_simDown" &
-          .data$method == empirical.method &
-          .data$sample.set == sample.set.input) |
-        (.data$data.type == "Empirical" &
-          .data$method == empirical.method &
-          .data$sample.set == "full"),
-      .data$chrom %in% c(chromosomes, "all")
-      ) %>%
-    mutate(source = case_when(
-      .data$data.type == "Simulation_2T12Consistent" ~ "TC",
-      .data$data.type ==
-        "Simulation_2T12Consistent_simDown" ~ "TCD",
-      .data$data.type == "Simulation_largeGrowth" ~ "LG",
-      .data$data.type == "Simulation_largeGrowth_simDown" ~ "LGD",
-      .data$data.type == "Empirical" ~ "1kG"
-      ))
-  empirical.chromosomes <- c(
-    if (require.chromosome.reference) chromosomes,
-    if (require.genome) "all"
-    )
-  data <- data %>%
-    filter(source != "1kG" | chrom %in% empirical.chromosomes) %>%
-    select(source, rep, chrom, mean, median, mode, sd)
-  expected.sources <- c("TC", "TCD", "LG", "LGD", "1kG")
-  missing.sources <- setdiff(expected.sources, unique(data$source))
-  if (length(missing.sources)) {
-    stop(
-      "Ancestry statistics are missing sources: ",
-      paste(missing.sources, collapse = ", ")
-      )
-    }
-  if (any(is.na(data$rep[data$source != "1kG"]))) {
-    stop("Simulation statistics require non-missing replicate IDs")
-    }
-  # reject duplicate identifiers before reshaping statistics
-  duplicates <- data %>%
-    count(source, chrom, rep, name = "rows") %>%
-    filter(rows != 1)
-  if (nrow(duplicates)) {
-    first.duplicate <- duplicates[1, ]
-    stop(
-      "Ancestry statistics contain duplicated replicate IDs for ",
-      first.duplicate$source, " chromosome ", first.duplicate$chrom
-      )
-    }
-  # require 50 unique simulation replicates for every autosome
-  simulation.counts <- data %>%
-    filter(source != "1kG", chrom != "all") %>%
-    count(source, chrom, name = "n.replicates") %>%
-    complete(
-      source = c("TC", "TCD", "LG", "LGD"),
-      chrom = chromosomes,
-      fill = list(n.replicates = 0L)
-      ) %>%
-    filter(n.replicates != 50)
-  if (nrow(simulation.counts)) {
-    first.incomplete <- simulation.counts[1, ]
-    stop(
-      "Each simulation source and chromosome must contain exactly ",
-      "50 replicate IDs; found ", first.incomplete$n.replicates,
-      " for ", first.incomplete$source, " chromosome ",
-      first.incomplete$chrom
-      )
-    }
-  # require one empirical estimate for each requested reference scope
-  empirical.counts <- data %>%
-    filter(source == "1kG") %>%
-    count(chrom, name = "n.estimates") %>%
-    complete(
-      chrom = empirical.chromosomes,
-      fill = list(n.estimates = 0L)
-      ) %>%
-    filter(n.estimates != 1)
-  if (nrow(empirical.counts)) {
-    first.incomplete <- empirical.counts[1, ]
-    expected.description <- paste(
-      c(
-        if (require.chromosome.reference) "all 22 chromosomes",
-        if (require.genome) "one genome estimate"
-        ),
-      collapse = " and "
-      )
-    stop(
-      "The 1kG reference must contain ", expected.description,
-      "; chromosome ", first.incomplete$chrom,
-      " has ", first.incomplete$n.estimates, " estimates"
-      )
-    }
-  # create the shared long representation and reject invalid estimates
-  data <- data %>%
-    pivot_longer(
-      c(mean, median, mode, sd),
-      names_to = "statistic", values_to = "estimate"
-      )
-  if (any(!is.finite(data$estimate))) {
-    invalid <- data %>% filter(!is.finite(estimate)) %>% slice(1)
-    stop(
-      "Ancestry statistics require finite estimates; found ",
-      invalid$source, " chromosome ", invalid$chrom, " ",
-      invalid$statistic
-      )
-    }
-
-  return(data)
-  }
-
-
-# run one t-test and return its shared output fields
-extract.ancestry.t.test <- function(
-    left.values, right.values = NULL, reference = NULL,
-    test.type, paired, var.equal = FALSE, context
-  ) {
-  # execute the requested test and attach context to unusable inputs
-  result <- tryCatch(
-    {
-      if (is.null(right.values)) {
-        stats::t.test(left.values, mu = reference)
-        } else {
-        stats::t.test(
-          left.values, right.values, paired = paired,
-          var.equal = var.equal
-          )
-        }
-      },
-    error = function(condition) {
-      stop(
-        "Unable to run ", context, ": ", conditionMessage(condition),
-        call. = FALSE
-        )
-      }
-    )
-  # standardize estimates and express every interval as left minus right
-  left.estimate <- mean(left.values)
-  if (is.null(right.values)) {
-    right.estimate <- reference
-    interval <- unname(result$conf.int) - reference
-    n.right <- 1L
-    } else {
-    right.estimate <- mean(right.values)
-    interval <- unname(result$conf.int)
-    n.right <- length(right.values)
-    }
-  extracted <- tibble(
-    test.type = test.type,
-    paired = paired,
-    n.left = length(left.values),
-    n.right = n.right,
-    left.estimate = left.estimate,
-    right.estimate = right.estimate,
-    difference = left.estimate - right.estimate,
-    conf.low = interval[[1]],
-    conf.high = interval[[2]],
-    statistic.t = unname(result$statistic),
-    df = unname(result$parameter),
-    p.value = result$p.value
-    )
-
-  return(extracted)
-  }
-
-
-# align two source vectors by replicate identifier for a paired test
-prepare.paired.ancestry.values <- function(
-    data, left.source, right.source, statistic, chromosome, context
-  ) {
-  left <- data %>%
-    filter(
-      source == left.source, .data$statistic == .env$statistic,
-      chrom == chromosome
-      ) %>%
-    select(rep, left = estimate)
-  right <- data %>%
-    filter(
-      source == right.source, .data$statistic == .env$statistic,
-      chrom == chromosome
-      ) %>%
-    select(rep, right = estimate)
-  if (!setequal(left$rep, right$rep)) {
-    stop(
-      context, " requires matching replicate IDs; ", left.source,
-      " and ", right.source, " differ",
-      call. = FALSE
-      )
-    }
-  paired.values <- inner_join(left, right, by = "rep") %>% arrange(rep)
-  return(paired.values)
-  }
-
-
-# compare simulation summaries within chromosomes for question one
-test.ancestry.chromosome.comparisons <- function(
-    summary.data = ancestry.summary.data,
-    empirical.method = PLOT.EMPIRICAL.METHOD,
-    sample.set.input = PLOT.SAMPLE.SET,
-    chromosomes = CHROMOSOMES
-  ) {
-  data <- prepare.ancestry.statistics.data(
-    summary.data, empirical.method, sample.set.input, chromosomes,
-    require.genome = FALSE
-    )
-  contrasts <- tribble(
-    ~left.source, ~right.source, ~test.type, ~paired, ~var.equal,
-    "TC", "1kG", "one-sample t-test", FALSE, FALSE,
-    "TC", "TCD", "paired t-test", TRUE, FALSE,
-    "TC", "LG", "Student t-test", FALSE, TRUE,
-    "TCD", "1kG", "one-sample t-test", FALSE, FALSE,
-    "LG", "LGD", "paired t-test", TRUE, FALSE
-    )
-  tests <- map_dfr(c("mean", "mode", "sd"), function(statistic.name) {
-    map_dfr(as.character(chromosomes), function(chromosome.name) {
-      pmap_dfr(contrasts, function(
-          left.source, right.source, test.type, paired, var.equal
-        ) {
-        contrast <- paste(left.source, "-", right.source)
-        context <- paste(
-          contrast, statistic.name, "chromosome", chromosome.name
-          )
-        left.values <- data %>%
-          filter(
-            source == left.source,
-            statistic == statistic.name,
-            chrom == chromosome.name
-            ) %>%
-          pull(estimate)
-        if (right.source == "1kG") {
-          reference <- data %>%
-            filter(
-              source == "1kG", statistic == statistic.name,
-              chrom == chromosome.name
-              ) %>%
-            pull(estimate)
-          result <- extract.ancestry.t.test(
-            left.values, reference = reference,
-            test.type = test.type, paired = FALSE,
-            context = context
-            )
-          reference.scope <- "chromosome"
-          } else if (paired) {
-          paired.values <- prepare.paired.ancestry.values(
-            data, left.source, right.source, statistic.name,
-            chromosome.name, context
-            )
-          result <- extract.ancestry.t.test(
-            paired.values$left, paired.values$right,
-            test.type = test.type, paired = TRUE,
-            context = context
-            )
-          reference.scope <- NA_character_
-          } else {
-          right.values <- data %>%
-            filter(
-              source == right.source,
-              statistic == statistic.name,
-              chrom == chromosome.name
-              ) %>%
-            pull(estimate)
-          result <- extract.ancestry.t.test(
-            left.values, right.values,
-            test.type = test.type, paired = FALSE,
-            var.equal = var.equal, context = context
-            )
-          reference.scope <- NA_character_
-          }
-        return(bind_cols(
-          tibble(
-            statistic = statistic.name,
-            chromosome = chromosome.name,
-            contrast = contrast,
-            left.source = left.source,
-            right.source = right.source,
-            reference.scope = reference.scope
-            ),
-          result
-          ))
-        })
-      })
-    }) %>%
-    group_by(statistic) %>%
-    mutate(
-      p.adjusted = p.adjust(p.value, method = "bonferroni"),
-      significant = p.adjusted < 0.05,
-      direction = case_when(
-        significant & right.source == "1kG" & difference < 0 ~
-          "underestimation",
-        significant & right.source == "1kG" & difference > 0 ~
-          "overestimation",
-        significant & right.source != "1kG" & difference < 0 ~ "lower",
-        significant & right.source != "1kG" & difference > 0 ~ "higher",
-        TRUE ~ NA_character_
-        )
-      ) %>%
-    ungroup()
-
-  return(tests)
-  }
-
-
-# compare chromosome simulations with the genome-wide reference
-test.ancestry.genome.reference <- function(
-    summary.data = ancestry.summary.data,
-    empirical.method = PLOT.EMPIRICAL.METHOD,
-    sample.set.input = PLOT.SAMPLE.SET,
-    chromosomes = CHROMOSOMES
-  ) {
-  data <- prepare.ancestry.statistics.data(
-    summary.data, empirical.method, sample.set.input, chromosomes,
-    require.chromosome.reference = FALSE
-    )
-  tests <- map_dfr(c("mean", "mode", "sd"), function(statistic.name) {
-    reference <- data %>%
-      filter(
-        source == "1kG", statistic == statistic.name, chrom == "all"
-        ) %>%
-      pull(estimate)
-    map_dfr(c("TC", "TCD", "LG", "LGD"), function(source.name) {
-      map_dfr(as.character(chromosomes), function(chromosome.name) {
-        values <- data %>%
-          filter(
-            source == source.name,
-            statistic == statistic.name,
-            chrom == chromosome.name
-            ) %>%
-          pull(estimate)
-        contrast <- paste(source.name, "- genome 1kG")
-        result <- extract.ancestry.t.test(
-          values, reference = reference,
-          test.type = "one-sample t-test", paired = FALSE,
-          context = paste(
-            contrast, statistic.name, "chromosome", chromosome.name
-            )
-          )
-        return(bind_cols(
-          tibble(
-            statistic = statistic.name,
-            chromosome = chromosome.name,
-            contrast = contrast,
-            left.source = source.name,
-            right.source = "1kG",
-            reference.scope = "genome"
-            ),
-          result
-          ))
-        })
-      })
-    }) %>%
-    group_by(statistic) %>%
-    mutate(
-      p.adjusted = p.adjust(p.value, method = "bonferroni"),
-      significant = p.adjusted < 0.05,
-      direction = case_when(
-        significant & difference < 0 ~ "underestimation",
-        significant & difference > 0 ~ "overestimation",
-        TRUE ~ NA_character_
-        )
-      ) %>%
-    ungroup()
-
-  return(tests)
-  }
-
-
-# fit chromosome-length models to median simulation summaries
-fit.ancestry.chromosome.length.models <- function(
-    summary.data = ancestry.summary.data,
-    length.data = chromosome.lengths,
-    empirical.method = PLOT.EMPIRICAL.METHOD,
-    sample.set.input = PLOT.SAMPLE.SET,
-    chromosomes = CHROMOSOMES
-  ) {
-  data <- prepare.ancestry.statistics.data(
-    summary.data, empirical.method, sample.set.input, chromosomes,
-    require.genome = FALSE
-    )
-  required.length.columns <- c("chrom", "chr_len")
-  missing <- setdiff(required.length.columns, names(length.data))
-  if (length(missing)) {
-    stop(
-      "Chromosome lengths are missing columns: ",
-      paste(missing, collapse = ", ")
-      )
-    }
-  lengths <- length.data %>%
-    transmute(chrom = as.character(chrom), chr.len.mb = chr_len / 1e6) %>%
-    filter(chrom %in% chromosomes)
-  if (nrow(lengths) != 22 || n_distinct(lengths$chrom) != 22) {
-    stop("Chromosome-length models require exactly 22 chromosome lengths")
-    }
-  if (any(!is.finite(lengths$chr.len.mb)) ||
-      stats::sd(lengths$chr.len.mb) == 0) {
-    stop("Chromosome-length models require finite, non-zero length variance")
-    }
-  model.data <- data %>%
-    filter(
-      statistic %in% c("mean", "mode", "sd"),
-      chrom != "all"
-      ) %>%
-    group_by(source, statistic, chrom) %>%
-    summarise(estimate = median(estimate), .groups = "drop") %>%
-    left_join(lengths, by = "chrom")
-  models <- model.data %>%
-    group_by(statistic, source) %>%
-    group_modify(function(group, key) {
-      context <- paste(key$source, key$statistic)
-      if (nrow(group) != 22 || n_distinct(group$chrom) != 22 ||
-          any(!is.finite(group$chr.len.mb))) {
-        stop(
-          "Chromosome-length model for ", context,
-          " requires 22 chromosomes",
-          call. = FALSE
-          )
-        }
-      if (stats::sd(group$estimate) == 0) {
-        stop(
-          "Chromosome-length model for ", context,
-          " has zero variance in estimates",
-          call. = FALSE
-          )
-        }
-      model <- stats::lm(estimate ~ chr.len.mb, data = group)
-      model.summary <- summary(model)
-      slope <- model.summary$coefficients["chr.len.mb", ]
-      interval <- stats::confint(model, "chr.len.mb", level = 0.95)
-      if (any(!is.finite(c(slope, interval)))) {
-        stop(
-          "Chromosome-length model for ", context,
-          " produced non-finite slope statistics",
-          call. = FALSE
-          )
-        }
-      return(tibble(
-        n.chromosomes = nrow(group),
-        intercept = unname(stats::coef(model)[["(Intercept)"]]),
-        slope.per.mb = unname(slope[["Estimate"]]),
-        slope.std.error = unname(slope[["Std. Error"]]),
-        conf.low = unname(interval[[1]]),
-        conf.high = unname(interval[[2]]),
-        statistic.t = unname(slope[["t value"]]),
-        df = stats::df.residual(model),
-        p.value = unname(slope[["Pr(>|t|)"]]),
-        r.squared = model.summary$r.squared
-        ))
-      }) %>%
-    ungroup() %>%
-    mutate(
-      statistic = factor(statistic, levels = c("mean", "mode", "sd")),
-      source = factor(source, levels = c("TC", "TCD", "LG", "LGD", "1kG"))
-      ) %>%
-    arrange(statistic, source) %>%
-    group_by(statistic) %>%
-    mutate(
-      p.adjusted = p.adjust(p.value, method = "bonferroni"),
-      significant = p.adjusted < 0.05,
-      direction = case_when(
-        slope.per.mb < 0 ~ "negative",
-        slope.per.mb > 0 ~ "positive",
-        TRUE ~ NA_character_
-        )
-      ) %>%
-    ungroup() %>%
-    mutate(
-      statistic = as.character(statistic),
-      source = as.character(source)
-      )
-
-  return(models)
-  }
-
-
-# validate summary and ASW values used by bootstrap difference tables
+# validate summary and asw values used by bootstrap difference tables.
 prepare.ancestry.bootstrap.comparison.data <- function(
     summary.data, individual.data, empirical.method, sample.set.input,
     chromosomes
@@ -1997,10 +502,8 @@ prepare.ancestry.bootstrap.comparison.data <- function(
     )
   missing.summary <- setdiff(required.summary, names(summary.data))
   if (length(missing.summary)) {
-    stop(
-      "Bootstrap ancestry summaries are missing columns: ",
-      paste(missing.summary, collapse = ", ")
-      )
+    stop("Bootstrap ancestry summaries are missing columns: ",
+      paste(missing.summary, collapse = ", "))
     }
   source.config <- tribble(
     ~source, ~data.type, ~method,
@@ -2044,35 +547,28 @@ prepare.ancestry.bootstrap.comparison.data <- function(
       " for ", first.count$source, " chromosome ", first.count$chrom
       )
     }
-  paired.contrasts <- ANCESTRY.BOOTSTRAP.CONTRASTS %>%
-    filter(paired)
   pwalk(
-    paired.contrasts,
+    filter(ANCESTRY.BOOTSTRAP.CONTRASTS, paired),
     function(contrast, left.source, right.source, paired) {
       for (chromosome in chromosomes) {
         left.ids <- simulation %>%
-          filter(source == left.source, chrom == chromosome) %>%
-          pull(rep)
+          filter(source == left.source, chrom == chromosome) %>% pull(rep)
         right.ids <- simulation %>%
-          filter(source == right.source, chrom == chromosome) %>%
-          pull(rep)
+          filter(source == right.source, chrom == chromosome) %>% pull(rep)
         if (!setequal(left.ids, right.ids)) {
-          stop(
-            contrast, " chromosome ", chromosome,
-            " requires matching replicate IDs",
-            call. = FALSE
-            )
+          stop(contrast, " chromosome ", chromosome,
+            " requires matching replicate IDs", call. = FALSE)
           }
         }
       }
     )
-  required.individual <- c("data.type", "role", "method", "chrom", "afr.q")
+  required.individual <- c(
+    "data.type", "role", "method", "chrom", "sample_id", "afr.q"
+    )
   missing.individual <- setdiff(required.individual, names(individual.data))
   if (length(missing.individual)) {
-    stop(
-      "Bootstrap empirical ancestry data are missing columns: ",
-      paste(missing.individual, collapse = ", ")
-      )
+    stop("Bootstrap empirical ancestry data are missing columns: ",
+      paste(missing.individual, collapse = ", "))
     }
   empirical <- individual.data %>%
     mutate(chrom = as.character(chrom)) %>%
@@ -2086,6 +582,10 @@ prepare.ancestry.bootstrap.comparison.data <- function(
   if (any(!is.finite(empirical$afr.q))) {
     stop("Bootstrap empirical ASW ancestry values must be finite")
     }
+  if (any(is.na(empirical$sample_id) |
+      !nzchar(trimws(empirical$sample_id)))) {
+    stop("Bootstrap empirical ASW ancestry requires a valid sample_id")
+    }
   empirical.counts <- empirical %>%
     count(chrom, name = "individual.count") %>%
     complete(
@@ -2094,25 +594,24 @@ prepare.ancestry.bootstrap.comparison.data <- function(
     filter(individual.count < 2L)
   if (nrow(empirical.counts)) {
     first.count <- empirical.counts[1, ]
+    stop("Bootstrap empirical ASW ancestry requires at least two individuals ",
+      "for chromosome ", first.count$chrom)
+    }
+  duplicates <- empirical %>%
+    count(chrom, sample_id, name = "rows") %>%
+    filter(rows != 1L)
+  if (nrow(duplicates)) {
+    first.duplicate <- duplicates[1, ]
     stop(
-      "Bootstrap empirical ASW ancestry requires at least two individuals ",
-      "for chromosome ", first.count$chrom
+      "Bootstrap empirical ASW sample IDs contain duplicated chromosome/ID: ",
+      first.duplicate$chrom, " / ", first.duplicate$sample_id
       )
     }
-  if ("sample_id" %in% names(empirical)) {
-    duplicates <- empirical %>%
-      count(chrom, sample_id, name = "rows") %>%
-      filter(rows != 1L)
-    if (nrow(duplicates)) {
-      stop("Bootstrap empirical ASW sample IDs must be unique")
-      }
-    }
-
   return(list(simulation = simulation, empirical = empirical))
   }
 
 
-# summarize one observed difference and its nominal and corrected intervals
+# summarize a bootstrap difference and nominal and corrected intervals.
 summarize.ancestry.bootstrap.difference <- function(
     draws, difference, family.size
   ) {
@@ -2120,22 +619,21 @@ summarize.ancestry.bootstrap.difference <- function(
     stop("Bootstrap ancestry comparison differences must be finite")
     }
   nominal <- quantile(draws, c(0.025, 0.975), names = FALSE)
-  corrected.probabilities <- c(
-    0.05 / (2 * family.size), 1 - 0.05 / (2 * family.size)
+  corrected <- quantile(
+    draws,
+    c(0.05 / (2 * family.size), 1 - 0.05 / (2 * family.size)),
+    names = FALSE
     )
-  corrected <- quantile(draws, corrected.probabilities, names = FALSE)
-
   return(tibble(
     difference = difference,
-    ci.95.lower = nominal[[1]],
-    ci.95.upper = nominal[[2]],
+    ci.95.lower = nominal[[1]], ci.95.upper = nominal[[2]],
     bonferroni.ci.lower = corrected[[1]],
     bonferroni.ci.upper = corrected[[2]]
     ))
   }
 
 
-# resample replicate-level simulation differences for one contrast
+# resample replicate-level simulation values for one contrast.
 bootstrap.ancestry.simulation.difference <- function(
     left.values, right.values, paired, bootstrap.replicates
   ) {
@@ -2151,13 +649,14 @@ bootstrap.ancestry.simulation.difference <- function(
         mean(sample(right.values, length(right.values), replace = TRUE))
       })
     }
-  difference <- mean(left.values) - mean(right.values)
-
-  return(list(draws = draws, difference = difference))
+  return(list(
+    draws = draws,
+    difference = mean(left.values) - mean(right.values)
+    ))
   }
 
 
-# resample simulation replicates and ASW individuals for one contrast
+# resample a simulation summary and asw individuals for one contrast.
 bootstrap.ancestry.empirical.difference <- function(
     simulation.values, empirical.values, statistic, bootstrap.replicates
   ) {
@@ -2169,12 +668,11 @@ bootstrap.ancestry.empirical.difference <- function(
         ))
     })
   difference <- mean(simulation.values) - statistic.function(empirical.values)
-
   return(list(draws = draws, difference = difference))
   }
 
 
-# build one bootstrap comparison table against a chromosome or genome ASW scope
+# build one table against chromosome or genome asw values.
 make.ancestry.bootstrap.comparison.table <- function(
     simulation, empirical, contrasts, chromosomes, statistic, reference.chrom,
     reference.scope, family.size, bootstrap.replicates
@@ -2184,30 +682,25 @@ make.ancestry.bootstrap.comparison.table <- function(
       contrast <- contrasts[index, ]
       left.values <- simulation %>%
         filter(source == contrast$left.source, chrom == chromosome) %>%
-        arrange(rep) %>%
-        pull(all_of(statistic))
+        arrange(rep) %>% pull(all_of(statistic))
       if (contrast$right.source == "Emp") {
         empirical.values <- empirical %>%
-          filter(chrom == reference.chrom(chromosome)) %>%
-          pull(afr.q)
+          filter(chrom == reference.chrom(chromosome)) %>% pull(afr.q)
         bootstrap <- bootstrap.ancestry.empirical.difference(
           left.values, empirical.values, statistic, bootstrap.replicates
           )
         } else {
         right.values <- simulation %>%
           filter(source == contrast$right.source, chrom == chromosome) %>%
-          arrange(rep) %>%
-          pull(all_of(statistic))
+          arrange(rep) %>% pull(all_of(statistic))
         bootstrap <- bootstrap.ancestry.simulation.difference(
           left.values, right.values, contrast$paired, bootstrap.replicates
           )
         }
       return(bind_cols(
         tibble(
-          statistic = statistic,
-          contrast = contrast$contrast,
-          chromosome = chromosome,
-          reference.scope = reference.scope
+          statistic = statistic, contrast = contrast$contrast,
+          chromosome = chromosome, reference.scope = reference.scope
           ),
         summarize.ancestry.bootstrap.difference(
           bootstrap$draws, bootstrap$difference, family.size
@@ -2219,7 +712,7 @@ make.ancestry.bootstrap.comparison.table <- function(
   }
 
 
-# make both deterministic African-ancestry bootstrap comparison tables
+# make deterministic chromosome and genome-wide asw comparison tables.
 make.ancestry.bootstrap.comparison.tables <- function(
     summary.data, individual.data, empirical.method = PLOT.EMPIRICAL.METHOD,
     sample.set.input = PLOT.SAMPLE.SET, chromosomes = CHROMOSOMES,
@@ -2235,13 +728,14 @@ make.ancestry.bootstrap.comparison.tables <- function(
     chromosomes
     )
   chromosomes <- as.character(chromosomes)
-  chromosome.contrasts <- ANCESTRY.BOOTSTRAP.CONTRASTS
-  genome.contrasts <- filter(chromosome.contrasts, right.source == "Emp")
+  genome.contrasts <- filter(
+    ANCESTRY.BOOTSTRAP.CONTRASTS, right.source == "Emp"
+    )
   set.seed(seed)
   chromosome.tables <- map_dfr(c("mean", "sd"), function(statistic) {
     make.ancestry.bootstrap.comparison.table(
-      data$simulation, data$empirical, chromosome.contrasts, chromosomes,
-      statistic, identity, "chromosome",
+      data$simulation, data$empirical, ANCESTRY.BOOTSTRAP.CONTRASTS,
+      chromosomes, statistic, identity, "chromosome",
       ANCESTRY.BOOTSTRAP.CHROMOSOME.FAMILY.SIZE, bootstrap.replicates
       )
     })
@@ -2256,7 +750,6 @@ make.ancestry.bootstrap.comparison.tables <- function(
       nrow(genome.tables) != ANCESTRY.BOOTSTRAP.GENOME.ASW.FAMILY.SIZE) {
     stop("Bootstrap ancestry comparison family size does not match its table")
     }
-
   return(list(
     chromosome.comparisons = chromosome.tables,
     chromosome.vs.genome.asw = genome.tables
@@ -2264,7 +757,7 @@ make.ancestry.bootstrap.comparison.tables <- function(
   }
 
 
-# persist the two deterministic bootstrap comparison tables
+# persist the two deterministic bootstrap comparison tables.
 write.ancestry.bootstrap.comparison.tables <- function(
     tables, output.directory
   ) {
@@ -2289,345 +782,69 @@ write.ancestry.bootstrap.comparison.tables <- function(
 # analysis data prep ----
 
 
-# read simulation ancestry sources
+# read tc/lg truth, configured tcd/lgd inference, and empirical inference.
 sim.tc.tspop.data <- read.ancestry.family(
   SIM.TC.DATA.DIR, "ancestry.chr{chrom}.parquet", CHROMOSOMES,
-  "Simulation_2T12Consistent", "tspop", 0, "tspop"
-  )
-sim.tc.admixture.data <- read.ancestry.family(
-  SIM.TC.DATA.DIR,
-  "ancestry_ADMIXTURE_multik.chr{chrom}.parquet", CHROMOSOMES,
-  "Simulation_2T12Consistent", "ADMIXTURE", SIMULATION.K, "ADMIXTURE"
-  )
-sim.tc.fastStructure.data <- read.ancestry.family(
-  SIM.TC.DATA.DIR,
-  "ancestry_fastStructure_multik.chr{chrom}.parquet", CHROMOSOMES,
-  "Simulation_2T12Consistent", "fastStructure", SIMULATION.K, "fastStructure"
+  "Simulation_2T12Consistent", "tspop", 0L, "tspop"
   )
 simDown.tc.inference.data <- read.ancestry.family(
-  SIMDOWN.TC.DATA.DIR,
-  ancestry.inference.file.family(PLOT.EMPIRICAL.METHOD), CHROMOSOMES,
-  "Simulation_2T12Consistent_simDown", PLOT.EMPIRICAL.METHOD, SIMULATION.K,
-  PLOT.EMPIRICAL.METHOD
+  SIMDOWN.TC.DATA.DIR, ancestry.inference.file.family(PLOT.EMPIRICAL.METHOD),
+  CHROMOSOMES, "Simulation_2T12Consistent_simDown", PLOT.EMPIRICAL.METHOD,
+  SIMULATION.K, PLOT.EMPIRICAL.METHOD
   )
 sim.lg.tspop.data <- read.ancestry.family(
   SIM.LG.DATA.DIR, "ancestry.chr{chrom}.parquet", CHROMOSOMES,
-  "Simulation_largeGrowth", "tspop", 0, "tspop"
-  )
-sim.lg.admixture.data <- read.ancestry.family(
-  SIM.LG.DATA.DIR,
-  "ancestry_ADMIXTURE_multik.chr{chrom}.parquet", CHROMOSOMES,
-  "Simulation_largeGrowth", "ADMIXTURE", SIMULATION.K, "ADMIXTURE"
-  )
-sim.lg.fastStructure.data <- read.ancestry.family(
-  SIM.LG.DATA.DIR,
-  "ancestry_fastStructure_multik.chr{chrom}.parquet", CHROMOSOMES,
-  "Simulation_largeGrowth", "fastStructure", SIMULATION.K, "fastStructure"
+  "Simulation_largeGrowth", "tspop", 0L, "tspop"
   )
 simDown.lg.inference.data <- read.ancestry.family(
-  SIMDOWN.LG.DATA.DIR,
-  ancestry.inference.file.family(PLOT.EMPIRICAL.METHOD), CHROMOSOMES,
-  "Simulation_largeGrowth_simDown", PLOT.EMPIRICAL.METHOD, SIMULATION.K,
-  PLOT.EMPIRICAL.METHOD
+  SIMDOWN.LG.DATA.DIR, ancestry.inference.file.family(PLOT.EMPIRICAL.METHOD),
+  CHROMOSOMES, "Simulation_largeGrowth_simDown", PLOT.EMPIRICAL.METHOD,
+  SIMULATION.K, PLOT.EMPIRICAL.METHOD
+  )
+empirical.file.family <- ancestry.inference.file.family(PLOT.EMPIRICAL.METHOD)
+empirical.genome.file <- str_replace(
+  empirical.file.family, "\\.chr\\{chrom\\}", ""
+  )
+empirical.inference.data <- read.ancestry.family(
+  EMPIRICAL.DATA.DIR, empirical.file.family, CHROMOSOMES, "Empirical",
+  PLOT.EMPIRICAL.METHOD, EMPIRICAL.K, "Empirical", include.genome = TRUE,
+  genome.file.family = empirical.genome.file
   )
 
-# read chromosome-level and whole-genome empirical inference
-emp.admixture.chromosome.data <- read.ancestry.family(
-  EMPIRICAL.DATA.DIR,
-  "ancestry_ADMIXTURE_multik.chr{chrom}.parquet", CHROMOSOMES,
-  "Empirical", "ADMIXTURE", EMPIRICAL.K, "Empirical"
-  )
-emp.fastStructure.chromosome.data <- read.ancestry.family(
-  EMPIRICAL.DATA.DIR,
-  "ancestry_fastStructure_multik.chr{chrom}.parquet", CHROMOSOMES,
-  "Empirical", "fastStructure", EMPIRICAL.K, "Empirical"
-  )
-emp.admixture.genome.data <- read.ancestry.family(
-  EMPIRICAL.DATA.DIR, "ancestry_ADMIXTURE_multik.parquet", "all",
-  "Empirical", "ADMIXTURE", EMPIRICAL.K, "Empirical"
-  )
-emp.fastStructure.genome.data <- read.ancestry.family(
-  EMPIRICAL.DATA.DIR, "ancestry_fastStructure_multik.parquet", "all",
-  "Empirical", "fastStructure", EMPIRICAL.K, "Empirical"
-  )
-
-# combine, orient, and apply fixed-size downsampling
+# orient ancestry components and add reproducible selected simulation rows.
 ancestry.individual.data <- bind_rows(
-  sim.tc.tspop.data, sim.tc.admixture.data,
-  sim.tc.fastStructure.data, simDown.tc.inference.data,
-  sim.lg.tspop.data,
-  sim.lg.admixture.data, sim.lg.fastStructure.data,
-  simDown.lg.inference.data,
-  emp.admixture.chromosome.data, emp.fastStructure.chromosome.data,
-  emp.admixture.genome.data, emp.fastStructure.genome.data
+  sim.tc.tspop.data, simDown.tc.inference.data, sim.lg.tspop.data,
+  simDown.lg.inference.data, empirical.inference.data
   ) %>%
   apply.ancestry.source.contract() %>%
-  orient.ancestry.components(
-    ADMIXED.ROLES, c("rep", "chrom", "data.type", "method")
-    )
+  orient.ancestry.components(c("rep", "chrom", "data.type", "method"))
 downsample.ids <- select.downsample.ids(
   ancestry.individual.data, DOWNSAMPLE.SIZE, "sample_id",
-  c("data.type", "rep", "chrom"), RANDOM.SEED,
-  PLOT.EMPIRICAL.METHOD
+  c("data.type", "rep", "chrom"), RANDOM.SEED
   )
 ancestry.individual.data <- apply.downsample.ids(
   ancestry.individual.data, downsample.ids, "sample_id",
   c("data.type", "rep", "chrom")
   )
 
-# calculate ancestry and histogram summaries
-ancestry.summary.data <- summarize.ancestry(
-  ancestry.individual.data,
-  c(
-    "rep", "chrom", "pop", "data.type", "simulation.source",
-    "method", "sample.set"
-    ),
-  BOOTSTRAP.REPLICATES, RANDOM.SEED, ADMIXED.ROLES
-  )
-
-# calculate and write deterministic bootstrap ancestry comparison tables
+# build and write the two active bootstrap comparison tables.
+ancestry.summary.data <- summarize.ancestry.comparison(ancestry.individual.data)
 ancestry.bootstrap.comparison.tables <-
   make.ancestry.bootstrap.comparison.tables(
-    ancestry.summary.data, ancestry.individual.data,
-    empirical.method = PLOT.EMPIRICAL.METHOD,
-    sample.set.input = PLOT.SAMPLE.SET, chromosomes = CHROMOSOMES,
-    bootstrap.replicates = BOOTSTRAP.REPLICATES, seed = RANDOM.SEED
-    )
+  ancestry.summary.data, ancestry.individual.data,
+  empirical.method = PLOT.EMPIRICAL.METHOD,
+  sample.set.input = PLOT.SAMPLE.SET, chromosomes = CHROMOSOMES,
+  bootstrap.replicates = BOOTSTRAP.REPLICATES, seed = RANDOM.SEED
+  )
 write.ancestry.bootstrap.comparison.tables(
   ancestry.bootstrap.comparison.tables, OUTPUT.DIR
   )
-
-ancestry.histogram.data <- summarize.histograms(
-  ancestry.individual.data, HISTOGRAM.BREAKS, SELECTED.CHROMOSOMES,
-  ADMIXED.ROLES
-  )
-
-# read chromosome lengths and choose-K diagnostics
-chromosome.lengths <- readr::read_tsv(
-  path.expand(CHROMOSOME.LENGTHS.PATH), show_col_types = FALSE
-  ) %>%
-  mutate(chr = str_remove(as.character(chr), "^chr")) %>%
-  rename(chrom = chr)
-emp.fastStructure.choose.k.chromosome <- read.choose.k.diagnostics(
-  EMPIRICAL.DATA.DIR, "fastStructure_chooseK.chr{chrom}.parquet",
-  CHROMOSOMES
-  ) %>%
-  filter(as.character(chrom) %in% SELECTED.CHROMOSOMES)
-emp.fastStructure.choose.k.genome <- read.choose.k.diagnostics(
-  EMPIRICAL.DATA.DIR, "fastStructure_chooseK.parquet", "all"
-  )
-choose.k.frequency.tables <- list(
-  chromosome.max.marginal = table(
-    emp.fastStructure.choose.k.chromosome$max_marginal_likelihood_k
-    ),
-  chromosome.model.components = table(
-    emp.fastStructure.choose.k.chromosome$model_components_k
-    ),
-  genome.max.marginal = table(
-    emp.fastStructure.choose.k.genome$max_marginal_likelihood_k
-    ),
-  genome.model.components = table(
-    emp.fastStructure.choose.k.genome$model_components_k
-    )
-  )
-
-
-# statistical tests ----
-
-
-# Legacy diagnostics and plot constructors are retained below as inactive
-# reference during the bootstrap plotting refresh.
-if (FALSE) {
-# plotting ----
-
-
-# create diagnostic barplots
-simulation.diagnostic.config <- tribble(
-  ~tag, ~source, ~method,
-  "tc.tspop", "Simulation_2T12Consistent", "tspop",
-  "tc.inference", "Simulation_2T12Consistent", PLOT.EMPIRICAL.METHOD,
-  "tc.d.inference", "Simulation_2T12Consistent_simDown",
-  PLOT.EMPIRICAL.METHOD,
-  "lg.tspop", "Simulation_largeGrowth", "tspop",
-  "lg.inference", "Simulation_largeGrowth", PLOT.EMPIRICAL.METHOD,
-  "lg.d.inference", "Simulation_largeGrowth_simDown", PLOT.EMPIRICAL.METHOD
-  )
-simulation.diagnostic.plots <- pmap(
-  simulation.diagnostic.config,
-  function(tag, source, method) {
-    data <- ancestry.individual.data %>%
-      filter(
-        .data$data.type == source,
-        .data$method == method,
-        .data$sample.set == "full",
-        .data$rep == 1,
-        .data$chrom == "1"
-        )
-    return(make.diagnostic.admixture.plot(
-      data,
-      chromosomes = "1",
-    component.columns = c("component_1_q", "component_2_q"),
-    sample.id.column = "sample_id", facet.columns = character(),
-    component.colors = ANCESTRY.COMPONENT.COLORS
-      ))
-    }
-  )
-names(simulation.diagnostic.plots) <- simulation.diagnostic.config$tag
-empirical.diagnostic.plot <- make.empirical.admixture.diagnostic.plot(
-  read.empirical.admixture.diagnostic(EMPIRICAL.DATA.DIR, 2:5),
-  c(
-    component_1_q = "#0072B2", component_2_q = "#D55E00",
-    component_3_q = "#009E73", component_4_q = "#CC79A7",
-    component_5_q = "#E69F00"
-    )
-  )
-# construct all four views for the nine primary plot families
-ancestry.mean.by.chromosome.plots <- imap(
-  PLOT.CONFIGS, function(data.types, tag) {
-    return(make.mean.by.chrom.plot(
-      ancestry.summary.data, PLOT.EMPIRICAL.METHOD,
-      PLOT.SAMPLE.SET, SELECTED.CHROMOSOMES, PLOT.STYLES,
-      data.types, tag
-      ))
-    }
-  )
-ancestry.mode.by.chromosome.plots <- imap(
-  PLOT.CONFIGS, function(data.types, tag) {
-    return(make.mode.by.chrom.plot(
-      ancestry.summary.data, PLOT.EMPIRICAL.METHOD,
-      PLOT.SAMPLE.SET, SELECTED.CHROMOSOMES, PLOT.STYLES,
-      data.types, tag
-      ))
-    }
-  )
-ancestry.sd.by.chromosome.plots <- imap(
-  PLOT.CONFIGS, function(data.types, tag) {
-    return(make.sd.by.chrom.plot(
-      ancestry.summary.data, PLOT.EMPIRICAL.METHOD,
-      PLOT.SAMPLE.SET, SELECTED.CHROMOSOMES, PLOT.STYLES,
-      data.types, tag
-      ))
-    }
-  )
-ancestry.summary.by.chrom.plots <- imap(
-  PLOT.CONFIGS, function(data.types, tag) {
-    return(make.summary.by.chrom.plot(
-      ancestry.summary.data, PLOT.EMPIRICAL.METHOD,
-      PLOT.SAMPLE.SET, SELECTED.CHROMOSOMES, PLOT.STYLES,
-      data.types, tag
-      ))
-    }
-  )
-ancestry.length.versus.mean.plots <- imap(
-  PLOT.CONFIGS, function(data.types, tag) {
-    return(make.length.mean.plot(
-      ancestry.summary.data, chromosome.lengths,
-      PLOT.EMPIRICAL.METHOD, PLOT.SAMPLE.SET, CHROMOSOMES,
-      PLOT.STYLES, data.types, tag
-      ))
-    }
-  )
-ancestry.length.versus.mode.plots <- imap(
-  PLOT.CONFIGS, function(data.types, tag) {
-    return(make.length.mode.plot(
-      ancestry.summary.data, chromosome.lengths,
-      PLOT.EMPIRICAL.METHOD, PLOT.SAMPLE.SET, CHROMOSOMES,
-      PLOT.STYLES, data.types, tag
-      ))
-    }
-  )
-ancestry.length.versus.sd.plots <- imap(
-  PLOT.CONFIGS, function(data.types, tag) {
-    return(make.length.sd.plot(
-      ancestry.summary.data, chromosome.lengths,
-      PLOT.EMPIRICAL.METHOD, PLOT.SAMPLE.SET, CHROMOSOMES,
-      PLOT.STYLES, data.types, tag
-      ))
-    }
-  )
-ancestry.summary.by.contig.len.plots <- imap(
-  PLOT.CONFIGS, function(data.types, tag) {
-    return(make.summary.by.contig.len.plot(
-      ancestry.summary.data, chromosome.lengths,
-      PLOT.EMPIRICAL.METHOD, PLOT.SAMPLE.SET, CHROMOSOMES,
-      PLOT.STYLES, data.types, tag
-      ))
-    }
-  )
-ancestry.histogram.plots <- imap(PLOT.CONFIGS, function(data.types, tag) {
-  return(make.histogram.plot(
-    ancestry.histogram.data, PLOT.EMPIRICAL.METHOD,
-    PLOT.SAMPLE.SET, SELECTED.CHROMOSOMES, HISTOGRAM.BREAKS,
-    PLOT.STYLES, data.types, tag, show.all = TRUE
-    ))
-  })
-
-# persist all primary and diagnostic plot objects
-primary.plot.groups <- list(
-  "ancestry.mean.by.chromosome.{tag}.rds" =
-    ancestry.mean.by.chromosome.plots,
-  "ancestry.mode.by.chromosome.{tag}.rds" =
-    ancestry.mode.by.chromosome.plots,
-  "ancestry.sd.by.chromosome.{tag}.rds" =
-    ancestry.sd.by.chromosome.plots,
-  "ancestry.summary.by.chrom.{tag}.rds" =
-    ancestry.summary.by.chrom.plots,
-  "ancestry.length.versus.mean.{tag}.rds" =
-    ancestry.length.versus.mean.plots,
-  "ancestry.length.versus.mode.{tag}.rds" =
-    ancestry.length.versus.mode.plots,
-  "ancestry.length.versus.sd.{tag}.rds" =
-    ancestry.length.versus.sd.plots,
-  "ancestry.summary.by.contig.len.{tag}.rds" =
-    ancestry.summary.by.contig.len.plots,
-  "ancestry.histogram.{tag}.rds" = ancestry.histogram.plots
-  )
-iwalk(primary.plot.groups, function(plots, template) {
-  iwalk(plots, function(plot, tag) {
-    file.name <- str_replace(template, fixed("{tag}"), tag)
-    saveRDS(plot, file.path(OUTPUT.DIR, file.name))
-    })
-  })
-iwalk(simulation.diagnostic.plots, function(plot, source.method) {
-  saveRDS(plot, file.path(
-    OUTPUT.DIR,
-    paste0(
-      "ancestry.diagnostic.simulation.", source.method, ".rds"
-      )
-    ))
-  })
-saveRDS(
-  empirical.diagnostic.plot,
-  file.path(OUTPUT.DIR, "ancestry.diagnostic.1kG.ADMIXTURE.rds")
-  )
-
-# print every figure only after all plot objects have been saved
-print(ancestry.summary.by.chrom.plots$TC.1kG)
-print(ancestry.summary.by.chrom.plots$TC.TCD)
-print(ancestry.summary.by.chrom.plots$TCD.1kG)
-print(ancestry.summary.by.chrom.plots$onlyADX)
-print(ancestry.summary.by.contig.len.plots$TC.1kG)
-print(ancestry.summary.by.contig.len.plots$TC.TCD)
-print(ancestry.summary.by.contig.len.plots$TCD.1kG)
-print(ancestry.summary.by.contig.len.plots$onlyADX)
-print(ancestry.histogram.plots$TC.1kG)
-print(ancestry.histogram.plots$TC.TCD)
-print(ancestry.histogram.plots$TCD.1kG)
-print(ancestry.histogram.plots$onlyADX)
-# print(simulation.diagnostic.plots$tc.tspop)
-# print(simulation.diagnostic.plots$tc.inference)
-# print(simulation.diagnostic.plots$tc.d.inference)
-# print(simulation.diagnostic.plots$lg.tspop)
-# print(simulation.diagnostic.plots$lg.inference)
-# print(simulation.diagnostic.plots$lg.d.inference)
-# print(empirical.diagnostic.plot)
-  }
 
 
 # bootstrap plotting ----
 
 
-# calculate complete-replicate simulation summaries and empirical histograms
+# construct the four active bottom bootstrap figures.
 bootstrap.ancestry.summary <- summarize.bootstrap.ancestry(
   ancestry.individual.data, DOWNSAMPLE.SIZE, RANDOM.SEED,
   BOOTSTRAP.REPLICATES
@@ -2636,16 +853,14 @@ bootstrap.ancestry.histograms <- summarize.bootstrap.histograms(
   ancestry.individual.data, HISTOGRAM.BREAKS, RANDOM.SEED,
   BOOTSTRAP.REPLICATES
   )
-
-# construct TCD/ASW and all-datatype ADX/ASW bootstrap views
 ancestry.bootstrap.tcd.1kg.bar <- make.bootstrap.ancestry.bar.plot(
   bootstrap.ancestry.summary,
   c("Simulation_2T12Consistent_simDown", "Empirical"),
   "African ancestry: TCD and ASW"
   )
-ancestry.bootstrap.all.datatypes.adx.asw.bar <- make.bootstrap.ancestry.bar.plot(
-  bootstrap.ancestry.summary,
-  c(SOURCE.LEVELS[1:4], "Empirical"),
+ancestry.bootstrap.all.datatypes.adx.asw.bar <-
+  make.bootstrap.ancestry.bar.plot(
+  bootstrap.ancestry.summary, SOURCE.LEVELS,
   "African ancestry: all ADX sources and ASW"
   )
 ancestry.bootstrap.tcd.1kg.histogram <- make.bootstrap.ancestry.histogram.plot(
@@ -2653,13 +868,13 @@ ancestry.bootstrap.tcd.1kg.histogram <- make.bootstrap.ancestry.histogram.plot(
   c("Simulation_2T12Consistent_simDown", "Empirical"),
   "Chromosome 1 simulations and genome-wide ASW: TCD and ASW"
   )
-ancestry.bootstrap.all.datatypes.adx.asw.histogram <- make.bootstrap.ancestry.histogram.plot(
-  bootstrap.ancestry.histograms,
-  c(SOURCE.LEVELS[1:4], "Empirical"),
-  "Chromosome 1 simulations and genome-wide ASW: all ADX sources and ASW"
-  )
+ancestry.bootstrap.all.datatypes.adx.asw.histogram <-
+  make.bootstrap.ancestry.histogram.plot(
+    bootstrap.ancestry.histograms, SOURCE.LEVELS,
+    "Chromosome 1 simulations and genome-wide ASW: all ADX sources and ASW"
+    )
 
-# save every bootstrap plot before explicit printing at the script end
+# save each active figure before explicit printing at the script end.
 dir.create(OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
 saveRDS(ancestry.bootstrap.tcd.1kg.bar, file.path(
   OUTPUT.DIR, "ancestry.bootstrap.tcd.1kg.bar.rds"
