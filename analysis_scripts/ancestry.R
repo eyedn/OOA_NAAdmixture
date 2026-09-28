@@ -571,7 +571,7 @@ prepare.ancestry.bootstrap.comparison.data <- function(
       paste(missing.individual, collapse = ", "))
     }
   empirical <- individual.data %>%
-    mutate(chrom = as.character(chrom)) %>%
+    mutate(chrom = as.character(chrom), sample_id = vcf_sample_id) %>%
     filter(
       data.type == "Empirical", role == "ASW", method == empirical.method,
       chrom %in% c(chromosomes, "all")
