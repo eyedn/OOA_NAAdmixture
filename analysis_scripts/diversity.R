@@ -14,6 +14,7 @@
 
 
 # set up ----
+options(scipen = 999)
 library(tidyverse)
 library(nanoparquet)
 
@@ -716,14 +717,14 @@ make.diversity.contrast.plot <- function(
       aes(ymin = ci.lower, ymax = ci.upper), width = 0, color = "black",
       linewidth = CATEGORICAL.BAR.LINEWIDTH, show.legend = FALSE
       ) +
-    geom_col(
+    geom_point(
       aes(fill = contrast, color = point.color),
       position = position_dodge(width = CATEGORICAL.BAR.DODGE),
-      width = CATEGORICAL.BAR.WIDTH,
-      linewidth = CATEGORICAL.BAR.LINEWIDTH
+      shape = 21, size = 2.5, stroke = CATEGORICAL.BAR.LINEWIDTH
       ) +
     facet.layer +
-    scale_color_manual(values = c(black = "black", red = "red"),
+    scale_color_manual(
+      values = c(red = "red", contrast.colors),
       guide = "none") +
     scale_fill_manual(
       values = contrast.colors, breaks = active.contrasts,
@@ -739,7 +740,7 @@ make.diversity.contrast.plot <- function(
     guides(
       fill = guide_legend(
         override.aes = list(
-          shape = 22, fill = unname(contrast.colors[active.contrasts]),
+          shape = 21, fill = unname(contrast.colors[active.contrasts]),
           color = "black"
           )
         )
@@ -777,11 +778,11 @@ make.diversity.population.empirical.contrast.plot <- function(data) {
       alpha = 0.5, linewidth = CATEGORICAL.BAR.LINEWIDTH,
       show.legend = FALSE
       ) +
-    geom_col(
-      aes(plot.x, difference, fill = contrast),
+    geom_point(
+      aes(plot.x, difference, fill = contrast, color = contrast),
       position = position_dodge(width = CATEGORICAL.BAR.DODGE),
-      width = CATEGORICAL.BAR.WIDTH, color = "black",
-      linewidth = CATEGORICAL.BAR.LINEWIDTH, inherit.aes = FALSE
+      shape = 21, size = 2.5, stroke = CATEGORICAL.BAR.LINEWIDTH,
+      inherit.aes = FALSE
       ) +
     facet_grid(
       rows = vars(stat), scales = "free_y",
@@ -798,7 +799,7 @@ make.diversity.population.empirical.contrast.plot <- function(data) {
     guides(
       color = guide_legend(
         override.aes = list(
-          shape = 22,
+          shape = 21,
           fill = unname(PLOT.STYLES$contrast.colors[active.contrasts]),
           color = "black"
           )

@@ -14,6 +14,7 @@
 
 
 # set up ----
+options(scipen = 999)
 library(tidyverse)
 library(glue)
 library(nanoparquet)

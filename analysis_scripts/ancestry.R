@@ -14,6 +14,7 @@
 
 
 # set up ----
+options(scipen = 999)
 library(tidyverse)
 library(ggh4x)
 library(nanoparquet)
@@ -906,7 +907,7 @@ prepare.ancestry.bootstrap.contrast.plot.data <- function(
       contrast = factor(contrast, levels = config$contrasts),
       statistic = factor(statistic, levels = statistics),
       significant = ci.lower > 0 | ci.upper < 0,
-      point.color = if_else(significant, "red", "black"),
+      point.color = if_else(significant, "red", as.character(contrast)),
       contrast.color = unname(PLOT.STYLES$contrast.colors[as.character(
         contrast
         )]),
@@ -942,13 +943,13 @@ make.ancestry.bootstrap.contrast.plot <- function(
       color = "black", linewidth = CATEGORICAL.BAR.LINEWIDTH,
       show.legend = FALSE
       ) +
-    geom_col(
+    geom_point(
       aes(fill = contrast, color = point.color),
       position = position_dodge(width = CATEGORICAL.BAR.DODGE),
-      width = CATEGORICAL.BAR.WIDTH,
-      linewidth = CATEGORICAL.BAR.LINEWIDTH
+      shape = 21, size = 2.5, stroke = CATEGORICAL.BAR.LINEWIDTH
       ) +
-    scale_color_manual(values = c(black = "black", red = "red"),
+    scale_color_manual(
+      values = c(red = "red", PLOT.STYLES$contrast.colors),
       guide = "none") +
     scale_fill_manual(
       values = PLOT.STYLES$contrast.colors, breaks = active.contrasts,
@@ -962,7 +963,7 @@ make.ancestry.bootstrap.contrast.plot <- function(
     guides(
       fill = guide_legend(
         override.aes = list(
-          shape = 22,
+          shape = 21,
           fill = unname(PLOT.STYLES$contrast.colors[active.contrasts]),
           color = "black"
           )

@@ -14,6 +14,7 @@
 
 
 # set up ----
+options(scipen = 999)
 library(tidyverse)
 library(glue)
 library(nanoparquet)
@@ -781,7 +782,7 @@ prepare.kinship.contrast.plot.data <- function(
       contrast = factor(contrast, levels = contrasts),
       outside.zero = ci.lower > 0 | ci.upper < 0,
       point.color = if_else(
-        outside.zero, "red", "black"
+        outside.zero, "red", as.character(contrast)
         )
       )
   if ("data.type" %in% names(displayed)) {
@@ -812,13 +813,13 @@ make.kinship.contrast.plot <- function(data, interval.label, title) {
       color = "black", linewidth = CATEGORICAL.BAR.LINEWIDTH,
       show.legend = FALSE
       ) +
-    geom_col(
+    geom_point(
       aes(fill = contrast, color = point.color), position = dodge,
-      width = KINSHIP.BIN.WIDTH * DENSE.BAR.WIDTH.MULTIPLIER,
-      linewidth = CATEGORICAL.BAR.LINEWIDTH
+      shape = 21, size = 2.5, stroke = CATEGORICAL.BAR.LINEWIDTH
       ) +
     coord_cartesian(xlim = KINSHIP.CONTRAST.X.LIMITS) +
-    scale_color_manual(values = c(black = "black", red = "red"),
+    scale_color_manual(
+      values = c(red = "red", KINSHIP.CONTRAST.COLORS),
       guide = "none") +
     scale_fill_manual(values = KINSHIP.CONTRAST.COLORS[active.contrasts],
       breaks = active.contrasts,
@@ -830,7 +831,7 @@ make.kinship.contrast.plot <- function(data, interval.label, title) {
       fill = guide_legend(
         nrow = 1, byrow = TRUE,
         override.aes = list(
-          shape = 22,
+          shape = 21,
           fill = unname(KINSHIP.CONTRAST.COLORS[active.contrasts]),
           color = "black"
           )

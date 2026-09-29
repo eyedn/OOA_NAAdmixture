@@ -14,6 +14,7 @@
 
 
 # set up ----
+options(scipen = 999)
 library(tidyverse)
 library(nanoparquet)
 library(scales)
@@ -668,7 +669,7 @@ prepare.sfs.contrast.plot.data <- function(
       measure = factor(measure, levels = c("count", "proportion")),
       outside.zero = ci.lower > 0 | ci.upper < 0,
       point.color = if_else(
-        outside.zero, "red", "black"
+        outside.zero, "red", as.character(contrast)
         )
       )
   if ("data.type" %in% names(displayed)) {
@@ -700,13 +701,13 @@ make.sfs.contrast.plot <- function(data, interval.label, title) {
       color = "black", linewidth = CATEGORICAL.BAR.LINEWIDTH,
       show.legend = FALSE
       ) +
-    geom_col(
+    geom_point(
       aes(fill = contrast, color = point.color), position = SFS.DODGE,
-      width = SFS.BIN.WIDTH * DENSE.BAR.WIDTH.MULTIPLIER,
-      linewidth = CATEGORICAL.BAR.LINEWIDTH
+      shape = 21, size = 2.5, stroke = CATEGORICAL.BAR.LINEWIDTH
       ) +
     scale_x_continuous(breaks = seq_len(DISPLAY.BIN.MAX)) +
-    scale_color_manual(values = c(black = "black", red = "red"),
+    scale_color_manual(
+      values = c(red = "red", SFS.CONTRAST.COLORS),
       guide = "none") +
     scale_fill_manual(
       values = SFS.CONTRAST.COLORS[active.contrasts],
@@ -721,7 +722,7 @@ make.sfs.contrast.plot <- function(data, interval.label, title) {
       fill = guide_legend(
         nrow = 1, byrow = TRUE,
         override.aes = list(
-          shape = 22,
+          shape = 21,
           fill = unname(SFS.CONTRAST.COLORS[active.contrasts]),
           color = "black"
           )
@@ -754,11 +755,13 @@ make.sfs.empirical.contrast.plot <- function(data) {
     aes(minor.allele.count, difference, group = contrast)
     ) +
     geom_hline(yintercept = 0, linetype = "dashed", linewidth = 1) +
-    geom_col(
-      aes(minor.allele.count, difference, fill = contrast, group = contrast),
+    geom_point(
+      aes(
+        minor.allele.count, difference, fill = contrast,
+        color = contrast, group = contrast
+        ),
       position = SFS.DODGE,
-      width = SFS.BIN.WIDTH * DENSE.BAR.WIDTH.MULTIPLIER,
-      color = "black", linewidth = CATEGORICAL.BAR.LINEWIDTH,
+      shape = 21, size = 2.5, stroke = CATEGORICAL.BAR.LINEWIDTH,
       inherit.aes = FALSE
       ) +
     scale_x_continuous(breaks = seq_len(DISPLAY.BIN.MAX)) +
@@ -766,6 +769,9 @@ make.sfs.empirical.contrast.plot <- function(data) {
       values = SFS.CONTRAST.COLORS[active.contrasts],
       breaks = active.contrasts,
       labels = SFS.CONTRAST.LABELS[active.contrasts]
+      ) +
+    scale_color_manual(
+      values = SFS.CONTRAST.COLORS[active.contrasts], guide = "none"
       ) +
     labs(
       x = "Minor allele count bin", y = "Left population minus right",
@@ -775,7 +781,7 @@ make.sfs.empirical.contrast.plot <- function(data) {
       fill = guide_legend(
         nrow = 1, byrow = TRUE,
         override.aes = list(
-          shape = 22,
+          shape = 21,
           fill = unname(SFS.CONTRAST.COLORS[active.contrasts]),
           color = "black"
           )
