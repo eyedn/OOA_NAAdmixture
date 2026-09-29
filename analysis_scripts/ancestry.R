@@ -8,11 +8,14 @@
 # ancestry.R
 # ______________________________________________________________________________
 
+# pattern: Mixed (unavoidable)
+# Reason: This analysis script combines Parquet I/O, bootstrap calculations,
+# and plot persistence.
+
 
 # set up ----
 library(tidyverse)
 library(ggh4x)
-library(ggfx)
 library(nanoparquet)
 
 
@@ -54,15 +57,15 @@ PLOT.STYLES <- list(
     Simulation_2T12Consistent = "#9A83CE",
     Simulation_2T12Consistent_simDown = "#6F55B5",
     Simulation_largeGrowth = "#32146F",
-    Simulation_largeGrowth_simDown = "#4B1FA8", Empirical = "#B83264"
+    Simulation_largeGrowth_simDown = "#4B1FA8", Empirical = "#E44B8D"
     ),
   labels = SOURCE.LABELS,
-  empirical.colors = c(ADMIXTURE = "#B83264", fastStructure = "#B9584A"),
+  empirical.colors = c(ADMIXTURE = "#E44B8D", fastStructure = "#E44B8D"),
   contrast.colors = c(
     `TC-Emp` = "#9A83CE", `TCD-Emp` = "#6F55B5",
     `LG-Emp` = "#32146F", `LGD-Emp` = "#4B1FA8",
-    `TC-TCD` = "#BDBDBD", `LG-LGD` = "#737373",
-    `TC-LG` = "#000000"
+    `TC-TCD` = "#BFFBFF", `LG-LGD` = "#16ACBD",
+    `TC-LG` = "#00606F"
     ),
   contrast.labels = c(
     `TC-Emp` = "T.C. - ASW", `TCD-Emp` = "T.C.D. - ASW",
@@ -84,6 +87,31 @@ ANCESTRY.BOOTSTRAP.CONTRASTS <- tribble(
 
 
 # internal functions ----
+
+
+# apply the common visual treatment to a completed plot.
+apply.standard.plot.theme <- function(plot, legend.position = "top") {
+  return(plot + theme_bw(base_size = PLOT.BASE.SIZE) + theme(
+    legend.position = legend.position,
+    legend.direction = "horizontal",
+    legend.box = "horizontal",
+    panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    strip.text = element_text(face = "plain")
+    ))
+  }
+
+
+# return the configured empirical-inference subtitle.
+ancestry.inference.subtitle <- function() {
+  return(paste("Empirical inference:", PLOT.EMPIRICAL.METHOD))
+  }
+
+
+# return a method-tagged output filename.
+ancestry.output.filename <- function(stem, extension) {
+  return(paste0(stem, ".", tolower(PLOT.EMPIRICAL.METHOD), ".", extension))
+  }
 
 
 # return active sources in their canonical display order.
@@ -458,13 +486,10 @@ make.bootstrap.ancestry.bar.plot <- function(data, data.types, title) {
       aes(ymin = lower, ymax = upper), position = dodge, width = 0,
       linewidth = CATEGORICAL.BAR.LINEWIDTH, na.rm = TRUE
       ) +
-    with_outer_glow(
-      geom_hline(
-        data = genome, aes(yintercept = mean), linetype = "longdash",
-        color = PLOT.STYLES$empirical.colors[[PLOT.EMPIRICAL.METHOD]],
-        linewidth = 1
-        ),
-      colour = "black", sigma = 0, expand = 3
+    geom_hline(
+      data = genome, aes(yintercept = mean), linetype = "longdash",
+      color = PLOT.STYLES$empirical.colors[[PLOT.EMPIRICAL.METHOD]],
+      linewidth = 1
       ) +
     facet_wrap(
       vars(stat), scales = "free_y", nrow = 1,
@@ -478,10 +503,11 @@ make.bootstrap.ancestry.bar.plot <- function(data, data.types, title) {
       ) +
     scale_fill_manual(values = PLOT.STYLES$colors,
       labels = PLOT.STYLES$labels) +
-    labs(title = title, x = "Chromosome", y = "African ancestry", fill = NULL) +
-    theme_bw(base_size = PLOT.BASE.SIZE) +
-    theme(legend.position = "top", panel.grid.minor = element_blank())
-  return(plot)
+    labs(
+      title = title, subtitle = ancestry.inference.subtitle(), x = "Chromosome",
+      y = "African ancestry", fill = NULL
+      )
+  return(apply.standard.plot.theme(plot))
   }
 
 
@@ -520,11 +546,9 @@ make.bootstrap.ancestry.histogram.plot <- function(
       labels = PLOT.STYLES$labels) +
     labs(
       title = title, x = "African ancestry", y = "Fraction of individuals",
-      fill = NULL
-      ) +
-    theme_bw(base_size = PLOT.BASE.SIZE) +
-    theme(legend.position = "top", panel.grid.minor = element_blank())
-  return(plot)
+      fill = NULL, subtitle = ancestry.inference.subtitle()
+      )
+  return(apply.standard.plot.theme(plot))
   }
 
 
@@ -810,14 +834,18 @@ write.ancestry.bootstrap.comparison.tables <- function(
     tables$chromosome.comparisons,
     file.path(
       output.directory,
-      "ancestry.statistics.bootstrap.chromosome.comparisons.csv"
+      ancestry.output.filename(
+        "ancestry.statistics.bootstrap.chromosome.comparisons", "csv"
+        )
       )
     )
   readr::write_csv(
     tables$chromosome.vs.genome.asw,
     file.path(
       output.directory,
-      "ancestry.statistics.bootstrap.chromosome_vs_genome_asw.csv"
+      ancestry.output.filename(
+        "ancestry.statistics.bootstrap.chromosome_vs_genome_asw", "csv"
+        )
       )
     )
   }
@@ -878,7 +906,7 @@ prepare.ancestry.bootstrap.contrast.plot.data <- function(
       contrast = factor(contrast, levels = config$contrasts),
       statistic = factor(statistic, levels = statistics),
       significant = ci.lower > 0 | ci.upper < 0,
-      point.color = if_else(significant, "red", as.character(contrast)),
+      point.color = if_else(significant, "red", "black"),
       contrast.color = unname(PLOT.STYLES$contrast.colors[as.character(
         contrast
         )]),
@@ -908,40 +936,35 @@ make.ancestry.bootstrap.contrast.plot <- function(
     data,
     aes(plot.x, difference, group = contrast)
     ) +
-    geom_hline(yintercept = 0, linetype = "dashed") +
+    geom_hline(yintercept = 0, linetype = "dashed", linewidth = 1) +
     geom_errorbar(
-      aes(ymin = ci.lower, ymax = ci.upper, color = contrast),
-      width = CATEGORICAL.BAR.WIDTH * 0.2,
-      linewidth = CATEGORICAL.BAR.LINEWIDTH, show.legend = FALSE
+      aes(ymin = ci.lower, ymax = ci.upper), width = 0,
+      color = "black", linewidth = CATEGORICAL.BAR.LINEWIDTH,
+      show.legend = FALSE
       ) +
-    geom_point(
-      aes(
-        plot.x, difference, color = point.color, fill = contrast,
-        group = contrast
-        ),
-      shape = 21, size = 2.5,
-      stroke = CATEGORICAL.BAR.LINEWIDTH, inherit.aes = FALSE
+    geom_col(
+      aes(fill = contrast, color = point.color),
+      position = position_dodge(width = CATEGORICAL.BAR.DODGE),
+      width = CATEGORICAL.BAR.WIDTH,
+      linewidth = CATEGORICAL.BAR.LINEWIDTH
       ) +
-    scale_color_manual(
-      values = c(PLOT.STYLES$contrast.colors, red = "red"),
-      breaks = active.contrasts,
-      labels = PLOT.STYLES$contrast.labels[active.contrasts]
-      ) +
+    scale_color_manual(values = c(black = "black", red = "red"),
+      guide = "none") +
     scale_fill_manual(
-      values = PLOT.STYLES$contrast.colors, guide = "none"
+      values = PLOT.STYLES$contrast.colors, breaks = active.contrasts,
+      labels = PLOT.STYLES$contrast.labels[active.contrasts]
       ) +
     scale_y_continuous(expand = expansion(mult = c(0.05, 0.15))) +
     labs(
-      x = "Chromosome",
-      y = "Difference", color = NULL,
-      title = title
+      x = "Chromosome", y = "Difference", color = NULL, title = title,
+      subtitle = ancestry.inference.subtitle()
       ) +
     guides(
-      color = guide_legend(
+      fill = guide_legend(
         override.aes = list(
-          shape = 21,
+          shape = 22,
           fill = unname(PLOT.STYLES$contrast.colors[active.contrasts]),
-          color = unname(PLOT.STYLES$contrast.colors[active.contrasts])
+          color = "black"
           )
         )
       ) +
@@ -949,13 +972,7 @@ make.ancestry.bootstrap.contrast.plot <- function(
       breaks = seq_along(levels(data$chromosome)),
       labels = levels(data$chromosome)
       ) +
-    theme_bw(base_size = PLOT.BASE.SIZE) +
-    theme(
-      legend.position = "top",
-      legend.title = element_blank(),
-      strip.background = element_rect(fill = "grey92"),
-      panel.grid.minor = element_blank()
-      )
+    theme(legend.title = element_blank())
     
   if (facet.statistics) {
     if (all(is.na(data$facet.label))) {
@@ -970,7 +987,7 @@ make.ancestry.bootstrap.contrast.plot <- function(
         )
       }
     }
-  return(plot)
+  return(apply.standard.plot.theme(plot))
   }
 
 
@@ -1138,43 +1155,65 @@ ancestry.bootstrap.simulation.bonferroni.comparisons <-
 # save each active figure before explicit printing at the script end.
 dir.create(OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
 saveRDS(ancestry.bootstrap.tcd.1kg.bar, file.path(
-  OUTPUT.DIR, "ancestry.bootstrap.tcd.1kg.bar.rds"
+  OUTPUT.DIR, ancestry.output.filename("ancestry.bootstrap.tcd.1kg.bar", "rds")
   ))
 saveRDS(ancestry.bootstrap.all.datatypes.adx.asw.bar, file.path(
-  OUTPUT.DIR, "ancestry.bootstrap.all.datatypes.adx.asw.bar.rds"
+  OUTPUT.DIR, ancestry.output.filename(
+    "ancestry.bootstrap.all.datatypes.adx.asw.bar", "rds"
+    )
   ))
 saveRDS(ancestry.bootstrap.tcd.1kg.histogram, file.path(
-  OUTPUT.DIR, "ancestry.bootstrap.tcd.1kg.histogram.rds"
+  OUTPUT.DIR, ancestry.output.filename(
+    "ancestry.bootstrap.tcd.1kg.histogram", "rds"
+    )
   ))
 saveRDS(ancestry.bootstrap.all.datatypes.adx.asw.histogram, file.path(
-  OUTPUT.DIR, "ancestry.bootstrap.all.datatypes.adx.asw.histogram.rds"
+  OUTPUT.DIR, ancestry.output.filename(
+    "ancestry.bootstrap.all.datatypes.adx.asw.histogram", "rds"
+    )
   ))
 saveRDS(ancestry.bootstrap.tcd.1kg.histograms, file.path(
-  OUTPUT.DIR, "ancestry.bootstrap.tcd.1kg.histograms.rds"
+  OUTPUT.DIR, ancestry.output.filename(
+    "ancestry.bootstrap.tcd.1kg.histograms", "rds"
+    )
   ))
 saveRDS(ancestry.bootstrap.all.datatypes.adx.asw.histograms, file.path(
-  OUTPUT.DIR, "ancestry.bootstrap.all.datatypes.adx.asw.histograms.rds"
+  OUTPUT.DIR, ancestry.output.filename(
+    "ancestry.bootstrap.all.datatypes.adx.asw.histograms", "rds"
+    )
   ))
 saveRDS(ancestry.bootstrap.empirical.95.chromosome.comparisons, file.path(
-  OUTPUT.DIR, "ancestry.bootstrap.empirical.95.chromosome.comparisons.rds"
+  OUTPUT.DIR, ancestry.output.filename(
+    "ancestry.bootstrap.empirical.95.chromosome.comparisons", "rds"
+    )
   ))
 saveRDS(ancestry.bootstrap.empirical.95.genome.comparisons, file.path(
-  OUTPUT.DIR, "ancestry.bootstrap.empirical.95.genome.comparisons.rds"
+  OUTPUT.DIR, ancestry.output.filename(
+    "ancestry.bootstrap.empirical.95.genome.comparisons", "rds"
+    )
   ))
 saveRDS(ancestry.bootstrap.empirical.bonferroni.chromosome.comparisons,
   file.path(
     OUTPUT.DIR,
-    "ancestry.bootstrap.empirical.bonferroni.chromosome.comparisons.rds"
+    ancestry.output.filename(
+      "ancestry.bootstrap.empirical.bonferroni.chromosome.comparisons", "rds"
+      )
     )
   )
 saveRDS(ancestry.bootstrap.empirical.bonferroni.genome.comparisons, file.path(
-  OUTPUT.DIR, "ancestry.bootstrap.empirical.bonferroni.genome.comparisons.rds"
+  OUTPUT.DIR, ancestry.output.filename(
+    "ancestry.bootstrap.empirical.bonferroni.genome.comparisons", "rds"
+    )
   ))
 saveRDS(ancestry.bootstrap.simulation.95.comparisons, file.path(
-  OUTPUT.DIR, "ancestry.bootstrap.simulation.95.comparisons.rds"
+  OUTPUT.DIR, ancestry.output.filename(
+    "ancestry.bootstrap.simulation.95.comparisons", "rds"
+    )
   ))
 saveRDS(ancestry.bootstrap.simulation.bonferroni.comparisons, file.path(
-  OUTPUT.DIR, "ancestry.bootstrap.simulation.bonferroni.comparisons.rds"
+  OUTPUT.DIR, ancestry.output.filename(
+    "ancestry.bootstrap.simulation.bonferroni.comparisons", "rds"
+    )
   ))
 print(ancestry.bootstrap.tcd.1kg.bar)
 print(ancestry.bootstrap.all.datatypes.adx.asw.bar)

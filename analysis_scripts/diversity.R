@@ -8,6 +8,10 @@
 # diversity.R
 # ______________________________________________________________________________
 
+# pattern: Mixed (unavoidable)
+# Reason: This analysis script combines Parquet I/O, bootstrap calculations,
+# and plot persistence.
+
 
 # set up ----
 library(tidyverse)
@@ -92,8 +96,8 @@ PLOT.STYLES <- list(
     YRI = "#EEC4DC", ASW = "#E44B8D", CEU = "#BB437E"
     ),
   contrast.colors = c(
-    `AFR-ADX` = "#BDBDBD", `AFR-EUR` = "#737373",
-    `ADX-EUR` = "#000000"
+    `AFR-ADX` = "#BFFBFF", `AFR-EUR` = "#16ACBD",
+    `ADX-EUR` = "#00606F"
     ),
   contrast.labels = c(
     `AFR-ADX` = "AFR - ADX", `AFR-EUR` = "AFR - EUR",
@@ -104,14 +108,27 @@ PLOT.STYLES <- list(
     `ADX-EUR` = "dotted"
     ),
   simulation.contrast.colors = c(
-    "T.C. - T.C.D." = "#BDBDBD", "L.G. - L.G.D." = "#737373",
-    "T.C. - L.G." = "#000000"
+    "T.C. - T.C.D." = "#BFFBFF", "L.G. - L.G.D." = "#16ACBD",
+    "T.C. - L.G." = "#00606F"
     ),
   series.labels = SOURCE.LABELS
   )
 
 
 # internal functions ----
+
+
+# apply the common visual treatment to a completed plot.
+apply.standard.plot.theme <- function(plot, legend.position = "top") {
+  return(plot + theme_bw(base_size = PLOT.BASE.SIZE) + theme(
+    legend.position = legend.position,
+    legend.direction = "horizontal",
+    legend.box = "horizontal",
+    panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    strip.text = element_text(face = "plain")
+    ))
+  }
 
 
 # return the canonical levels represented by a filtered plot view
@@ -579,7 +596,7 @@ prepare.diversity.population.contrast.plot.data <- function(
     mutate(
       simulated.outside = ci.lower > 0 | ci.upper < 0,
       point.color = if_else(
-        simulated.outside, "red", as.character(contrast)
+        simulated.outside, "red", "black"
         )
       ) %>%
     ungroup()
@@ -680,7 +697,7 @@ make.diversity.contrast.plot <- function(
     contrasts %in% unique(as.character(simulation$contrast))
     ]
   plot <- ggplot(simulation, aes(plot.x, difference)) +
-    geom_hline(yintercept = 0, linetype = "dashed")
+    geom_hline(yintercept = 0, linetype = "dashed", linewidth = 1)
   facet.layer <- if (contrast.type == "population") {
     facet_grid(
       rows = vars(data.type, stat), scales = "free_y",
@@ -696,32 +713,34 @@ make.diversity.contrast.plot <- function(
     }
   plot <- plot +
     geom_errorbar(
-      aes(ymin = ci.lower, ymax = ci.upper, color = contrast), width = 0.08,
+      aes(ymin = ci.lower, ymax = ci.upper), width = 0, color = "black",
       linewidth = CATEGORICAL.BAR.LINEWIDTH, show.legend = FALSE
       ) +
-    geom_point(
-      aes(plot.x, difference, color = point.color, fill = contrast),
-      shape = 21, size = 2.5,
-      stroke = CATEGORICAL.BAR.LINEWIDTH, inherit.aes = FALSE
+    geom_col(
+      aes(fill = contrast, color = point.color),
+      position = position_dodge(width = CATEGORICAL.BAR.DODGE),
+      width = CATEGORICAL.BAR.WIDTH,
+      linewidth = CATEGORICAL.BAR.LINEWIDTH
       ) +
     facet.layer +
-    scale_color_manual(
-      values = c(contrast.colors, red = "red"), breaks = active.contrasts,
+    scale_color_manual(values = c(black = "black", red = "red"),
+      guide = "none") +
+    scale_fill_manual(
+      values = contrast.colors, breaks = active.contrasts,
       labels = if (contrast.type == "population") {
         PLOT.STYLES$contrast.labels[active.contrasts]
         } else {
         active.contrasts
         }
       ) +
-    scale_fill_manual(values = contrast.colors, guide = "none") +
     scale_linetype_manual(
       values = PLOT.STYLES$contrast.linetypes, guide = "none"
       ) +
     guides(
-      color = guide_legend(
+      fill = guide_legend(
         override.aes = list(
-          shape = 21, fill = unname(contrast.colors[active.contrasts]),
-          color = unname(contrast.colors[active.contrasts])
+          shape = 22, fill = unname(contrast.colors[active.contrasts]),
+          color = "black"
           )
         )
       ) +
@@ -740,12 +759,8 @@ make.diversity.contrast.plot <- function(
           }
         )
       ) +
-    theme_bw(base_size = PLOT.BASE.SIZE) +
-    theme(
-      legend.position = "top", legend.title = element_blank(),
-      strip.text = element_text(face = "bold")
-      )
-  return(plot)
+    theme(legend.title = element_blank())
+  return(apply.standard.plot.theme(plot))
   }
 
 
@@ -762,10 +777,11 @@ make.diversity.population.empirical.contrast.plot <- function(data) {
       alpha = 0.5, linewidth = CATEGORICAL.BAR.LINEWIDTH,
       show.legend = FALSE
       ) +
-    geom_point(
-      aes(plot.x, difference, color = contrast, fill = contrast),
-      shape = 21, size = 2.5, stroke = CATEGORICAL.BAR.LINEWIDTH,
-      inherit.aes = FALSE
+    geom_col(
+      aes(plot.x, difference, fill = contrast),
+      position = position_dodge(width = CATEGORICAL.BAR.DODGE),
+      width = CATEGORICAL.BAR.WIDTH, color = "black",
+      linewidth = CATEGORICAL.BAR.LINEWIDTH, inherit.aes = FALSE
       ) +
     facet_grid(
       rows = vars(stat), scales = "free_y",
@@ -782,9 +798,9 @@ make.diversity.population.empirical.contrast.plot <- function(data) {
     guides(
       color = guide_legend(
         override.aes = list(
-          shape = 21,
+          shape = 22,
           fill = unname(PLOT.STYLES$contrast.colors[active.contrasts]),
-          color = unname(PLOT.STYLES$contrast.colors[active.contrasts])
+          color = "black"
           )
         )
       ) +
@@ -795,12 +811,8 @@ make.diversity.population.empirical.contrast.plot <- function(data) {
       x = "Chromosome", y = "Difference", color = NULL,
       title = "Empirical population diversity differences"
       ) +
-    theme_bw(base_size = PLOT.BASE.SIZE) +
-    theme(
-      legend.position = "top", legend.title = element_blank(),
-      strip.text = element_text(face = "bold")
-      )
-  return(plot)
+    theme(legend.title = element_blank())
+  return(apply.standard.plot.theme(plot))
   }
 
 
@@ -1051,7 +1063,7 @@ make.diversity.plot <- function(
     geom_errorbar(
       data = points,
       aes(ymin = lower, ymax = upper),
-      position = dodge, width = 0.15,
+      position = dodge, width = 0,
       linewidth = CATEGORICAL.BAR.LINEWIDTH,
       na.rm = TRUE
       ) +
@@ -1071,16 +1083,10 @@ make.diversity.plot <- function(
       )
   
   plot <- plot +
-    ggfx::with_outer_glow(
-      geom_hline(
-        data = genome.lines,
-        aes(yintercept = estimate, color = pop),
-        linetype = "longdash",
-        linewidth = CATEGORICAL.BAR.LINEWIDTH
-        ),
-      colour = "black",
-      sigma = 0,
-      expand = 3
+    geom_hline(
+      data = genome.lines,
+      aes(yintercept = estimate, color = pop),
+      linetype = "longdash", linewidth = CATEGORICAL.BAR.LINEWIDTH
       ) +
     scale_y_continuous(
       labels = scales::label_number(accuracy = 0.00001)
@@ -1096,16 +1102,9 @@ make.diversity.plot <- function(
       color = "none",
       fill = guide_legend(order = 1, nrow = 1, byrow = TRUE)
       ) +
-    theme_bw(base_size = PLOT.BASE.SIZE) +
-    theme(
-      legend.position = "top",
-      legend.direction = "horizontal",
-      legend.box = "horizontal",
-      legend.title = element_blank(),
-      strip.text = element_text(face = "bold")
-      )
+    theme(legend.title = element_blank())
 
-  return(plot)
+  return(apply.standard.plot.theme(plot))
   }
 
 

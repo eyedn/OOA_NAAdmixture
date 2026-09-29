@@ -8,6 +8,10 @@
 # kinship.R
 # ______________________________________________________________________________
 
+# pattern: Mixed (unavoidable)
+# Reason: This analysis script combines Parquet I/O, bootstrap calculations,
+# and plot persistence.
+
 
 # set up ----
 library(tidyverse)
@@ -40,6 +44,7 @@ KINSHIP.DOWNSAMPLE.SIZES <- c(AFR = 118L, ADX = 50L, EUR = 119L)
 BOOTSTRAP.REPLICATES <- 1000L
 RANDOM.SEED <- 123L
 PLOT.BASE.SIZE <- 24
+CATEGORICAL.BAR.LINEWIDTH <- 1
 DENSE.BAR.WIDTH.MULTIPLIER <- 0.8
 DENSE.BAR.LINEWIDTH <- 0.75
 KINSHIP.CONTRAST.BOOTSTRAP.REPLICATES <- 50L
@@ -66,10 +71,10 @@ KINSHIP.EMPIRICAL.CONTRASTS <- tribble(
   "ASW-CEU", "ASW", "CEU"
   )
 KINSHIP.CONTRAST.COLORS <- c(
-  "AFR-ADX" = "#BDBDBD", "AFR-EUR" = "#737373", "ADX-EUR" = "#000000",
-  "T.C. - T.C.D." = "#BDBDBD", "L.G. - L.G.D." = "#737373",
-  "T.C. - L.G." = "#000000",
-  "YRI-ASW" = "#BDBDBD", "YRI-CEU" = "#737373", "ASW-CEU" = "#000000"
+  "AFR-ADX" = "#BFFBFF", "AFR-EUR" = "#16ACBD", "ADX-EUR" = "#00606F",
+  "T.C. - T.C.D." = "#BFFBFF", "L.G. - L.G.D." = "#16ACBD",
+  "T.C. - L.G." = "#00606F",
+  "YRI-ASW" = "#BFFBFF", "YRI-CEU" = "#16ACBD", "ASW-CEU" = "#00606F"
   )
 KINSHIP.CONTRAST.LABELS <- c(
   "AFR-ADX" = "AFR - ADX", "AFR-EUR" = "AFR - EUR",
@@ -105,6 +110,19 @@ BOOTSTRAP.PLOT.STYLES <- list(
 
 
 # internal functions ----
+
+
+# apply the common visual treatment to a completed plot.
+apply.standard.plot.theme <- function(plot, legend.position = "top") {
+  return(plot + theme_bw(base_size = PLOT.BASE.SIZE) + theme(
+    legend.position = legend.position,
+    legend.direction = "horizontal",
+    legend.box = "horizontal",
+    panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    strip.text = element_text(face = "plain")
+    ))
+  }
 
 
 # return the canonical levels represented by a filtered plot view
@@ -360,10 +378,8 @@ make.bootstrap.kinship.plot <- function(
       ) +
     labs(title = title, x = "Pairwise KING kinship", y = "Fraction of pairs",
       fill = NULL) +
-    guides(fill = guide_legend(order = 1, nrow = 1, byrow = TRUE)) +
-    theme_bw(base_size = PLOT.BASE.SIZE) +
-    theme(legend.position = "top", panel.grid.minor = element_blank(),)
-  return(plot)
+    guides(fill = guide_legend(order = 1, nrow = 1, byrow = TRUE))
+  return(apply.standard.plot.theme(plot))
   }
 
 
@@ -765,7 +781,7 @@ prepare.kinship.contrast.plot.data <- function(
       contrast = factor(contrast, levels = contrasts),
       outside.zero = ci.lower > 0 | ci.upper < 0,
       point.color = if_else(
-        outside.zero, "red", as.character(contrast)
+        outside.zero, "red", "black"
         )
       )
   if ("data.type" %in% names(displayed)) {
@@ -790,49 +806,43 @@ make.kinship.contrast.plot <- function(data, interval.label, title) {
   plot <- ggplot(
     simulation, aes(xmid, difference, group = contrast)
     ) +
-    geom_hline(yintercept = 0, linetype = "dashed") +
+    geom_hline(yintercept = 0, linetype = "dashed", linewidth = 1) +
     geom_errorbar(
-      aes(ymin = ci.lower, ymax = ci.upper, color = contrast),
-      position = dodge, width = 0, linewidth = DENSE.BAR.LINEWIDTH,
+      aes(ymin = ci.lower, ymax = ci.upper), position = dodge, width = 0,
+      color = "black", linewidth = CATEGORICAL.BAR.LINEWIDTH,
       show.legend = FALSE
       ) +
-    geom_point(
-      aes(
-        xmid, difference, color = point.color, fill = contrast,
-        group = contrast
-        ),
-      shape = 21, position = dodge, size = 2.5,
-      stroke = DENSE.BAR.LINEWIDTH, inherit.aes = FALSE
+    geom_col(
+      aes(fill = contrast, color = point.color), position = dodge,
+      width = KINSHIP.BIN.WIDTH * DENSE.BAR.WIDTH.MULTIPLIER,
+      linewidth = CATEGORICAL.BAR.LINEWIDTH
       ) +
     coord_cartesian(xlim = KINSHIP.CONTRAST.X.LIMITS) +
-    scale_color_manual(
-      values = c(KINSHIP.CONTRAST.COLORS, red = "red"),
-      breaks = active.contrasts,
-      labels = KINSHIP.CONTRAST.LABELS[active.contrasts]
-      ) +
-    scale_fill_manual(values = KINSHIP.CONTRAST.COLORS[active.contrasts],
+    scale_color_manual(values = c(black = "black", red = "red"),
       guide = "none") +
+    scale_fill_manual(values = KINSHIP.CONTRAST.COLORS[active.contrasts],
+      breaks = active.contrasts,
+      labels = KINSHIP.CONTRAST.LABELS[active.contrasts]) +
     labs(x = "Pairwise KING kinship", y = "Left minus right fraction of pairs",
       color = NULL, title = title,
       subtitle = paste(interval.label, "interval")) +
     guides(
-      color = guide_legend(
+      fill = guide_legend(
         nrow = 1, byrow = TRUE,
         override.aes = list(
-          shape = 21,
+          shape = 22,
           fill = unname(KINSHIP.CONTRAST.COLORS[active.contrasts]),
-          color = unname(KINSHIP.CONTRAST.COLORS[active.contrasts])
+          color = "black"
           )
         )
       ) +
-    theme_bw(base_size = PLOT.BASE.SIZE) +
-    theme(legend.position = "top", panel.grid.minor = element_blank())
+    theme()
   if ("data.type" %in% names(simulation)) {
     plot <- plot + facet_grid(
       . ~ data.type, labeller = labeller(data.type = SOURCE.LABELS)
       )
     }
-  return(plot)
+  return(apply.standard.plot.theme(plot))
   }
 
 

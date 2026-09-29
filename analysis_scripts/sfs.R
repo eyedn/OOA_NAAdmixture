@@ -8,6 +8,10 @@
 # sfs.R
 # ______________________________________________________________________________
 
+# pattern: Mixed (unavoidable)
+# Reason: This analysis script combines Parquet I/O, bootstrap calculations,
+# and plot persistence.
+
 
 # set up ----
 library(tidyverse)
@@ -86,6 +90,7 @@ SFS.SERIES.LABELS <- c(
 SFS.BIN.WIDTH <- 1
 SFS.DODGE <- position_dodge(width = SFS.BIN.WIDTH)
 PLOT.BASE.SIZE <- 24
+CATEGORICAL.BAR.LINEWIDTH <- 1
 DENSE.BAR.WIDTH.MULTIPLIER <- 0.8
 DENSE.BAR.LINEWIDTH <- 0.75
 SFS.CONTRAST.BOOTSTRAP.REPLICATES <- 50L
@@ -111,10 +116,10 @@ SFS.EMPIRICAL.CONTRASTS <- tribble(
   "ASW-CEU", "ASW", "CEU"
   )
 SFS.CONTRAST.COLORS <- c(
-  "AFR-ADX" = "#BDBDBD", "AFR-EUR" = "#737373", "ADX-EUR" = "#000000",
-  "T.C. - T.C.D." = "#BDBDBD", "L.G. - L.G.D." = "#737373",
-  "T.C. - L.G." = "#000000",
-  "YRI-ASW" = "#BDBDBD", "YRI-CEU" = "#737373", "ASW-CEU" = "#000000"
+  "AFR-ADX" = "#BFFBFF", "AFR-EUR" = "#16ACBD", "ADX-EUR" = "#00606F",
+  "T.C. - T.C.D." = "#BFFBFF", "L.G. - L.G.D." = "#16ACBD",
+  "T.C. - L.G." = "#00606F",
+  "YRI-ASW" = "#BFFBFF", "YRI-CEU" = "#16ACBD", "ASW-CEU" = "#00606F"
   )
 SFS.CONTRAST.LABELS <- c(
   "AFR-ADX" = "AFR - ADX", "AFR-EUR" = "AFR - EUR",
@@ -127,6 +132,19 @@ SFS.CONTRAST.LABELS <- c(
 
 
 # internal functions ----
+
+
+# apply the common visual treatment to a completed plot.
+apply.standard.plot.theme <- function(plot, legend.position = "top") {
+  return(plot + theme_bw(base_size = PLOT.BASE.SIZE) + theme(
+    legend.position = legend.position,
+    legend.direction = "horizontal",
+    legend.box = "horizontal",
+    panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    strip.text = element_text(face = "plain")
+    ))
+  }
 
 
 # return the canonical levels represented by a filtered plot view
@@ -650,7 +668,7 @@ prepare.sfs.contrast.plot.data <- function(
       measure = factor(measure, levels = c("count", "proportion")),
       outside.zero = ci.lower > 0 | ci.upper < 0,
       point.color = if_else(
-        outside.zero, "red", as.character(contrast)
+        outside.zero, "red", "black"
         )
       )
   if ("data.type" %in% names(displayed)) {
@@ -676,45 +694,40 @@ make.sfs.contrast.plot <- function(data, interval.label, title) {
     simulation,
     aes(minor.allele.count, difference, group = contrast)
     ) +
-    geom_hline(yintercept = 0, linetype = "dashed") +
+    geom_hline(yintercept = 0, linetype = "dashed", linewidth = 1) +
     geom_errorbar(
-      aes(ymin = ci.lower, ymax = ci.upper, color = contrast),
-      position = SFS.DODGE, width = 0.25,
-      linewidth = DENSE.BAR.LINEWIDTH, show.legend = FALSE
+      aes(ymin = ci.lower, ymax = ci.upper), position = SFS.DODGE, width = 0,
+      color = "black", linewidth = CATEGORICAL.BAR.LINEWIDTH,
+      show.legend = FALSE
       ) +
-    geom_point(
-      aes(
-        minor.allele.count, difference, color = point.color,
-        fill = contrast, group = contrast
-        ),
-      shape = 21, position = SFS.DODGE, size = 2.5,
-      stroke = DENSE.BAR.LINEWIDTH, inherit.aes = FALSE
+    geom_col(
+      aes(fill = contrast, color = point.color), position = SFS.DODGE,
+      width = SFS.BIN.WIDTH * DENSE.BAR.WIDTH.MULTIPLIER,
+      linewidth = CATEGORICAL.BAR.LINEWIDTH
       ) +
     scale_x_continuous(breaks = seq_len(DISPLAY.BIN.MAX)) +
-    scale_color_manual(
-      values = c(SFS.CONTRAST.COLORS, red = "red"),
+    scale_color_manual(values = c(black = "black", red = "red"),
+      guide = "none") +
+    scale_fill_manual(
+      values = SFS.CONTRAST.COLORS[active.contrasts],
       breaks = active.contrasts,
       labels = SFS.CONTRAST.LABELS[active.contrasts]
-      ) +
-    scale_fill_manual(
-      values = SFS.CONTRAST.COLORS[active.contrasts], guide = "none"
       ) +
     labs(
       x = "Minor allele count bin", y = "Left population/source minus right",
       color = NULL, title = title, subtitle = paste(interval.label, "interval")
       ) +
     guides(
-      color = guide_legend(
+      fill = guide_legend(
         nrow = 1, byrow = TRUE,
         override.aes = list(
-          shape = 21,
+          shape = 22,
           fill = unname(SFS.CONTRAST.COLORS[active.contrasts]),
-          color = unname(SFS.CONTRAST.COLORS[active.contrasts])
+          color = "black"
           )
         )
       ) +
-    theme_bw(base_size = PLOT.BASE.SIZE) +
-    theme(legend.position = "top", panel.grid.minor = element_blank())
+    theme()
   if ("data.type" %in% names(simulation)) {
     plot <- plot + facet_grid(
       rows = vars(data.type, measure), scales = "free_y",
@@ -723,7 +736,7 @@ make.sfs.contrast.plot <- function(data, interval.label, title) {
     } else {
     plot <- plot + facet_grid(measure ~ ., scales = "free_y")
     }
-  return(plot)
+  return(apply.standard.plot.theme(plot))
   }
 
 
@@ -738,42 +751,39 @@ make.sfs.empirical.contrast.plot <- function(data) {
       contrast = factor(contrast, levels = contrasts),
       measure = factor(measure, levels = c("count", "proportion"))
       ),
-    aes(minor.allele.count, difference, color = contrast, group = contrast)
+    aes(minor.allele.count, difference, group = contrast)
     ) +
-    geom_hline(yintercept = 0, linetype = "dashed") +
-    geom_point(
-      aes(minor.allele.count, difference, color = contrast, fill = contrast,
-        group = contrast),
-      shape = 21, position = SFS.DODGE, size = 2.5,
-      stroke = DENSE.BAR.LINEWIDTH, inherit.aes = FALSE
+    geom_hline(yintercept = 0, linetype = "dashed", linewidth = 1) +
+    geom_col(
+      aes(minor.allele.count, difference, fill = contrast, group = contrast),
+      position = SFS.DODGE,
+      width = SFS.BIN.WIDTH * DENSE.BAR.WIDTH.MULTIPLIER,
+      color = "black", linewidth = CATEGORICAL.BAR.LINEWIDTH,
+      inherit.aes = FALSE
       ) +
     scale_x_continuous(breaks = seq_len(DISPLAY.BIN.MAX)) +
-    scale_color_manual(
+    scale_fill_manual(
       values = SFS.CONTRAST.COLORS[active.contrasts],
       breaks = active.contrasts,
       labels = SFS.CONTRAST.LABELS[active.contrasts]
       ) +
-    scale_fill_manual(
-      values = SFS.CONTRAST.COLORS[active.contrasts], guide = "none"
-      ) +
     labs(
       x = "Minor allele count bin", y = "Left population minus right",
-      color = NULL, title = "Empirical population contrasts"
+      fill = NULL, title = "Empirical population contrasts"
       ) +
     guides(
-      color = guide_legend(
+      fill = guide_legend(
         nrow = 1, byrow = TRUE,
         override.aes = list(
-          shape = 21,
+          shape = 22,
           fill = unname(SFS.CONTRAST.COLORS[active.contrasts]),
-          color = unname(SFS.CONTRAST.COLORS[active.contrasts])
+          color = "black"
           )
         )
       ) +
     facet_grid(measure ~ ., scales = "free_y") +
-    theme_bw(base_size = PLOT.BASE.SIZE) +
-    theme(legend.position = "top", panel.grid.minor = element_blank())
-  return(plot)
+    theme()
+  return(apply.standard.plot.theme(plot))
   }
 
 
@@ -847,7 +857,7 @@ make.sfs.plot <- function(
     geom_errorbar(
       aes(ymin = lower, ymax = upper),
       position = SFS.DODGE,
-      width = 0.25, linewidth = DENSE.BAR.LINEWIDTH,
+      width = 0, linewidth = DENSE.BAR.LINEWIDTH,
       na.rm = TRUE
       ) +
     scale_x_continuous(
@@ -873,12 +883,7 @@ make.sfs.plot <- function(
         ),
       fill = NULL
       ) +
-    guides(fill = guide_legend(order = 1, nrow = 1, byrow = TRUE)) +
-    theme_bw(base_size = PLOT.BASE.SIZE) +
-    theme(
-      legend.position = "top", legend.direction = "horizontal", 
-      legend.box = "horizontal", panel.grid.minor = element_blank()
-    )
+    guides(fill = guide_legend(order = 1, nrow = 1, byrow = TRUE))
   if (pseudo.log) {
     plot <- plot +
       scale_y_log10(
@@ -890,7 +895,7 @@ make.sfs.plot <- function(
     } else {
     plot <- plot + scale_y_continuous()
     }
-  return(plot)
+  return(apply.standard.plot.theme(plot))
   }
 
 

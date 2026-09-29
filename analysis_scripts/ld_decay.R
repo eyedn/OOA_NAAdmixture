@@ -8,6 +8,10 @@
 # ld_decay.R
 # ______________________________________________________________________________
 
+# pattern: Mixed (unavoidable)
+# Reason: This analysis script combines Parquet I/O, bootstrap calculations,
+# and plot persistence.
+
 
 # set up ----
 library(tidyverse)
@@ -69,18 +73,31 @@ PLOT.STYLES <- list(
     Simulation_largeGrowth_simDown = "#4B1FA8"
     ),
   contrast.colors = c(
-    `AFR-ADX` = "#BDBDBD", `AFR-EUR` = "#737373",
-    `ADX-EUR` = "#000000"
+    `AFR-ADX` = "#BFFBFF", `AFR-EUR` = "#16ACBD",
+    `ADX-EUR` = "#00606F"
     ),
   simulation.contrast.colors = c(
-    "T.C. - T.C.D." = "#BDBDBD", "L.G. - L.G.D." = "#737373",
-    "T.C. - L.G." = "#000000"
+    "T.C. - T.C.D." = "#BFFBFF", "L.G. - L.G.D." = "#16ACBD",
+    "T.C. - L.G." = "#00606F"
     ),
   series.labels = SOURCE.LABELS
   )
 
 
 # internal functions ----
+
+
+# apply the common visual treatment to a completed plot.
+apply.standard.plot.theme <- function(plot, legend.position = "top") {
+  return(plot + theme_bw(base_size = PLOT.BASE.SIZE) + theme(
+    legend.position = legend.position,
+    legend.direction = "horizontal",
+    legend.box = "horizontal",
+    panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    strip.text = element_text(face = "plain")
+    ))
+  }
 
 
 # return the canonical levels represented by a filtered plot view
@@ -678,7 +695,7 @@ make.ld.simulation.contrast.plot <- function(
     data$simulation,
     aes(distance_bin_bp, difference, fill = contrast)
     ) +
-    geom_hline(yintercept = 0, linetype = "dashed") +
+    geom_hline(yintercept = 0, linetype = "dashed", linewidth = 1) +
     geom_ribbon(aes(ymin = ci.lower, ymax = ci.upper), alpha = 0.2,
       color = NA) +
     geom_line(linewidth = 1) +
@@ -691,39 +708,23 @@ make.ld.simulation.contrast.plot <- function(
       stroke = LD.CONTRAST.LINEWIDTH, inherit.aes = FALSE
       ) +
     facet_wrap(~contrast, nrow = 1) +
-    scale_color_manual(
-      values = c(colors, red = "red"), breaks = active.contrasts,
-      labels = if (contrast.type == "population") {
-        PLOT.STYLES$contrast.labels[active.contrasts]
-        } else {
-        active.contrasts
-        }
-      ) +
+    scale_color_manual(values = c(colors, red = "red"), guide = "none") +
     scale_fill_manual(
       values = colors, breaks = active.contrasts, guide = "none"
-      ) +
-    guides(
-      color = guide_legend(
-        override.aes = list(
-          shape = 21, fill = unname(colors[active.contrasts]),
-          color = unname(colors[active.contrasts])
-          )
-        )
       ) +
     scale_x_continuous(
       limits = c(5000, 200000), breaks = LD.PLOT.DISTANCE.BINS
       ) +
     labs(x = "Distance between SNPs (bp)", y = "Difference", title = title) +
-    theme_bw(base_size = PLOT.BASE.SIZE) +
-    theme(panel.grid.minor = element_blank())
-  return(plot)
+    theme()
+  return(apply.standard.plot.theme(plot, legend.position = "none"))
   }
 
 
 # construct a direct empirical LD population-difference plot without intervals
 make.ld.population.empirical.contrast.plot <- function(data) {
   plot <- ggplot(data, aes(distance_bin_bp, difference, color = contrast)) +
-    geom_hline(yintercept = 0, linetype = "dashed") +
+    geom_hline(yintercept = 0, linetype = "dashed", linewidth = 1) +
     geom_line(linewidth = 1) +
     facet_wrap(~contrast, nrow = 1) +
     scale_color_manual(
@@ -737,9 +738,8 @@ make.ld.population.empirical.contrast.plot <- function(data) {
       x = "Distance between SNPs (bp)", y = "Difference",
       title = "Empirical population LD differences"
       ) +
-    theme_bw(base_size = PLOT.BASE.SIZE) +
-    theme(panel.grid.minor = element_blank())
-  return(plot)
+    theme()
+  return(apply.standard.plot.theme(plot, legend.position = "none"))
   }
 
 
@@ -789,8 +789,7 @@ make.bootstrap.ld.plot <- function(data, data.types, view, title = view) {
       x = "Distance between SNPs (bp)", y = expression("Mean " * r^2),
       title = title, color = NULL, fill = NULL
       ) +
-    theme_bw(base_size = PLOT.BASE.SIZE) +
-    theme(legend.position = "top", panel.grid.minor = element_blank())
+    theme()
   if (!grepl("all.lines$", view)) {
     plot <- plot + geom_ribbon(
       data = filter(plotted, data.type != "Empirical"),
@@ -845,7 +844,9 @@ make.bootstrap.ld.plot <- function(data, data.types, view, title = view) {
       labeller = labeller(data.type = PLOT.STYLES$series.labels)
       )
     }
-  return(plot)
+  return(apply.standard.plot.theme(
+    plot, legend.position = if (show.legend) "top" else "none"
+    ))
   }
 
 
