@@ -38,6 +38,24 @@ PLOT.CONFIGS <- list(
   )
 BOOTSTRAP.LEGEND.VIEWS <- c("all.lines", "role.interval")
 PLOT.BASE.SIZE <- 24
+LD.PLOT.DISTANCE.BINS <- seq(5000, 200000, by = 5000)
+LD.POPULATION.CONTRAST.BOOTSTRAP.REPLICATES <- 1000L
+LD.POPULATION.CONTRAST.FAMILY.SIZE <- 120L
+LD.POPULATION.CONTRAST.SOURCES <- SOURCE.LEVELS[c(1L, 2L)]
+LD.SIMULATION.CONTRAST.SOURCES <- SOURCE.LEVELS[seq_len(4L)]
+LD.POPULATION.CONTRASTS <- tribble(
+  ~contrast, ~simulation.left, ~simulation.right,
+  ~empirical.left, ~empirical.right,
+  "AFR-ADX", "AFR", "ADX", "YRI", "ASW",
+  "AFR-EUR", "AFR", "EUR", "YRI", "CEU",
+  "ADX-EUR", "ADX", "EUR", "ASW", "CEU"
+  )
+LD.SIMULATION.CONTRASTS <- tribble(
+  ~contrast, ~left.source, ~right.source, ~paired,
+  "T.C. - T.C.D.", SOURCE.LEVELS[[1L]], SOURCE.LEVELS[[2L]], TRUE,
+  "L.G. - L.G.D.", SOURCE.LEVELS[[3L]], SOURCE.LEVELS[[4L]], TRUE,
+  "T.C. - L.G.", SOURCE.LEVELS[[1L]], SOURCE.LEVELS[[3L]], FALSE
+  )
 PLOT.STYLES <- list(
   population.colors = c(
     AFR = "#56B4E9", ADX = "#4B1FA8", EUR = "#fb8072",
@@ -48,6 +66,14 @@ PLOT.STYLES <- list(
     Simulation_2T12Consistent_simDown = "#6F55B5",
     Simulation_largeGrowth = "#32146F",
     Simulation_largeGrowth_simDown = "#4B1FA8"
+    ),
+  contrast.colors = c(
+    `AFR-ADX` = "#BDBDBD", `AFR-EUR` = "#737373",
+    `ADX-EUR` = "#000000"
+    ),
+  simulation.contrast.colors = c(
+    "T.C. - T.C.D." = "#BDBDBD", "L.G. - L.G.D." = "#737373",
+    "T.C. - L.G." = "#000000"
     ),
   series.labels = SOURCE.LABELS
   )
@@ -267,6 +293,422 @@ summarize.ld.curves <- function(data, chromosomes) {
   }
 
 
+# validate complete selected-chromosome simulation LD curves
+validate.ld.contrast.simulation <- function(data, sources, populations) {
+  required.columns <- c(
+    "data.type", "rep", "chrom", "pop", "distance_bin_bp", "mean.r2"
+    )
+  missing.columns <- setdiff(required.columns, names(data))
+  if (length(missing.columns)) {
+    stop("LD contrast data are missing columns: ",
+      paste(missing.columns, collapse = ", "))
+    }
+  data <- data %>%
+    filter(
+      data.type %in% sources,
+      as.character(chrom) %in% SELECTED.CHROMOSOMES,
+      pop %in% populations,
+      distance_bin_bp %in% LD.PLOT.DISTANCE.BINS
+      ) %>%
+    mutate(
+      data.type = as.character(data.type), chrom = as.character(chrom),
+      pop = as.character(pop), distance_bin_bp = as.numeric(distance_bin_bp)
+      )
+  if (any(!is.finite(data$mean.r2))) {
+    stop("LD contrast simulation values must be finite")
+    }
+  expected <- crossing(
+    data.type = sources, rep = seq_len(50L), chrom = SELECTED.CHROMOSOMES,
+    pop = populations, distance_bin_bp = LD.PLOT.DISTANCE.BINS
+    )
+  counts <- expected %>%
+    left_join(
+      data %>%
+        count(data.type, rep, chrom, pop, distance_bin_bp,
+          name = "value.count"),
+      by = c("data.type", "rep", "chrom", "pop", "distance_bin_bp")
+      ) %>%
+    mutate(value.count = replace_na(value.count, 0L)) %>%
+    filter(value.count != 1L)
+  unexpected <- anti_join(
+    data, expected,
+    by = c("data.type", "rep", "chrom", "pop", "distance_bin_bp")
+    )
+  if (nrow(counts) || nrow(unexpected)) {
+    stop("LD population contrast inputs require exactly one finite value for ",
+      "every source, replicate, selected chromosome, population, and ",
+      "displayed distance bin")
+    }
+  return(data)
+  }
+
+
+# validate paired replicate IDs for one set of populations or sources
+validate.ld.paired.ids <- function(data, grouping.columns, value.column,
+    error.message) {
+  ids <- data %>%
+    group_by(across(all_of(c(grouping.columns, value.column)))) %>%
+    summarise(rep.ids = list(sort(rep)), .groups = "drop") %>%
+    pivot_wider(names_from = all_of(value.column), values_from = rep.ids)
+  value.names <- setdiff(names(ids), grouping.columns)
+  for (row in seq_len(nrow(ids))) {
+    values <- ids[row, value.names]
+    if (any(vapply(values, is.null, logical(1))) ||
+        !all(vapply(values, identical, logical(1), values[[1L]]))) {
+      stop(error.message)
+      }
+    }
+  return(invisible(NULL))
+  }
+
+
+# bootstrap one population difference from paired replicate curves
+summarize.ld.population.contrast.bootstrap <- function(
+    left.values, right.values, bootstrap.replicates,
+    family.size = LD.POPULATION.CONTRAST.FAMILY.SIZE
+  ) {
+  if (length(left.values) != 50L || length(right.values) != 50L ||
+      any(!is.finite(left.values)) || any(!is.finite(right.values))) {
+    stop("Paired LD population contrast bootstraps require 50 finite values")
+    }
+  draws <- replicate(bootstrap.replicates, {
+    indices <- sample(seq_along(left.values), length(left.values),
+      replace = TRUE)
+    mean(left.values[indices] - right.values[indices])
+    })
+  nominal <- quantile(draws, c(0.025, 0.975), names = FALSE)
+  bonferroni <- quantile(
+    draws,
+    c(0.05 / (2 * family.size), 1 - 0.05 / (2 * family.size)),
+    names = FALSE
+    )
+  return(tibble(
+    difference = mean(left.values) - mean(right.values),
+    ci.95.lower = nominal[[1L]], ci.95.upper = nominal[[2L]],
+    bonferroni.ci.lower = bonferroni[[1L]],
+    bonferroni.ci.upper = bonferroni[[2L]]
+    ))
+  }
+
+
+# bootstrap direct population LD differences for each T.C. source and bin
+make.ld.population.contrast.tables <- function(
+    data, bootstrap.replicates = LD.POPULATION.CONTRAST.BOOTSTRAP.REPLICATES,
+    seed = 1L
+  ) {
+  populations <- unique(c(
+    LD.POPULATION.CONTRASTS$simulation.left,
+    LD.POPULATION.CONTRASTS$simulation.right
+    ))
+  validate.ld.paired.ids(
+    data %>%
+      filter(
+        data.type %in% LD.POPULATION.CONTRAST.SOURCES,
+        as.character(chrom) %in% SELECTED.CHROMOSOMES,
+        pop %in% populations,
+        distance_bin_bp %in% LD.PLOT.DISTANCE.BINS
+        ),
+    c("data.type", "chrom", "distance_bin_bp"), "pop",
+    "Paired LD population contrast replicate IDs must match"
+    )
+  data <- validate.ld.contrast.simulation(
+    data, LD.POPULATION.CONTRAST.SOURCES, populations
+    )
+  set.seed(seed)
+  tables <- map_dfr(LD.POPULATION.CONTRAST.SOURCES, function(source) {
+    map_dfr(seq_len(nrow(LD.POPULATION.CONTRASTS)), function(index) {
+      contrast <- LD.POPULATION.CONTRASTS[index, ]
+      map_dfr(LD.PLOT.DISTANCE.BINS, function(distance.bin) {
+        values <- data %>%
+          filter(
+            data.type == source, distance_bin_bp == distance.bin,
+            pop %in% c(contrast$simulation.left, contrast$simulation.right)
+            )
+        left <- values %>% filter(pop == contrast$simulation.left) %>%
+          arrange(rep)
+        right <- values %>% filter(pop == contrast$simulation.right) %>%
+          arrange(rep)
+        return(bind_cols(
+          tibble(
+            data.type = source, distance_bin_bp = distance.bin,
+            contrast = contrast$contrast
+            ),
+          summarize.ld.population.contrast.bootstrap(
+            left$mean.r2, right$mean.r2, bootstrap.replicates
+            )
+          ))
+        })
+      })
+    })
+  if (nrow(tables) != length(LD.POPULATION.CONTRAST.SOURCES) *
+      nrow(LD.POPULATION.CONTRASTS) * length(LD.PLOT.DISTANCE.BINS)) {
+    stop("LD population contrast bootstrap table does not match family size")
+    }
+  return(tables)
+  }
+
+
+# bootstrap one paired or independent ADX source difference
+summarize.ld.simulation.contrast.bootstrap <- function(
+    left.values, right.values, bootstrap.replicates, paired,
+    family.size = LD.POPULATION.CONTRAST.FAMILY.SIZE
+  ) {
+  if (length(left.values) != 50L || length(right.values) != 50L ||
+      any(!is.finite(left.values)) || any(!is.finite(right.values))) {
+    stop("LD simulation contrast bootstraps require 50 finite values")
+    }
+  draws <- replicate(bootstrap.replicates, {
+    if (paired) {
+      indices <- sample(seq_along(left.values), length(left.values),
+        replace = TRUE)
+      mean(left.values[indices] - right.values[indices])
+      } else {
+      mean(sample(left.values, length(left.values), replace = TRUE)) -
+        mean(sample(right.values, length(right.values), replace = TRUE))
+      }
+    })
+  nominal <- quantile(draws, c(0.025, 0.975), names = FALSE)
+  bonferroni <- quantile(
+    draws,
+    c(0.05 / (2 * family.size), 1 - 0.05 / (2 * family.size)),
+    names = FALSE
+    )
+  return(tibble(
+    difference = mean(left.values) - mean(right.values),
+    ci.95.lower = nominal[[1L]], ci.95.upper = nominal[[2L]],
+    bonferroni.ci.lower = bonferroni[[1L]],
+    bonferroni.ci.upper = bonferroni[[2L]]
+    ))
+  }
+
+
+# bootstrap ADX LD differences among simulation sources for each displayed bin
+make.ld.simulation.contrast.tables <- function(
+    data, bootstrap.replicates = LD.POPULATION.CONTRAST.BOOTSTRAP.REPLICATES,
+    seed = 1L
+  ) {
+  paired.contrasts <- filter(LD.SIMULATION.CONTRASTS, paired)
+  for (index in seq_len(nrow(paired.contrasts))) {
+    contrast <- paired.contrasts[index, ]
+    validate.ld.paired.ids(
+      data %>%
+        filter(
+          data.type %in% c(contrast$left.source, contrast$right.source),
+          as.character(chrom) %in% SELECTED.CHROMOSOMES,
+          pop == "ADX", distance_bin_bp %in% LD.PLOT.DISTANCE.BINS
+          ),
+      c("chrom", "distance_bin_bp"), "data.type",
+      "Paired LD simulation contrast replicate IDs must match"
+      )
+    }
+  data <- validate.ld.contrast.simulation(
+    data, LD.SIMULATION.CONTRAST.SOURCES, "ADX"
+    )
+  set.seed(seed)
+  tables <- map_dfr(seq_len(nrow(LD.SIMULATION.CONTRASTS)), function(index) {
+    contrast <- LD.SIMULATION.CONTRASTS[index, ]
+    map_dfr(LD.PLOT.DISTANCE.BINS, function(distance.bin) {
+      left <- data %>%
+        filter(data.type == contrast$left.source,
+          distance_bin_bp == distance.bin) %>%
+        arrange(rep)
+      right <- data %>%
+        filter(data.type == contrast$right.source,
+          distance_bin_bp == distance.bin) %>%
+        arrange(rep)
+      return(bind_cols(
+        tibble(distance_bin_bp = distance.bin, contrast = contrast$contrast),
+        summarize.ld.simulation.contrast.bootstrap(
+          left$mean.r2, right$mean.r2, bootstrap.replicates, contrast$paired
+          )
+        ))
+      })
+    })
+  if (nrow(tables) != nrow(LD.SIMULATION.CONTRASTS) *
+      length(LD.PLOT.DISTANCE.BINS)) {
+    stop("LD simulation contrast bootstrap table does not match family size")
+    }
+  return(tables)
+  }
+
+
+# calculate direct empirical population LD differences for displayed bins
+make.ld.population.empirical.contrasts <- function(data) {
+  populations <- unique(c(
+    LD.POPULATION.CONTRASTS$empirical.left,
+    LD.POPULATION.CONTRASTS$empirical.right
+    ))
+  data <- data %>%
+    filter(
+      data.type == "Empirical", as.character(chrom) %in% SELECTED.CHROMOSOMES,
+      pop %in% populations, distance_bin_bp %in% LD.PLOT.DISTANCE.BINS
+      ) %>%
+    mutate(
+      pop = as.character(pop),
+      distance_bin_bp = as.numeric(distance_bin_bp)
+      )
+  expected <- crossing(
+    pop = populations, distance_bin_bp = LD.PLOT.DISTANCE.BINS
+    )
+  counts <- data %>%
+    count(pop, distance_bin_bp, name = "value.count") %>%
+    right_join(expected, by = c("pop", "distance_bin_bp")) %>%
+    mutate(value.count = replace_na(value.count, 0L)) %>%
+    filter(value.count != 1L)
+  if (nrow(counts) || any(!is.finite(data$mean.r2))) {
+    stop("Empirical LD population contrast inputs require exactly one finite ",
+      "value for every selected chromosome, population, and displayed bin")
+    }
+  return(map_dfr(seq_len(nrow(LD.POPULATION.CONTRASTS)), function(index) {
+    contrast <- LD.POPULATION.CONTRASTS[index, ]
+    left <- data %>% filter(pop == contrast$empirical.left) %>%
+      select(distance_bin_bp, left.value = mean.r2)
+    right <- data %>% filter(pop == contrast$empirical.right) %>%
+      select(distance_bin_bp, right.value = mean.r2)
+    inner_join(left, right, by = "distance_bin_bp") %>%
+      transmute(
+        distance_bin_bp, contrast = contrast$contrast,
+        difference = left.value - right.value
+        )
+    }))
+  }
+
+
+# select one interval family and significant differences for a contrast plot
+prepare.ld.population.contrast.plot.data <- function(
+    simulation, interval.type = c("95", "bonferroni"), source
+  ) {
+  interval.type <- match.arg(interval.type)
+  lower.column <- if (interval.type == "95") {
+    "ci.95.lower"
+    } else {
+    "bonferroni.ci.lower"
+    }
+  upper.column <- if (interval.type == "95") {
+    "ci.95.upper"
+    } else {
+    "bonferroni.ci.upper"
+    }
+  simulation <- simulation %>%
+    filter(data.type == source) %>%
+    transmute(
+      distance_bin_bp, contrast, difference,
+      ci.lower = .data[[lower.column]], ci.upper = .data[[upper.column]]
+      ) %>%
+    mutate(
+      contrast = factor(
+        contrast, levels = LD.POPULATION.CONTRASTS$contrast
+        )
+      )
+  return(list(
+    simulation = simulation,
+    red.markers = filter(simulation, ci.lower > 0 | ci.upper < 0)
+    ))
+  }
+
+
+# select one interval family for ADX source-contrast plotting
+prepare.ld.simulation.contrast.plot.data <- function(
+    simulation, interval.type = c("95", "bonferroni")
+  ) {
+  interval.type <- match.arg(interval.type)
+  lower.column <- if (interval.type == "95") {
+    "ci.95.lower"
+    } else {
+    "bonferroni.ci.lower"
+    }
+  upper.column <- if (interval.type == "95") {
+    "ci.95.upper"
+    } else {
+    "bonferroni.ci.upper"
+    }
+  simulation <- simulation %>%
+    transmute(
+      distance_bin_bp, contrast, difference,
+      ci.lower = .data[[lower.column]], ci.upper = .data[[upper.column]]
+      ) %>%
+    mutate(
+      contrast = factor(
+        contrast, levels = LD.SIMULATION.CONTRASTS$contrast
+        )
+      )
+  return(list(
+    simulation = simulation,
+    red.markers = filter(simulation, ci.lower > 0 | ci.upper < 0)
+    ))
+  }
+
+
+# construct a simulated LD contrast plot with selected confidence intervals
+make.ld.simulation.contrast.plot <- function(
+    data, interval.type = c("95", "bonferroni"),
+    contrast.type = c("population", "simulation")
+  ) {
+  interval.type <- match.arg(interval.type)
+  contrast.type <- match.arg(contrast.type)
+  contrasts <- if (contrast.type == "population") {
+    LD.POPULATION.CONTRASTS$contrast
+    } else {
+    LD.SIMULATION.CONTRASTS$contrast
+    }
+  colors <- if (contrast.type == "population") {
+    PLOT.STYLES$contrast.colors
+    } else {
+    PLOT.STYLES$simulation.contrast.colors
+    }
+  title <- paste(
+    if (interval.type == "bonferroni") "Bonferroni" else "95%",
+    if (contrast.type == "population") {
+      "population LD differences"
+      } else {
+      "ADX simulation LD differences"
+      }
+    )
+  return(ggplot(
+    data$simulation,
+    aes(distance_bin_bp, difference, color = contrast, fill = contrast)
+    ) +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    geom_ribbon(aes(ymin = ci.lower, ymax = ci.upper), alpha = 0.2,
+      color = NA) +
+    geom_line(linewidth = 1) +
+    geom_point(data = data$red.markers, color = "red", size = 1.8) +
+    facet_wrap(~contrast, nrow = 1, scales = "free_y") +
+    scale_color_manual(values = colors, breaks = contrasts, guide = "none") +
+    scale_fill_manual(values = colors, breaks = contrasts, guide = "none") +
+    scale_x_continuous(
+      limits = c(5000, 200000), breaks = LD.PLOT.DISTANCE.BINS
+      ) +
+    labs(x = "Distance between SNPs (bp)", y = "Difference", title = title) +
+    theme_bw(base_size = PLOT.BASE.SIZE) +
+    theme(panel.grid.minor = element_blank())
+    )
+  }
+
+
+# construct a direct empirical LD population-difference plot without intervals
+make.ld.population.empirical.contrast.plot <- function(data) {
+  return(ggplot(data, aes(distance_bin_bp, difference, color = contrast)) +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    geom_line(linewidth = 1) +
+    facet_wrap(~contrast, nrow = 1, scales = "free_y") +
+    scale_color_manual(
+      values = PLOT.STYLES$contrast.colors,
+      breaks = LD.POPULATION.CONTRASTS$contrast, guide = "none"
+      ) +
+    scale_x_continuous(
+      limits = c(5000, 200000), breaks = LD.PLOT.DISTANCE.BINS
+      ) +
+    labs(
+      x = "Distance between SNPs (bp)", y = "Difference",
+      title = "Empirical population LD differences"
+      ) +
+    theme_bw(base_size = PLOT.BASE.SIZE) +
+    theme(panel.grid.minor = element_blank())
+    )
+  }
+
+
 # build one chromosome-1 bootstrap LD view over the requested distance range
 make.bootstrap.ld.plot <- function(data, data.types, view, title = view) {
   source.view <- grepl("all.datatypes.adx.asw", view)
@@ -306,7 +748,9 @@ make.bootstrap.ld.plot <- function(data, data.types, view, title = view) {
       )
   plot <- ggplot(plotted, aes(distance_bin_bp, mean, color = plot.key,
     fill = plot.key, group = interaction(data.type, pop))) +
-    scale_x_continuous(limits = c(5000, 250000)) +
+    scale_x_continuous(
+      limits = c(5000, 200000), breaks = LD.PLOT.DISTANCE.BINS
+      ) +
     labs(
       x = "Distance between SNPs (bp)", y = expression("Mean " * r^2),
       title = title, color = NULL, fill = NULL
@@ -411,6 +855,62 @@ ld.summary <- bind_rows(
   simulation.ld.selected, empirical.ld.selected, empirical.ld.genome
   ) %>%
   summarize.ld.curves(SELECTED.CHROMOSOMES)
+
+# bootstrap population and ADX source LD contrasts on displayed bins
+ld.population.contrast.tables <- make.ld.population.contrast.tables(
+  simulation.ld.selected, LD.POPULATION.CONTRAST.BOOTSTRAP.REPLICATES
+  )
+ld.simulation.contrast.tables <- make.ld.simulation.contrast.tables(
+  simulation.ld.selected, LD.POPULATION.CONTRAST.BOOTSTRAP.REPLICATES
+  )
+ld.population.contrast.plots <- list(
+  tc = list(
+    `95` = make.ld.simulation.contrast.plot(
+      prepare.ld.population.contrast.plot.data(
+        ld.population.contrast.tables, "95", SOURCE.LEVELS[[1L]]
+        ),
+      "95", "population"
+      ),
+    bonferroni = make.ld.simulation.contrast.plot(
+      prepare.ld.population.contrast.plot.data(
+        ld.population.contrast.tables, "bonferroni", SOURCE.LEVELS[[1L]]
+        ),
+      "bonferroni", "population"
+      )
+    ),
+  tcd = list(
+    `95` = make.ld.simulation.contrast.plot(
+      prepare.ld.population.contrast.plot.data(
+        ld.population.contrast.tables, "95", SOURCE.LEVELS[[2L]]
+        ),
+      "95", "population"
+      ),
+    bonferroni = make.ld.simulation.contrast.plot(
+      prepare.ld.population.contrast.plot.data(
+        ld.population.contrast.tables, "bonferroni", SOURCE.LEVELS[[2L]]
+        ),
+      "bonferroni", "population"
+      )
+    ),
+  empirical = make.ld.population.empirical.contrast.plot(
+    make.ld.population.empirical.contrasts(empirical.ld.selected)
+    )
+  )
+ld.simulation.contrast.plots <- list(
+  `95` = make.ld.simulation.contrast.plot(
+    prepare.ld.simulation.contrast.plot.data(
+      ld.simulation.contrast.tables, "95"
+      ),
+    "95", "simulation"
+    ),
+  bonferroni = make.ld.simulation.contrast.plot(
+    prepare.ld.simulation.contrast.plot.data(
+      ld.simulation.contrast.tables, "bonferroni"
+      ),
+    "bonferroni", "simulation"
+    )
+  )
+
 # save TCD/1kG and all-datatype ADX/ASW chromosome-1 bootstrap LD views
 bootstrap.tcd.1kg.ld.all.lines <- make.bootstrap.ld.plot(
   ld.summary, c("Simulation_2T12Consistent_simDown", "Empirical"),
@@ -448,9 +948,37 @@ saveRDS(bootstrap.all.datatypes.adx.asw.ld.all.lines, file.path(
 saveRDS(bootstrap.all.datatypes.adx.asw.ld.datatype.interval, file.path(
   OUTPUT.DIR, "ld.bootstrap.all.datatypes.adx.asw.datatype.interval.rds"
   ))
+saveRDS(ld.population.contrast.plots$tc$`95`, file.path(
+  OUTPUT.DIR, "ld.population.tc.95.rds"
+  ))
+saveRDS(ld.population.contrast.plots$tc$bonferroni, file.path(
+  OUTPUT.DIR, "ld.population.tc.bonferroni.rds"
+  ))
+saveRDS(ld.population.contrast.plots$tcd$`95`, file.path(
+  OUTPUT.DIR, "ld.population.tcd.95.rds"
+  ))
+saveRDS(ld.population.contrast.plots$tcd$bonferroni, file.path(
+  OUTPUT.DIR, "ld.population.tcd.bonferroni.rds"
+  ))
+saveRDS(ld.population.contrast.plots$empirical, file.path(
+  OUTPUT.DIR, "ld.population.empirical.rds"
+  ))
+saveRDS(ld.simulation.contrast.plots$`95`, file.path(
+  OUTPUT.DIR, "ld.simulation.contrast.95.rds"
+  ))
+saveRDS(ld.simulation.contrast.plots$bonferroni, file.path(
+  OUTPUT.DIR, "ld.simulation.contrast.bonferroni.rds"
+  ))
 
 print(bootstrap.tcd.1kg.ld.all.lines)
 print(bootstrap.tcd.1kg.ld.role.interval)
 print(bootstrap.tcd.1kg.ld.datatype.interval)
 print(bootstrap.all.datatypes.adx.asw.ld.all.lines)
 print(bootstrap.all.datatypes.adx.asw.ld.datatype.interval)
+print(ld.population.contrast.plots$tc$`95`)
+print(ld.population.contrast.plots$tc$bonferroni)
+print(ld.population.contrast.plots$tcd$`95`)
+print(ld.population.contrast.plots$tcd$bonferroni)
+print(ld.population.contrast.plots$empirical)
+print(ld.simulation.contrast.plots$`95`)
+print(ld.simulation.contrast.plots$bonferroni)
