@@ -275,7 +275,7 @@ make.bootstrap.ld.plot <- function(data, data.types, view, title = view) {
     filter(
       as.character(chrom) == "1",
       as.character(data.type) %in% data.types,
-      between(distance_bin_bp, 5000, 250000)
+      between(distance_bin_bp, 5000, 200000)
       ) %>%
     filter(
       !source.view |

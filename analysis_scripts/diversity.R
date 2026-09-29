@@ -428,10 +428,10 @@ prepare.diversity.population.contrast.plot.data <- function(
         max(ci.upper) - min(ci.lower),
         max(abs(c(ci.lower, ci.upper))) * 0.05, 0.01
         ),
-      red.marker.position = ci.upper + interval.span * 0.06,
-      blue.marker.position = ci.upper + interval.span * 0.13,
-      chromosome.inside = empirical.chromosome >= ci.lower &
-        empirical.chromosome <= ci.upper,
+      red.marker.position = ci.upper + interval.span * 0.02,
+      blue.marker.position = ci.upper + interval.span * 0.02,
+      chromosome.outside = empirical.chromosome < ci.lower |
+        empirical.chromosome > ci.upper,
       genome.outside = empirical.genome < ci.lower |
         empirical.genome > ci.upper
       ) %>%
@@ -442,7 +442,7 @@ prepare.diversity.population.contrast.plot.data <- function(
       select(stat, chrom, contrast, plot.x, difference = empirical.chromosome),
     empirical.genome = markers %>%
       distinct(stat, contrast, empirical.genome),
-    red.markers = filter(markers, chromosome.inside),
+    red.markers = filter(markers, chromosome.outside),
     blue.markers = filter(markers, genome.outside)
     ))
   }

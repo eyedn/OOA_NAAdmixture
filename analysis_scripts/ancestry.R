@@ -655,7 +655,7 @@ prepare.ancestry.bootstrap.comparison.data <- function(
   empirical <- individual.data %>%
     mutate(
       chrom = as.character(chrom),
-      sample_id = as.character(sample_id)
+      sample_id = as.character(vcf_sample_id) # copy vcf_sample_id into sample_id
       ) %>%
     filter(
       data.type == "Empirical", role == "ASW", method == empirical.method,
@@ -984,24 +984,17 @@ make.ancestry.bootstrap.contrast.plot <- function(
       y = "Difference", color = "Contrast",
       title = title
       ) +
+    scale_x_continuous(
+      breaks = seq_along(levels(data$chromosome)),
+      labels = levels(data$chromosome)
+      ) +
     theme_bw(base_size = PLOT.BASE.SIZE) +
     theme(
       legend.position = "bottom",
       strip.background = element_rect(fill = "grey92"),
       panel.grid.minor = element_blank()
       )
-  if (all(data$reference.scope == "genome")) {
-    plot <- plot +
-      scale_x_continuous(breaks = NULL, labels = NULL) +
-      labs(x = NULL) +
-      theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
-    } else {
-    plot <- plot +
-      scale_x_continuous(
-        breaks = seq_along(levels(data$chromosome)),
-        labels = levels(data$chromosome)
-        )
-    }
+    
   if (facet.statistics) {
     if (all(is.na(data$facet.label))) {
       plot <- plot + facet_grid(
@@ -1275,9 +1268,9 @@ print(ancestry.bootstrap.empirical.95.chromosome.comparisons)
 print(ancestry.bootstrap.empirical.95.genome.comparisons)
 print(ancestry.bootstrap.empirical.bonferroni.chromosome.comparisons)
 print(ancestry.bootstrap.empirical.bonferroni.genome.comparisons)
-print(ancestry.bootstrap.empirical.skew.95.chromosome.comparisons)
-print(ancestry.bootstrap.empirical.skew.95.genome.comparisons)
-print(ancestry.bootstrap.empirical.skew.bonferroni.chromosome.comparisons)
-print(ancestry.bootstrap.empirical.skew.bonferroni.genome.comparisons)
+# print(ancestry.bootstrap.empirical.skew.95.chromosome.comparisons)
+# print(ancestry.bootstrap.empirical.skew.95.genome.comparisons)
+# print(ancestry.bootstrap.empirical.skew.bonferroni.chromosome.comparisons)
+# print(ancestry.bootstrap.empirical.skew.bonferroni.genome.comparisons)
 print(ancestry.bootstrap.simulation.95.comparisons)
 print(ancestry.bootstrap.simulation.bonferroni.comparisons)
