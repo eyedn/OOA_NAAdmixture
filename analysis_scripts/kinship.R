@@ -42,6 +42,42 @@ RANDOM.SEED <- 123L
 PLOT.BASE.SIZE <- 24
 DENSE.BAR.WIDTH.MULTIPLIER <- 0.8
 DENSE.BAR.LINEWIDTH <- 0.75
+KINSHIP.CONTRAST.BOOTSTRAP.REPLICATES <- 50L
+KINSHIP.CONTRAST.FAMILY.SIZE <- 75L
+KINSHIP.CONTRAST.X.LIMITS <- c(-0.20, 0.05)
+KINSHIP.POPULATION.CONTRAST.SOURCES <- SOURCE.LEVELS[1:2]
+KINSHIP.POPULATION.CONTRASTS <- tribble(
+  ~contrast, ~left.pop, ~right.pop,
+  "AFR-ADX", "AFR", "ADX",
+  "AFR-EUR", "AFR", "EUR",
+  "ADX-EUR", "ADX", "EUR"
+  )
+KINSHIP.SIMULATION.CONTRAST.SOURCES <- SOURCE.LEVELS[1:4]
+KINSHIP.SIMULATION.CONTRASTS <- tribble(
+  ~contrast, ~left.source, ~right.source,
+  "T.C. - T.C.D.", SOURCE.LEVELS[[1L]], SOURCE.LEVELS[[2L]],
+  "L.G. - L.G.D.", SOURCE.LEVELS[[3L]], SOURCE.LEVELS[[4L]],
+  "T.C. - L.G.", SOURCE.LEVELS[[1L]], SOURCE.LEVELS[[3L]]
+  )
+KINSHIP.EMPIRICAL.CONTRASTS <- tribble(
+  ~contrast, ~left.pop, ~right.pop,
+  "YRI-ASW", "YRI", "ASW",
+  "YRI-CEU", "YRI", "CEU",
+  "ASW-CEU", "ASW", "CEU"
+  )
+KINSHIP.CONTRAST.COLORS <- c(
+  "AFR-ADX" = "#BDBDBD", "AFR-EUR" = "#737373", "ADX-EUR" = "#000000",
+  "T.C. - T.C.D." = "#BDBDBD", "L.G. - L.G.D." = "#737373",
+  "T.C. - L.G." = "#000000",
+  "YRI-ASW" = "#BDBDBD", "YRI-CEU" = "#737373", "ASW-CEU" = "#000000"
+  )
+KINSHIP.CONTRAST.LABELS <- c(
+  "AFR-ADX" = "AFR - ADX", "AFR-EUR" = "AFR - EUR",
+  "ADX-EUR" = "ADX - EUR", "T.C. - T.C.D." = "T.C. - T.C.D.",
+  "L.G. - L.G.D." = "L.G. - L.G.D.", "T.C. - L.G." = "T.C. - L.G.",
+  "YRI-ASW" = "YRI - ASW", "YRI-CEU" = "YRI - CEU",
+  "ASW-CEU" = "ASW - CEU"
+  )
 BOOTSTRAP.PLOT.STYLES <- list(
   tcd.1kg = list(
     fill.colors = c(
@@ -514,6 +550,254 @@ build.kinship.histograms <- function(data, breaks) {
   }
 
 
+# select exactly the displayed bins while retaining all-pair normalization
+select.kinship.contrast.bins <- function(data) {
+  selected <- data %>% filter(
+    xmin >= KINSHIP.CONTRAST.X.LIMITS[[1L]] - .Machine$double.eps,
+    xmax <= KINSHIP.CONTRAST.X.LIMITS[[2L]] + .Machine$double.eps
+    )
+  expected.bins <- diff(KINSHIP.CONTRAST.X.LIMITS) / KINSHIP.BIN.WIDTH
+  if (n_distinct(selected$xmin) != expected.bins) {
+    stop("Kinship contrast display requires exactly 25 fixed bins")
+    }
+  return(selected)
+  }
+
+
+# require complete finite per-replicate simulation fractions for contrasts
+validate.kinship.contrast.input <- function(data, sources, populations) {
+  required.columns <- c("data.type", "rep", "chrom", "pop", "xmin",
+    "xmax", "xmid", "fraction")
+  missing.columns <- setdiff(required.columns, names(data))
+  if (length(missing.columns)) {
+    stop("Kinship contrast inputs are missing columns: ",
+      paste(missing.columns, collapse = ", "))
+    }
+  data <- data %>%
+    filter(data.type %in% sources, pop %in% populations,
+      as.character(chrom) %in% SELECTED.CHROMOSOMES) %>%
+    select.kinship.contrast.bins() %>%
+    mutate(data.type = as.character(data.type), chrom = as.character(chrom),
+      pop = as.character(pop))
+  expected <- crossing(data.type = sources, rep = seq_len(50L),
+    chrom = SELECTED.CHROMOSOMES, pop = populations,
+    xmin = sort(unique(data$xmin)))
+  counts <- data %>% count(data.type, rep, chrom, pop, xmin,
+    name = "fraction.count")
+  invalid <- expected %>% left_join(counts,
+    by = c("data.type", "rep", "chrom", "pop", "xmin")) %>%
+    mutate(fraction.count = replace_na(fraction.count, 0L)) %>%
+    filter(fraction.count != 1L)
+  if (nrow(invalid) || any(!is.finite(data$fraction))) {
+    stop("Kinship contrast inputs require exactly one finite fraction for ",
+      "every source, replicate, population, and bin")
+    }
+  return(data)
+  }
+
+
+# bootstrap a paired left-minus-right kinship fraction difference
+summarize.kinship.contrast.bootstrap <- function(
+    left.values, right.values, bootstrap.replicates,
+    family.size = KINSHIP.CONTRAST.FAMILY.SIZE
+  ) {
+  if (length(left.values) != 50L || length(right.values) != 50L ||
+      any(!is.finite(left.values)) || any(!is.finite(right.values))) {
+    stop("Kinship contrast bootstraps require 50 finite paired values")
+    }
+  draws <- replicate(bootstrap.replicates, {
+    indices <- sample(seq_along(left.values), length(left.values),
+      replace = TRUE)
+    mean(left.values[indices] - right.values[indices])
+    })
+  nominal <- quantile(draws, c(0.025, 0.975), names = FALSE)
+  bonferroni.quantile <- 0.05 / (2 * family.size)
+  bonferroni <- quantile(draws,
+    c(bonferroni.quantile, 1 - bonferroni.quantile), names = FALSE)
+  return(tibble(
+    difference = mean(left.values) - mean(right.values),
+    ci.95.lower = nominal[[1L]], ci.95.upper = nominal[[2L]],
+    bonferroni.ci.lower = bonferroni[[1L]],
+    bonferroni.ci.upper = bonferroni[[2L]],
+    bonferroni.quantile = bonferroni.quantile
+    ))
+  }
+
+
+# construct paired population contrast intervals from simulation histograms
+make.kinship.population.contrast.tables <- function(
+    data, bootstrap.replicates = KINSHIP.CONTRAST.BOOTSTRAP.REPLICATES,
+    seed = RANDOM.SEED
+  ) {
+  data <- validate.kinship.contrast.input(data,
+    KINSHIP.POPULATION.CONTRAST.SOURCES, c("AFR", "ADX", "EUR"))
+  set.seed(seed)
+  tables <- map_dfr(KINSHIP.POPULATION.CONTRAST.SOURCES, function(source) {
+    map_dfr(seq_len(nrow(KINSHIP.POPULATION.CONTRASTS)), function(index) {
+      contrast <- KINSHIP.POPULATION.CONTRASTS[index, ]
+      map_dfr(sort(unique(data$xmin)), function(bin) {
+        left <- data %>% filter(data.type == source,
+          pop == contrast$left.pop, xmin == bin) %>% arrange(rep)
+        right <- data %>% filter(data.type == source,
+          pop == contrast$right.pop, xmin == bin) %>% arrange(rep)
+        if (!identical(left$rep, right$rep)) {
+          stop("Paired kinship contrast replicate IDs must match")
+          }
+        bind_cols(tibble(data.type = source, xmin = bin,
+          xmax = left$xmax[[1L]], xmid = left$xmid[[1L]],
+          contrast = contrast$contrast),
+          summarize.kinship.contrast.bootstrap(left$fraction, right$fraction,
+            bootstrap.replicates))
+        })
+      })
+    })
+  return(tables)
+  }
+
+
+# construct paired ADX simulation-source contrast intervals from histograms
+make.kinship.simulation.contrast.tables <- function(
+    data, bootstrap.replicates = KINSHIP.CONTRAST.BOOTSTRAP.REPLICATES,
+    seed = RANDOM.SEED
+  ) {
+  data <- validate.kinship.contrast.input(data,
+    KINSHIP.SIMULATION.CONTRAST.SOURCES, "ADX")
+  set.seed(seed)
+  tables <- map_dfr(
+    seq_len(nrow(KINSHIP.SIMULATION.CONTRASTS)), function(index) {
+    contrast <- KINSHIP.SIMULATION.CONTRASTS[index, ]
+    map_dfr(sort(unique(data$xmin)), function(bin) {
+      left <- data %>% filter(data.type == contrast$left.source,
+        xmin == bin) %>% arrange(rep)
+      right <- data %>% filter(data.type == contrast$right.source,
+        xmin == bin) %>% arrange(rep)
+      if (!identical(left$rep, right$rep)) {
+        stop("Paired kinship contrast replicate IDs must match")
+        }
+      bind_cols(tibble(xmin = bin, xmax = left$xmax[[1L]],
+        xmid = left$xmid[[1L]], contrast = contrast$contrast),
+        summarize.kinship.contrast.bootstrap(left$fraction, right$fraction,
+          bootstrap.replicates))
+      })
+      })
+  return(tables)
+  }
+
+
+# bootstrap independently resampled empirical pair fractions for each contrast
+make.kinship.empirical.contrast.tables <- function(
+    data, breaks, bootstrap.replicates = KINSHIP.CONTRAST.BOOTSTRAP.REPLICATES,
+    seed = RANDOM.SEED
+  ) {
+  if (any(!is.finite(data$kinship))) {
+    stop("Empirical kinship contrast values must be finite")
+    }
+  data <- data %>% filter(data.type == "Empirical",
+    as.character(chrom) %in% SELECTED.CHROMOSOMES,
+    pop %in% c("YRI", "ASW", "CEU"))
+  if (!all(c("YRI", "ASW", "CEU") %in% unique(data$pop))) {
+    stop("Empirical kinship contrast inputs require YRI, ASW, and CEU pairs")
+    }
+  set.seed(seed)
+  displayed.breaks <- breaks[
+    breaks >= KINSHIP.CONTRAST.X.LIMITS[[1L]] - .Machine$double.eps &
+      breaks <= KINSHIP.CONTRAST.X.LIMITS[[2L]] + .Machine$double.eps
+    ]
+  if (length(displayed.breaks) != 26L) {
+    stop("Kinship contrast display requires exactly 25 fixed bins")
+    }
+  tables <- map_dfr(
+    seq_len(nrow(KINSHIP.EMPIRICAL.CONTRASTS)), function(index) {
+    contrast <- KINSHIP.EMPIRICAL.CONTRASTS[index, ]
+    left <- filter(data, pop == contrast$left.pop)$kinship
+    right <- filter(data, pop == contrast$right.pop)$kinship
+    observed <- function(values) {
+      histogram <- hist(values, breaks = breaks, plot = FALSE,
+        include.lowest = TRUE)
+      histogram$counts / length(values)
+      }
+    left.observed <- observed(left)
+    right.observed <- observed(right)
+    draws <- replicate(bootstrap.replicates, {
+      observed(sample(left, length(left), replace = TRUE)) -
+        observed(sample(right, length(right), replace = TRUE))
+      })
+    bin.index <- match(head(displayed.breaks, -1L), head(breaks, -1L))
+    nominal <- apply(draws[bin.index, , drop = FALSE], 1L, quantile,
+      c(0.025, 0.975), names = FALSE)
+    bonferroni.quantile <- 0.05 / (2 * KINSHIP.CONTRAST.FAMILY.SIZE)
+    bonferroni <- apply(draws[bin.index, , drop = FALSE], 1L, quantile,
+      c(bonferroni.quantile, 1 - bonferroni.quantile), names = FALSE)
+    tibble(
+      xmin = head(displayed.breaks, -1L),
+      xmax = tail(displayed.breaks, -1L),
+      xmid = rowMeans(embed(displayed.breaks, 2L)),
+      contrast = contrast$contrast,
+      difference = left.observed[bin.index] - right.observed[bin.index],
+      ci.95.lower = nominal[1L, ], ci.95.upper = nominal[2L, ],
+      bonferroni.ci.lower = bonferroni[1L, ],
+      bonferroni.ci.upper = bonferroni[2L, ],
+      bonferroni.quantile = bonferroni.quantile)
+      })
+  return(tables)
+  }
+
+
+# select one interval family and preserve the configured contrast order
+prepare.kinship.contrast.plot.data <- function(
+    data, interval.type = c("95", "bonferroni"),
+    family = c("simulation", "empirical")
+  ) {
+  interval.type <- match.arg(interval.type)
+  family <- match.arg(family)
+  lower <- if (interval.type == "95") "ci.95.lower" else "bonferroni.ci.lower"
+  upper <- if (interval.type == "95") "ci.95.upper" else "bonferroni.ci.upper"
+  contrasts <- if (family == "empirical") {
+    KINSHIP.EMPIRICAL.CONTRASTS$contrast
+    } else if ("data.type" %in% names(data)) {
+    KINSHIP.POPULATION.CONTRASTS$contrast
+    } else {
+    KINSHIP.SIMULATION.CONTRASTS$contrast
+    }
+  displayed <- data %>% transmute(across(any_of("data.type")), xmin, xmax,
+    xmid, contrast, difference, ci.lower = .data[[lower]],
+    ci.upper = .data[[upper]]) %>% mutate(
+      contrast = factor(contrast, levels = contrasts))
+  if ("data.type" %in% names(displayed)) {
+    displayed <- displayed %>% mutate(data.type = factor(data.type,
+      levels = KINSHIP.POPULATION.CONTRAST.SOURCES))
+    }
+  return(displayed)
+  }
+
+
+# build a fixed-bin kinship contrast plot with zero reference and intervals
+make.kinship.contrast.plot <- function(data, interval.label, title) {
+  contrasts <- levels(data$contrast)
+  dodge <- position_dodge(KINSHIP.BIN.WIDTH)
+  plot <- ggplot(
+    data, aes(xmid, difference, color = contrast, group = contrast)
+    ) +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    geom_errorbar(aes(ymin = ci.lower, ymax = ci.upper), position = dodge,
+      width = 0, linewidth = DENSE.BAR.LINEWIDTH) +
+    geom_point(position = dodge, size = 2) +
+    coord_cartesian(xlim = KINSHIP.CONTRAST.X.LIMITS) +
+    scale_color_manual(values = KINSHIP.CONTRAST.COLORS[contrasts],
+      labels = KINSHIP.CONTRAST.LABELS[contrasts]) +
+    labs(x = "Pairwise KING kinship", y = "Left minus right fraction of pairs",
+      color = NULL, title = title,
+      subtitle = paste(interval.label, "interval")) +
+    guides(color = guide_legend(nrow = 1, byrow = TRUE)) +
+    theme_bw(base_size = PLOT.BASE.SIZE) +
+    theme(legend.position = "top", panel.grid.minor = element_blank())
+  if ("data.type" %in% names(data)) {
+    plot <- plot + facet_grid(. ~ data.type)
+    }
+  return(plot)
+  }
+
+
 # analysis ----
 
 
@@ -549,6 +833,59 @@ kinship.breaks <- make.kinship.breaks(
   kinship.data, KINSHIP.BIN.WIDTH
   )
 kinship.summary <- summarize.bootstrap.kinship(kinship.data, kinship.breaks)
+contrast.selected.ids <- select.bootstrap.kinship.ids(kinship.data, RANDOM.SEED)
+contrast.histograms <- apply.kinship.selection(
+  kinship.data, contrast.selected.ids
+  ) %>%
+  filter(sample.set == "downsampled") %>%
+  build.kinship.histograms(kinship.breaks)
+population.contrast.tables <- make.kinship.population.contrast.tables(
+  filter(contrast.histograms, data.type != "Empirical")
+  )
+simulation.contrast.tables <- make.kinship.simulation.contrast.tables(
+  filter(contrast.histograms, data.type != "Empirical")
+  )
+empirical.contrast.tables <- make.kinship.empirical.contrast.tables(
+  empirical.kinship, kinship.breaks
+  )
+population.contrast.plots <- list(
+  `95` = make.kinship.contrast.plot(
+    prepare.kinship.contrast.plot.data(population.contrast.tables, "95"),
+    "95%", "T.C. and T.C.D. kinship population contrasts"
+    ),
+  bonferroni = make.kinship.contrast.plot(
+    prepare.kinship.contrast.plot.data(
+      population.contrast.tables, "bonferroni"
+      ),
+    "Bonferroni", "T.C. and T.C.D. kinship population contrasts"
+    )
+  )
+simulation.contrast.plots <- list(
+  `95` = make.kinship.contrast.plot(
+    prepare.kinship.contrast.plot.data(simulation.contrast.tables, "95"),
+    "95%", "ADX kinship simulation-source contrasts"
+    ),
+  bonferroni = make.kinship.contrast.plot(
+    prepare.kinship.contrast.plot.data(
+      simulation.contrast.tables, "bonferroni"
+      ),
+    "Bonferroni", "ADX kinship simulation-source contrasts"
+    )
+  )
+empirical.contrast.plots <- list(
+  `95` = make.kinship.contrast.plot(
+    prepare.kinship.contrast.plot.data(
+      empirical.contrast.tables, "95", "empirical"
+      ),
+    "95%", "Empirical kinship population contrasts"
+    ),
+  bonferroni = make.kinship.contrast.plot(
+    prepare.kinship.contrast.plot.data(
+      empirical.contrast.tables, "bonferroni", "empirical"
+      ),
+    "Bonferroni", "Empirical kinship population contrasts"
+    )
+  )
 kinship.bootstrap.tcd.1kg <- make.bootstrap.kinship.plot(
   kinship.summary, kinship.breaks, PLOT.CONFIGS$tcd.1kg,
   "Pairwise KING kinship: chromosome 1 TCD and 1kG",
@@ -571,6 +908,30 @@ saveRDS(kinship.bootstrap.tcd.1kg, file.path(
 saveRDS(kinship.bootstrap.all.datatypes.adx.asw, file.path(
   OUTPUT.DIR, "kinship.bootstrap.all.datatypes.adx.asw.rds"
   ))
+saveRDS(population.contrast.plots$`95`, file.path(
+  OUTPUT.DIR, "kinship.population.contrasts.95.rds"
+  ))
+saveRDS(population.contrast.plots$bonferroni, file.path(
+  OUTPUT.DIR, "kinship.population.contrasts.bonferroni.rds"
+  ))
+saveRDS(simulation.contrast.plots$`95`, file.path(
+  OUTPUT.DIR, "kinship.simulation.contrasts.95.rds"
+  ))
+saveRDS(simulation.contrast.plots$bonferroni, file.path(
+  OUTPUT.DIR, "kinship.simulation.contrasts.bonferroni.rds"
+  ))
+saveRDS(empirical.contrast.plots$`95`, file.path(
+  OUTPUT.DIR, "kinship.empirical.contrasts.95.rds"
+  ))
+saveRDS(empirical.contrast.plots$bonferroni, file.path(
+  OUTPUT.DIR, "kinship.empirical.contrasts.bonferroni.rds"
+  ))
 
 print(kinship.bootstrap.tcd.1kg)
 print(kinship.bootstrap.all.datatypes.adx.asw)
+print(population.contrast.plots$`95`)
+print(population.contrast.plots$bonferroni)
+print(simulation.contrast.plots$`95`)
+print(simulation.contrast.plots$bonferroni)
+print(empirical.contrast.plots$`95`)
+print(empirical.contrast.plots$bonferroni)
