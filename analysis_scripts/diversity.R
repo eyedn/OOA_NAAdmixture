@@ -1293,10 +1293,10 @@ saveRDS(diversity.simulation.contrast.plots$bonferroni, file.path(
 
 print(diversity.bootstrap.plots$tc.tcd.1kg)
 print(diversity.bootstrap.plots$all.datatypes.adx.asw)
-print(diversity.population.contrast.plots$tc.tcd$`95`)
+# print(diversity.population.contrast.plots$tc.tcd$`95`)
 print(diversity.population.contrast.plots$tc.tcd$bonferroni)
-print(diversity.population.contrast.plots$lg.lgd$`95`)
+# print(diversity.population.contrast.plots$lg.lgd$`95`)
 print(diversity.population.contrast.plots$lg.lgd$bonferroni)
 print(diversity.population.contrast.plots$empirical)
-print(diversity.simulation.contrast.plots$`95`)
+# print(diversity.simulation.contrast.plots$`95`)
 print(diversity.simulation.contrast.plots$bonferroni)

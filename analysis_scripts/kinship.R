@@ -983,9 +983,9 @@ saveRDS(kinship.empirical.contrast.plots$bonferroni, file.path(
 
 print(kinship.bootstrap.tcd.1kg)
 print(kinship.bootstrap.all.datatypes.adx.asw)
-print(kinship.population.contrast.plots$`95`)
+# print(kinship.population.contrast.plots$`95`)
 print(kinship.population.contrast.plots$bonferroni)
-print(kinship.simulation.contrast.plots$`95`)
+# print(kinship.simulation.contrast.plots$`95`)
 print(kinship.simulation.contrast.plots$bonferroni)
-print(kinship.empirical.contrast.plots$`95`)
+# print(kinship.empirical.contrast.plots$`95`)
 print(kinship.empirical.contrast.plots$bonferroni)
