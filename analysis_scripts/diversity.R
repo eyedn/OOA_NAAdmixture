@@ -1079,125 +1079,125 @@ make.diversity.plot <- function(
 
 
 # read all available chromosome-level simulation diversity estimates
-sim.tc.diversity <- read.diversity.chromosomes(
+diversity.sim.tc <- read.diversity.chromosomes(
   SIM.TC.DATA.DIR, "pi_theta_stats.chr{chrom}.parquet",
   CHROMOSOMES, "Simulation_2T12Consistent"
   )
-simDown.tc.intergenic.diversity <- read.diversity.chromosomes(
+diversity.simDown.tc.intergenic <- read.diversity.chromosomes(
   SIMDOWN.TC.DATA.DIR,
   "pi_theta_stats_intergenic.chr{chrom}.parquet",
   CHROMOSOMES, "Simulation_2T12Consistent_simDown", "Intergenic"
   )
-simDown.tc.full.callable.diversity <- read.diversity.chromosomes(
+diversity.simDown.tc.full.callable <- read.diversity.chromosomes(
   SIMDOWN.TC.DATA.DIR,
   "pi_theta_stats_full_callable_chrom.chr{chrom}.parquet",
   CHROMOSOMES, "Simulation_2T12Consistent_simDown", "Full callable"
   )
-sim.lg.diversity <- read.diversity.chromosomes(
+diversity.sim.lg <- read.diversity.chromosomes(
   SIM.LG.DATA.DIR, "pi_theta_stats.chr{chrom}.parquet",
   CHROMOSOMES, "Simulation_largeGrowth"
   )
-simDown.lg.intergenic.diversity <- read.diversity.chromosomes(
+diversity.simDown.lg.intergenic <- read.diversity.chromosomes(
   SIMDOWN.LG.DATA.DIR,
   "pi_theta_stats_intergenic.chr{chrom}.parquet",
   CHROMOSOMES, "Simulation_largeGrowth_simDown", "Intergenic"
   )
-simDown.lg.full.callable.diversity <- read.diversity.chromosomes(
+diversity.simDown.lg.full.callable <- read.diversity.chromosomes(
   SIMDOWN.LG.DATA.DIR,
   "pi_theta_stats_full_callable_chrom.chr{chrom}.parquet",
   CHROMOSOMES, "Simulation_largeGrowth_simDown", "Full callable"
   )
 
 # read all available chromosome-level empirical diversity estimates
-emp.intergenic.chromosome <- read.diversity.chromosomes(
+diversity.emp.intergenic.chromosome <- read.diversity.chromosomes(
   EMPIRICAL.DATA.DIR,
   "pi_theta_stats_intergenic.chr{chrom}.parquet",
   CHROMOSOMES, "Empirical", "Intergenic"
   )
-emp.full.callable.chromosome <- read.diversity.chromosomes(
+diversity.emp.full.callable.chromosome <- read.diversity.chromosomes(
   EMPIRICAL.DATA.DIR,
   "pi_theta_stats_full_callable_chrom.chr{chrom}.parquet",
   CHROMOSOMES, "Empirical", "Full callable"
   )
 
 # read genome-wide empirical diversity references
-emp.intergenic.genome <- read.diversity.genome(
+diversity.emp.intergenic.genome <- read.diversity.genome(
   EMPIRICAL.DATA.DIR, "pi_theta_stats_intergenic.parquet",
   "Intergenic"
   )
-emp.full.callable.genome <- read.diversity.genome(
+diversity.emp.full.callable.genome <- read.diversity.genome(
   EMPIRICAL.DATA.DIR,
   "pi_theta_stats_full_callable_chrom.parquet", "Full callable"
   )
 
 # summarize sources and construct all configured diversity views
-population.contrast.simulation <- bind_rows(
-  mutate(sim.tc.diversity, mask = "Intergenic"),
-  simDown.tc.intergenic.diversity,
-  mutate(sim.lg.diversity, mask = "Intergenic"),
-  simDown.lg.intergenic.diversity
+diversity.population.contrast.simulation <- bind_rows(
+  mutate(diversity.sim.tc, mask = "Intergenic"),
+  diversity.simDown.tc.intergenic,
+  mutate(diversity.sim.lg, mask = "Intergenic"),
+  diversity.simDown.lg.intergenic
   )
-population.contrast.empirical <- bind_rows(
-  emp.intergenic.chromosome, emp.intergenic.genome
+diversity.population.contrast.empirical <- bind_rows(
+  diversity.emp.intergenic.chromosome, diversity.emp.intergenic.genome
   )
-population.contrast.tables <- make.diversity.population.contrast.tables(
-  population.contrast.simulation, CHROMOSOMES,
+diversity.population.contrast.tables <- make.diversity.population.contrast.tables(
+  diversity.population.contrast.simulation, CHROMOSOMES,
   DIVERSITY.POPULATION.CONTRAST.BOOTSTRAP.REPLICATES
   )
-population.contrast.empirical.tables <-
+diversity.population.contrast.empirical.tables <-
   make.diversity.population.empirical.contrasts(
-    population.contrast.empirical, CHROMOSOMES
+    diversity.population.contrast.empirical, CHROMOSOMES
     )
-population.contrast.plots <- imap(
+diversity.population.contrast.plots <- imap(
   DIVERSITY.POPULATION.CONTRAST.SOURCE.GROUPS,
   function(sources, tag) {
     list(
       `95` = make.diversity.contrast.plot(
         prepare.diversity.population.contrast.plot.data(
-          population.contrast.tables, "95", CHROMOSOMES, sources
+          diversity.population.contrast.tables, "95", CHROMOSOMES, sources
           ),
         "95", "population"
         ),
       bonferroni = make.diversity.contrast.plot(
         prepare.diversity.population.contrast.plot.data(
-          population.contrast.tables, "bonferroni", CHROMOSOMES, sources
+          diversity.population.contrast.tables, "bonferroni", CHROMOSOMES, sources
           ),
         "bonferroni", "population"
         )
       )
     }
   )
-population.contrast.plots$empirical <-
+diversity.population.contrast.plots$empirical <-
   make.diversity.population.empirical.contrast.plot(
     prepare.diversity.population.empirical.contrast.plot.data(
-      population.contrast.empirical.tables, CHROMOSOMES
+      diversity.population.contrast.empirical.tables, CHROMOSOMES
       )
     )
-simulation.contrast.tables <- make.diversity.simulation.contrast.tables(
-  population.contrast.simulation, CHROMOSOMES,
+diversity.simulation.contrast.tables <- make.diversity.simulation.contrast.tables(
+  diversity.population.contrast.simulation, CHROMOSOMES,
   DIVERSITY.POPULATION.CONTRAST.BOOTSTRAP.REPLICATES
   )
-simulation.contrast.plots <- list(
+diversity.simulation.contrast.plots <- list(
   `95` = make.diversity.contrast.plot(
     prepare.diversity.simulation.contrast.plot.data(
-      simulation.contrast.tables, "95", CHROMOSOMES
+      diversity.simulation.contrast.tables, "95", CHROMOSOMES
       ),
     "95", "simulation"
     ),
   bonferroni = make.diversity.contrast.plot(
     prepare.diversity.simulation.contrast.plot.data(
-      simulation.contrast.tables, "bonferroni", CHROMOSOMES
+      diversity.simulation.contrast.tables, "bonferroni", CHROMOSOMES
       ),
     "bonferroni", "simulation"
     )
   )
-simulation.diversity.summary <- bind_rows(
-  sim.tc.diversity,
-  simDown.tc.intergenic.diversity,
-  simDown.tc.full.callable.diversity,
-  sim.lg.diversity,
-  simDown.lg.intergenic.diversity,
-  simDown.lg.full.callable.diversity
+diversity.simulation.summary <- bind_rows(
+  diversity.sim.tc,
+  diversity.simDown.tc.intergenic,
+  diversity.simDown.tc.full.callable,
+  diversity.sim.lg,
+  diversity.simDown.lg.intergenic,
+  diversity.simDown.lg.full.callable
   ) %>%
   filter(
     !(data.type %in% c(
@@ -1206,11 +1206,14 @@ simulation.diversity.summary <- bind_rows(
   ) %>%
   summarize.simulation.diversity()
 diversity.plot.data <- build.diversity.plot.data(
-  simulation.diversity.summary,
+  diversity.simulation.summary,
   bind_rows(
-    emp.intergenic.chromosome, emp.full.callable.chromosome
+    diversity.emp.intergenic.chromosome,
+    diversity.emp.full.callable.chromosome
     ),
-  bind_rows(emp.intergenic.genome, emp.full.callable.genome),
+  bind_rows(
+    diversity.emp.intergenic.genome, diversity.emp.full.callable.genome
+    ),
   SELECTED.CHROMOSOMES
   )
 diversity.bootstrap.plots <- imap(list(
@@ -1232,34 +1235,34 @@ saveRDS(diversity.bootstrap.plots$tc.tcd.1kg, file.path(
 saveRDS(diversity.bootstrap.plots$all.datatypes.adx.asw, file.path(
   OUTPUT.DIR, "diversity.bootstrap.all.datatypes.adx.asw.rds"
   ))
-saveRDS(population.contrast.plots$tc.tcd$`95`, file.path(
+saveRDS(diversity.population.contrast.plots$tc.tcd$`95`, file.path(
   OUTPUT.DIR, "diversity.population.contrasts.tc.tcd.95.rds"
   ))
-saveRDS(population.contrast.plots$tc.tcd$bonferroni, file.path(
+saveRDS(diversity.population.contrast.plots$tc.tcd$bonferroni, file.path(
   OUTPUT.DIR, "diversity.population.contrasts.tc.tcd.bonferroni.rds"
   ))
-saveRDS(population.contrast.plots$lg.lgd$`95`, file.path(
+saveRDS(diversity.population.contrast.plots$lg.lgd$`95`, file.path(
   OUTPUT.DIR, "diversity.population.contrasts.lg.lgd.95.rds"
   ))
-saveRDS(population.contrast.plots$lg.lgd$bonferroni, file.path(
+saveRDS(diversity.population.contrast.plots$lg.lgd$bonferroni, file.path(
   OUTPUT.DIR, "diversity.population.contrasts.lg.lgd.bonferroni.rds"
   ))
-saveRDS(population.contrast.plots$empirical, file.path(
+saveRDS(diversity.population.contrast.plots$empirical, file.path(
   OUTPUT.DIR, "diversity.population.contrasts.empirical.rds"
   ))
-saveRDS(simulation.contrast.plots$`95`, file.path(
+saveRDS(diversity.simulation.contrast.plots$`95`, file.path(
   OUTPUT.DIR, "diversity.simulation.contrasts.95.rds"
   ))
-saveRDS(simulation.contrast.plots$bonferroni, file.path(
+saveRDS(diversity.simulation.contrast.plots$bonferroni, file.path(
   OUTPUT.DIR, "diversity.simulation.contrasts.bonferroni.rds"
   ))
 
 print(diversity.bootstrap.plots$tc.tcd.1kg)
 print(diversity.bootstrap.plots$all.datatypes.adx.asw)
-print(population.contrast.plots$tc.tcd$`95`)
-print(population.contrast.plots$tc.tcd$bonferroni)
-print(population.contrast.plots$lg.lgd$`95`)
-print(population.contrast.plots$lg.lgd$bonferroni)
-print(population.contrast.plots$empirical)
-print(simulation.contrast.plots$`95`)
-print(simulation.contrast.plots$bonferroni)
+print(diversity.population.contrast.plots$tc.tcd$`95`)
+print(diversity.population.contrast.plots$tc.tcd$bonferroni)
+print(diversity.population.contrast.plots$lg.lgd$`95`)
+print(diversity.population.contrast.plots$lg.lgd$bonferroni)
+print(diversity.population.contrast.plots$empirical)
+print(diversity.simulation.contrast.plots$`95`)
+print(diversity.simulation.contrast.plots$bonferroni)

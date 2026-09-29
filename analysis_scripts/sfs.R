@@ -946,35 +946,37 @@ sfs.data <- prepare.sfs.analysis(
   sfs.inputs$empirical
   )
 sfs.summaries <- summarize.sfs.analysis(sfs.data)
-population.contrast.tables <- make.sfs.population.contrast.tables(sfs.data)
-simulation.contrast.tables <- make.sfs.simulation.contrast.tables(sfs.data)
-empirical.contrast.table <- make.sfs.empirical.contrast.table(sfs.data)
-population.contrast.plots <- list(
+sfs.population.contrast.tables <- make.sfs.population.contrast.tables(sfs.data)
+sfs.simulation.contrast.tables <- make.sfs.simulation.contrast.tables(sfs.data)
+sfs.empirical.contrast.table <- make.sfs.empirical.contrast.table(sfs.data)
+sfs.population.contrast.plots <- list(
   tc.tcd = list(
     `95` = make.sfs.contrast.plot(
       prepare.sfs.contrast.plot.data(
-        population.contrast.tables, "95",
+        sfs.population.contrast.tables, "95",
         SFS.POPULATION.CONTRAST.SOURCES
         ),
       "95%", "T.C. and T.C.D. population contrasts"
       ),
     bonferroni = make.sfs.contrast.plot(
       prepare.sfs.contrast.plot.data(
-        population.contrast.tables, "bonferroni",
+        sfs.population.contrast.tables, "bonferroni",
         SFS.POPULATION.CONTRAST.SOURCES
         ),
       "Bonferroni", "T.C. and T.C.D. population contrasts"
       )
     ),
-  empirical = make.sfs.empirical.contrast.plot(empirical.contrast.table)
+  empirical = make.sfs.empirical.contrast.plot(sfs.empirical.contrast.table)
   )
-simulation.contrast.plots <- list(
+sfs.simulation.contrast.plots <- list(
   `95` = make.sfs.contrast.plot(
-    prepare.sfs.contrast.plot.data(simulation.contrast.tables, "95"),
+    prepare.sfs.contrast.plot.data(sfs.simulation.contrast.tables, "95"),
     "95%", "ADX simulation source contrasts"
     ),
   bonferroni = make.sfs.contrast.plot(
-    prepare.sfs.contrast.plot.data(simulation.contrast.tables, "bonferroni"),
+    prepare.sfs.contrast.plot.data(
+      sfs.simulation.contrast.tables, "bonferroni"
+      ),
     "Bonferroni", "ADX simulation source contrasts"
     )
   )
@@ -1014,19 +1016,19 @@ saveRDS(sfs.bootstrap.proportion.plots$tcd.1kg, file.path(
 saveRDS(sfs.bootstrap.proportion.plots$all.datatypes.adx.asw, file.path(
   OUTPUT.DIR, "sfs.bootstrap.proportion.all.datatypes.adx.asw.rds"
   ))
-saveRDS(population.contrast.plots$tc.tcd$`95`, file.path(
+saveRDS(sfs.population.contrast.plots$tc.tcd$`95`, file.path(
   OUTPUT.DIR, "sfs.population.contrasts.tc.tcd.95.rds"
   ))
-saveRDS(population.contrast.plots$tc.tcd$bonferroni, file.path(
+saveRDS(sfs.population.contrast.plots$tc.tcd$bonferroni, file.path(
   OUTPUT.DIR, "sfs.population.contrasts.tc.tcd.bonferroni.rds"
   ))
-saveRDS(population.contrast.plots$empirical, file.path(
+saveRDS(sfs.population.contrast.plots$empirical, file.path(
   OUTPUT.DIR, "sfs.population.contrasts.empirical.rds"
   ))
-saveRDS(simulation.contrast.plots$`95`, file.path(
+saveRDS(sfs.simulation.contrast.plots$`95`, file.path(
   OUTPUT.DIR, "sfs.simulation.contrasts.95.rds"
   ))
-saveRDS(simulation.contrast.plots$bonferroni, file.path(
+saveRDS(sfs.simulation.contrast.plots$bonferroni, file.path(
   OUTPUT.DIR, "sfs.simulation.contrasts.bonferroni.rds"
   ))
 
@@ -1034,8 +1036,8 @@ print(sfs.bootstrap.count.plots$tcd.1kg)
 print(sfs.bootstrap.count.plots$all.datatypes.adx.asw)
 print(sfs.bootstrap.proportion.plots$tcd.1kg)
 print(sfs.bootstrap.proportion.plots$all.datatypes.adx.asw)
-print(population.contrast.plots$tc.tcd$`95`)
-print(population.contrast.plots$tc.tcd$bonferroni)
-print(population.contrast.plots$empirical)
-print(simulation.contrast.plots$`95`)
-print(simulation.contrast.plots$bonferroni)
+print(sfs.population.contrast.plots$tc.tcd$`95`)
+print(sfs.population.contrast.plots$tc.tcd$bonferroni)
+print(sfs.population.contrast.plots$empirical)
+print(sfs.simulation.contrast.plots$`95`)
+print(sfs.simulation.contrast.plots$bonferroni)

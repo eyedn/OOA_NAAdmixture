@@ -818,86 +818,92 @@ make.kinship.contrast.plot <- function(data, interval.label, title) {
 
 
 # read selected chromosome-level simulation and empirical estimates
-sim.tc.kinship <- read.kinship.chromosomes(
+kinship.sim.tc <- read.kinship.chromosomes(
   SIM.TC.DATA.DIR, SELECTED.CHROMOSOMES, "Simulation_2T12Consistent"
   )
-simDown.tc.kinship <- read.kinship.chromosomes(
+kinship.simDown.tc <- read.kinship.chromosomes(
   SIMDOWN.TC.DATA.DIR, SELECTED.CHROMOSOMES,
   "Simulation_2T12Consistent_simDown"
   )
-sim.lg.kinship <- read.kinship.chromosomes(
+kinship.sim.lg <- read.kinship.chromosomes(
   SIM.LG.DATA.DIR, SELECTED.CHROMOSOMES, "Simulation_largeGrowth"
   )
-simDown.lg.kinship <- read.kinship.chromosomes(
+kinship.simDown.lg <- read.kinship.chromosomes(
   SIMDOWN.LG.DATA.DIR, SELECTED.CHROMOSOMES,
   "Simulation_largeGrowth_simDown"
   )
-emp.chromosome.kinship <- read.kinship.chromosomes(
+kinship.emp.chromosome <- read.kinship.chromosomes(
   EMPIRICAL.DATA.DIR, SELECTED.CHROMOSOMES, "Empirical"
   )
 
 # combine all unrelated simulation and empirical pairs
-simulation.kinship <- bind_rows(
-  sim.tc.kinship, simDown.tc.kinship,
-  sim.lg.kinship, simDown.lg.kinship
+kinship.simulation <- bind_rows(
+  kinship.sim.tc, kinship.simDown.tc,
+  kinship.sim.lg, kinship.simDown.lg
   )
-empirical.kinship <- emp.chromosome.kinship
+kinship.empirical <- kinship.emp.chromosome
 
 # summarize common-bin histograms and construct all configured plots
-kinship.data <- bind_rows(simulation.kinship, empirical.kinship)
+kinship.data <- bind_rows(kinship.simulation, kinship.empirical)
 kinship.breaks <- make.kinship.breaks(
   kinship.data, KINSHIP.BIN.WIDTH
   )
 kinship.summary <- summarize.bootstrap.kinship(kinship.data, kinship.breaks)
-contrast.selected.ids <- select.bootstrap.kinship.ids(kinship.data, RANDOM.SEED)
-contrast.histograms <- apply.kinship.selection(
-  kinship.data, contrast.selected.ids
+kinship.contrast.selected.ids <- select.bootstrap.kinship.ids(
+  kinship.data, RANDOM.SEED
+  )
+kinship.contrast.histograms <- apply.kinship.selection(
+  kinship.data, kinship.contrast.selected.ids
   ) %>%
   filter(sample.set == "downsampled") %>%
   build.kinship.histograms(kinship.breaks)
-population.contrast.tables <- make.kinship.population.contrast.tables(
-  filter(contrast.histograms, data.type != "Empirical")
+kinship.population.contrast.tables <- make.kinship.population.contrast.tables(
+  filter(kinship.contrast.histograms, data.type != "Empirical")
   )
-simulation.contrast.tables <- make.kinship.simulation.contrast.tables(
-  filter(contrast.histograms, data.type != "Empirical")
+kinship.simulation.contrast.tables <- make.kinship.simulation.contrast.tables(
+  filter(kinship.contrast.histograms, data.type != "Empirical")
   )
-empirical.contrast.tables <- make.kinship.empirical.contrast.tables(
-  empirical.kinship, kinship.breaks
+kinship.empirical.contrast.tables <- make.kinship.empirical.contrast.tables(
+  kinship.empirical, kinship.breaks
   )
-population.contrast.plots <- list(
+kinship.population.contrast.plots <- list(
   `95` = make.kinship.contrast.plot(
-    prepare.kinship.contrast.plot.data(population.contrast.tables, "95"),
+    prepare.kinship.contrast.plot.data(
+      kinship.population.contrast.tables, "95"
+      ),
     "95%", "T.C. and T.C.D. kinship population contrasts"
     ),
   bonferroni = make.kinship.contrast.plot(
     prepare.kinship.contrast.plot.data(
-      population.contrast.tables, "bonferroni"
+      kinship.population.contrast.tables, "bonferroni"
       ),
     "Bonferroni", "T.C. and T.C.D. kinship population contrasts"
     )
   )
-simulation.contrast.plots <- list(
+kinship.simulation.contrast.plots <- list(
   `95` = make.kinship.contrast.plot(
-    prepare.kinship.contrast.plot.data(simulation.contrast.tables, "95"),
+    prepare.kinship.contrast.plot.data(
+      kinship.simulation.contrast.tables, "95"
+      ),
     "95%", "ADX kinship simulation-source contrasts"
     ),
   bonferroni = make.kinship.contrast.plot(
     prepare.kinship.contrast.plot.data(
-      simulation.contrast.tables, "bonferroni"
+      kinship.simulation.contrast.tables, "bonferroni"
       ),
     "Bonferroni", "ADX kinship simulation-source contrasts"
     )
   )
-empirical.contrast.plots <- list(
+kinship.empirical.contrast.plots <- list(
   `95` = make.kinship.contrast.plot(
     prepare.kinship.contrast.plot.data(
-      empirical.contrast.tables, "95", "empirical"
+      kinship.empirical.contrast.tables, "95", "empirical"
       ),
     "95%", "Empirical kinship population contrasts"
     ),
   bonferroni = make.kinship.contrast.plot(
     prepare.kinship.contrast.plot.data(
-      empirical.contrast.tables, "bonferroni", "empirical"
+      kinship.empirical.contrast.tables, "bonferroni", "empirical"
       ),
     "Bonferroni", "Empirical kinship population contrasts"
     )
@@ -924,30 +930,30 @@ saveRDS(kinship.bootstrap.tcd.1kg, file.path(
 saveRDS(kinship.bootstrap.all.datatypes.adx.asw, file.path(
   OUTPUT.DIR, "kinship.bootstrap.all.datatypes.adx.asw.rds"
   ))
-saveRDS(population.contrast.plots$`95`, file.path(
+saveRDS(kinship.population.contrast.plots$`95`, file.path(
   OUTPUT.DIR, "kinship.population.contrasts.95.rds"
   ))
-saveRDS(population.contrast.plots$bonferroni, file.path(
+saveRDS(kinship.population.contrast.plots$bonferroni, file.path(
   OUTPUT.DIR, "kinship.population.contrasts.bonferroni.rds"
   ))
-saveRDS(simulation.contrast.plots$`95`, file.path(
+saveRDS(kinship.simulation.contrast.plots$`95`, file.path(
   OUTPUT.DIR, "kinship.simulation.contrasts.95.rds"
   ))
-saveRDS(simulation.contrast.plots$bonferroni, file.path(
+saveRDS(kinship.simulation.contrast.plots$bonferroni, file.path(
   OUTPUT.DIR, "kinship.simulation.contrasts.bonferroni.rds"
   ))
-saveRDS(empirical.contrast.plots$`95`, file.path(
+saveRDS(kinship.empirical.contrast.plots$`95`, file.path(
   OUTPUT.DIR, "kinship.empirical.contrasts.95.rds"
   ))
-saveRDS(empirical.contrast.plots$bonferroni, file.path(
+saveRDS(kinship.empirical.contrast.plots$bonferroni, file.path(
   OUTPUT.DIR, "kinship.empirical.contrasts.bonferroni.rds"
   ))
 
 print(kinship.bootstrap.tcd.1kg)
 print(kinship.bootstrap.all.datatypes.adx.asw)
-print(population.contrast.plots$`95`)
-print(population.contrast.plots$bonferroni)
-print(simulation.contrast.plots$`95`)
-print(simulation.contrast.plots$bonferroni)
-print(empirical.contrast.plots$`95`)
-print(empirical.contrast.plots$bonferroni)
+print(kinship.population.contrast.plots$`95`)
+print(kinship.population.contrast.plots$bonferroni)
+print(kinship.simulation.contrast.plots$`95`)
+print(kinship.simulation.contrast.plots$bonferroni)
+print(kinship.empirical.contrast.plots$`95`)
+print(kinship.empirical.contrast.plots$bonferroni)

@@ -819,49 +819,49 @@ make.bootstrap.ld.plot <- function(data, data.types, view, title = view) {
 
 
 # read all available chromosomes for all four simulation sources
-sim.tc.ld.chromosomes <- read.ld.chromosomes(
+ld.sim.tc.chromosomes <- read.ld.chromosomes(
   SIM.TC.DATA.DIR, CHROMOSOMES, "Simulation_2T12Consistent"
   )
-simDown.tc.ld.chromosomes <- read.ld.chromosomes(
+ld.simDown.tc.chromosomes <- read.ld.chromosomes(
   SIMDOWN.TC.DATA.DIR, CHROMOSOMES,
   "Simulation_2T12Consistent_simDown"
   )
-sim.lg.ld.chromosomes <- read.ld.chromosomes(
+ld.sim.lg.chromosomes <- read.ld.chromosomes(
   SIM.LG.DATA.DIR, CHROMOSOMES, "Simulation_largeGrowth"
   )
-simDown.lg.ld.chromosomes <- read.ld.chromosomes(
+ld.simDown.lg.chromosomes <- read.ld.chromosomes(
   SIMDOWN.LG.DATA.DIR, CHROMOSOMES,
   "Simulation_largeGrowth_simDown"
   )
-simulation.ld.chromosomes <- bind_rows(
-  sim.tc.ld.chromosomes, simDown.tc.ld.chromosomes,
-  sim.lg.ld.chromosomes, simDown.lg.ld.chromosomes
+ld.simulation.chromosomes <- bind_rows(
+  ld.sim.tc.chromosomes, ld.simDown.tc.chromosomes,
+  ld.sim.lg.chromosomes, ld.simDown.lg.chromosomes
   )
 
 # pool every simulation chromosome curve from producer sufficient statistics
-simulation.ld.selected <- simulation.ld.chromosomes %>%
+ld.simulation.selected <- ld.simulation.chromosomes %>%
   pool.ld.curves(include.chromosome = TRUE)
 
 # read and pool all available empirical chromosomes
-empirical.ld.selected <- read.ld.chromosomes(
+ld.empirical.selected <- read.ld.chromosomes(
   EMPIRICAL.DATA.DIR, CHROMOSOMES, "Empirical"
   ) %>%
   pool.ld.curves(include.chromosome = TRUE)
-empirical.ld.genome <- read.empirical.ld.genome(EMPIRICAL.DATA.DIR) %>%
+ld.empirical.genome <- read.empirical.ld.genome(EMPIRICAL.DATA.DIR) %>%
   pool.ld.curves(include.chromosome = TRUE)
 
 # summarize curves for the active bootstrap views
 ld.summary <- bind_rows(
-  simulation.ld.selected, empirical.ld.selected, empirical.ld.genome
+  ld.simulation.selected, ld.empirical.selected, ld.empirical.genome
   ) %>%
   summarize.ld.curves(SELECTED.CHROMOSOMES)
 
 # bootstrap population and ADX source LD contrasts on displayed bins
 ld.population.contrast.tables <- make.ld.population.contrast.tables(
-  simulation.ld.selected, LD.POPULATION.CONTRAST.BOOTSTRAP.REPLICATES
+  ld.simulation.selected, LD.POPULATION.CONTRAST.BOOTSTRAP.REPLICATES
   )
 ld.simulation.contrast.tables <- make.ld.simulation.contrast.tables(
-  simulation.ld.selected, LD.POPULATION.CONTRAST.BOOTSTRAP.REPLICATES
+  ld.simulation.selected, LD.POPULATION.CONTRAST.BOOTSTRAP.REPLICATES
   )
 ld.population.contrast.plots <- list(
   tc = list(
@@ -893,7 +893,7 @@ ld.population.contrast.plots <- list(
       )
     ),
   empirical = make.ld.population.empirical.contrast.plot(
-    make.ld.population.empirical.contrasts(empirical.ld.selected)
+    make.ld.population.empirical.contrasts(ld.empirical.selected)
     )
   )
 ld.simulation.contrast.plots <- list(
@@ -912,40 +912,40 @@ ld.simulation.contrast.plots <- list(
   )
 
 # save TCD/1kG and all-datatype ADX/ASW chromosome-1 bootstrap LD views
-bootstrap.tcd.1kg.ld.all.lines <- make.bootstrap.ld.plot(
+ld.bootstrap.tcd.1kg.all.lines <- make.bootstrap.ld.plot(
   ld.summary, c("Simulation_2T12Consistent_simDown", "Empirical"),
   "all.lines", "LD decay: chromosome 1 TCD and 1kG"
   )
-bootstrap.tcd.1kg.ld.role.interval <- make.bootstrap.ld.plot(
+ld.bootstrap.tcd.1kg.role.interval <- make.bootstrap.ld.plot(
   ld.summary, c("Simulation_2T12Consistent_simDown", "Empirical"),
   "role.interval", "LD decay: chromosome 1 TCD and 1kG by role"
   )
-bootstrap.tcd.1kg.ld.datatype.interval <- make.bootstrap.ld.plot(
+ld.bootstrap.tcd.1kg.datatype.interval <- make.bootstrap.ld.plot(
   ld.summary, c("Simulation_2T12Consistent_simDown", "Empirical"),
   "datatype.interval", "LD decay: chromosome 1 TCD and 1kG by source"
   )
-bootstrap.all.datatypes.adx.asw.ld.all.lines <- make.bootstrap.ld.plot(
+ld.bootstrap.all.datatypes.adx.asw.all.lines <- make.bootstrap.ld.plot(
   ld.summary, SOURCE.LEVELS, "all.datatypes.adx.asw.all.lines",
   "LD decay: chromosome 1 all ADX sources and ASW"
   )
-bootstrap.all.datatypes.adx.asw.ld.datatype.interval <- make.bootstrap.ld.plot(
+ld.bootstrap.all.datatypes.adx.asw.datatype.interval <- make.bootstrap.ld.plot(
   ld.summary, SOURCE.LEVELS, "all.datatypes.adx.asw.datatype.interval",
   "LD decay: chromosome 1 all ADX sources and ASW by source"
   )
 dir.create(OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
-saveRDS(bootstrap.tcd.1kg.ld.all.lines, file.path(
+saveRDS(ld.bootstrap.tcd.1kg.all.lines, file.path(
   OUTPUT.DIR, "ld.bootstrap.tcd.1kg.all.lines.rds"
   ))
-saveRDS(bootstrap.tcd.1kg.ld.role.interval, file.path(
+saveRDS(ld.bootstrap.tcd.1kg.role.interval, file.path(
   OUTPUT.DIR, "ld.bootstrap.tcd.1kg.role.interval.rds"
   ))
-saveRDS(bootstrap.tcd.1kg.ld.datatype.interval, file.path(
+saveRDS(ld.bootstrap.tcd.1kg.datatype.interval, file.path(
   OUTPUT.DIR, "ld.bootstrap.tcd.1kg.datatype.interval.rds"
   ))
-saveRDS(bootstrap.all.datatypes.adx.asw.ld.all.lines, file.path(
+saveRDS(ld.bootstrap.all.datatypes.adx.asw.all.lines, file.path(
   OUTPUT.DIR, "ld.bootstrap.all.datatypes.adx.asw.all.lines.rds"
   ))
-saveRDS(bootstrap.all.datatypes.adx.asw.ld.datatype.interval, file.path(
+saveRDS(ld.bootstrap.all.datatypes.adx.asw.datatype.interval, file.path(
   OUTPUT.DIR, "ld.bootstrap.all.datatypes.adx.asw.datatype.interval.rds"
   ))
 saveRDS(ld.population.contrast.plots$tc$`95`, file.path(
@@ -970,11 +970,11 @@ saveRDS(ld.simulation.contrast.plots$bonferroni, file.path(
   OUTPUT.DIR, "ld.simulation.contrast.bonferroni.rds"
   ))
 
-print(bootstrap.tcd.1kg.ld.all.lines)
-print(bootstrap.tcd.1kg.ld.role.interval)
-print(bootstrap.tcd.1kg.ld.datatype.interval)
-print(bootstrap.all.datatypes.adx.asw.ld.all.lines)
-print(bootstrap.all.datatypes.adx.asw.ld.datatype.interval)
+print(ld.bootstrap.tcd.1kg.all.lines)
+print(ld.bootstrap.tcd.1kg.role.interval)
+print(ld.bootstrap.tcd.1kg.datatype.interval)
+print(ld.bootstrap.all.datatypes.adx.asw.all.lines)
+print(ld.bootstrap.all.datatypes.adx.asw.datatype.interval)
 print(ld.population.contrast.plots$tc$`95`)
 print(ld.population.contrast.plots$tc$bonferroni)
 print(ld.population.contrast.plots$tcd$`95`)

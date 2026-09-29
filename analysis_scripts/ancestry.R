@@ -950,51 +950,54 @@ make.ancestry.bootstrap.contrast.plot <- function(
   }
 
 
-# analysis data prep ----
+# analysis ----
 
 
 # read tc/lg truth, configured tcd/lgd inference, and empirical inference.
-sim.tc.tspop.data <- read.ancestry.family(
+ancestry.sim.tc.tspop.data <- read.ancestry.family(
   SIM.TC.DATA.DIR, "ancestry.chr{chrom}.parquet", CHROMOSOMES,
   "Simulation_2T12Consistent", "tspop", 0L, "tspop"
   )
-simDown.tc.inference.data <- read.ancestry.family(
+ancestry.simDown.tc.inference.data <- read.ancestry.family(
   SIMDOWN.TC.DATA.DIR, ancestry.inference.file.family(PLOT.EMPIRICAL.METHOD),
   CHROMOSOMES, "Simulation_2T12Consistent_simDown", PLOT.EMPIRICAL.METHOD,
   SIMULATION.K, PLOT.EMPIRICAL.METHOD
   )
-sim.lg.tspop.data <- read.ancestry.family(
+ancestry.sim.lg.tspop.data <- read.ancestry.family(
   SIM.LG.DATA.DIR, "ancestry.chr{chrom}.parquet", CHROMOSOMES,
   "Simulation_largeGrowth", "tspop", 0L, "tspop"
   )
-simDown.lg.inference.data <- read.ancestry.family(
+ancestry.simDown.lg.inference.data <- read.ancestry.family(
   SIMDOWN.LG.DATA.DIR, ancestry.inference.file.family(PLOT.EMPIRICAL.METHOD),
   CHROMOSOMES, "Simulation_largeGrowth_simDown", PLOT.EMPIRICAL.METHOD,
   SIMULATION.K, PLOT.EMPIRICAL.METHOD
   )
-empirical.file.family <- ancestry.inference.file.family(PLOT.EMPIRICAL.METHOD)
-empirical.genome.file <- str_replace(
-  empirical.file.family, "\\.chr\\{chrom\\}", ""
+ancestry.empirical.file.family <- ancestry.inference.file.family(
+  PLOT.EMPIRICAL.METHOD
   )
-empirical.inference.data <- read.ancestry.family(
-  EMPIRICAL.DATA.DIR, empirical.file.family, CHROMOSOMES, "Empirical",
+ancestry.empirical.genome.file <- str_replace(
+  ancestry.empirical.file.family, "\\.chr\\{chrom\\}", ""
+  )
+ancestry.empirical.inference.data <- read.ancestry.family(
+  EMPIRICAL.DATA.DIR, ancestry.empirical.file.family, CHROMOSOMES, "Empirical",
   PLOT.EMPIRICAL.METHOD, EMPIRICAL.K, "Empirical", include.genome = TRUE,
-  genome.file.family = empirical.genome.file
+  genome.file.family = ancestry.empirical.genome.file
   )
 
 # orient ancestry components and add reproducible selected simulation rows.
 ancestry.individual.data <- bind_rows(
-  sim.tc.tspop.data, simDown.tc.inference.data, sim.lg.tspop.data,
-  simDown.lg.inference.data, empirical.inference.data
+  ancestry.sim.tc.tspop.data, ancestry.simDown.tc.inference.data,
+  ancestry.sim.lg.tspop.data, ancestry.simDown.lg.inference.data,
+  ancestry.empirical.inference.data
   ) %>%
   apply.ancestry.source.contract() %>%
   orient.ancestry.components(c("rep", "chrom", "data.type", "method"))
-downsample.ids <- select.downsample.ids(
+ancestry.downsample.ids <- select.downsample.ids(
   ancestry.individual.data, DOWNSAMPLE.SIZE, "sample_id",
   c("data.type", "rep", "chrom"), RANDOM.SEED
   )
 ancestry.individual.data <- apply.downsample.ids(
-  ancestry.individual.data, downsample.ids, "sample_id",
+  ancestry.individual.data, ancestry.downsample.ids, "sample_id",
   c("data.type", "rep", "chrom")
   )
 
@@ -1012,36 +1015,33 @@ write.ancestry.bootstrap.comparison.tables(
   )
 
 
-# bootstrap plotting ----
-
-
 # construct the four active bottom bootstrap figures.
-bootstrap.ancestry.summary <- summarize.bootstrap.ancestry(
+ancestry.bootstrap.summary <- summarize.bootstrap.ancestry(
   ancestry.individual.data, DOWNSAMPLE.SIZE, RANDOM.SEED,
   BOOTSTRAP.REPLICATES
   )
-bootstrap.ancestry.histograms <- summarize.bootstrap.histograms(
+ancestry.bootstrap.histograms <- summarize.bootstrap.histograms(
   ancestry.individual.data, HISTOGRAM.BREAKS, RANDOM.SEED,
   BOOTSTRAP.REPLICATES
   )
 ancestry.bootstrap.tcd.1kg.bar <- make.bootstrap.ancestry.bar.plot(
-  bootstrap.ancestry.summary,
+  ancestry.bootstrap.summary,
   c("Simulation_2T12Consistent_simDown", "Empirical"),
   "African ancestry: TCD and ASW"
   )
 ancestry.bootstrap.all.datatypes.adx.asw.bar <-
   make.bootstrap.ancestry.bar.plot(
-  bootstrap.ancestry.summary, SOURCE.LEVELS,
+  ancestry.bootstrap.summary, SOURCE.LEVELS,
   "African ancestry: all ADX sources and ASW"
   )
 ancestry.bootstrap.tcd.1kg.histogram <- make.bootstrap.ancestry.histogram.plot(
-  bootstrap.ancestry.histograms,
+  ancestry.bootstrap.histograms,
   c("Simulation_2T12Consistent_simDown", "Empirical"),
   "Chromosome 1 simulations and genome-wide ASW: TCD and ASW"
   )
 ancestry.bootstrap.all.datatypes.adx.asw.histogram <-
   make.bootstrap.ancestry.histogram.plot(
-    bootstrap.ancestry.histograms, SOURCE.LEVELS,
+    ancestry.bootstrap.histograms, SOURCE.LEVELS,
     "Chromosome 1 simulations and genome-wide ASW: all ADX sources and ASW"
     )
 ancestry.bootstrap.empirical.95.chromosome.comparisons <-
