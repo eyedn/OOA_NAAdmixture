@@ -906,17 +906,17 @@ make.ancestry.bootstrap.contrast.plot <- function(
     ) +
     geom_hline(yintercept = 0, linetype = "dashed") +
     geom_errorbar(
-      aes(ymin = ci.lower, ymax = ci.upper),
+      aes(ymin = ci.lower, ymax = ci.upper, color = contrast),
       width = CATEGORICAL.BAR.WIDTH * 0.2,
-      linewidth = CATEGORICAL.BAR.LINEWIDTH
+      linewidth = CATEGORICAL.BAR.LINEWIDTH, show.legend = FALSE
       ) +
     geom_point(
       aes(
         plot.x, difference, color = point.color, fill = contrast,
         group = contrast
         ),
-      shape = 21, size = 2.2,
-      stroke = CATEGORICAL.BAR.LINEWIDTH / 2, inherit.aes = FALSE
+      shape = 21, size = 2.5,
+      stroke = CATEGORICAL.BAR.LINEWIDTH, inherit.aes = FALSE
       ) +
     scale_color_manual(
       values = c(PLOT.STYLES$contrast.colors, red = "red"),
@@ -931,6 +931,14 @@ make.ancestry.bootstrap.contrast.plot <- function(
       x = "Chromosome",
       y = "Difference", color = NULL,
       title = title
+      ) +
+    guides(
+      color = guide_legend(
+        override.aes = list(
+          shape = 21, fill = unname(PLOT.STYLES$contrast.colors),
+          color = unname(PLOT.STYLES$contrast.colors)
+          )
+        )
       ) +
     scale_x_continuous(
       breaks = seq_along(levels(data$chromosome)),
@@ -1045,7 +1053,7 @@ ancestry.bootstrap.all.datatypes.adx.asw.bar <-
   ancestry.bootstrap.summary, SOURCE.LEVELS,
   "African ancestry: all ADX sources and ASW"
   )
-ancestry.bootstrap.histogram.chromosomes <- as.character(1:5)
+ancestry.bootstrap.histogram.chromosomes <- as.character(1:22)
 ancestry.bootstrap.tcd.1kg.histograms <- setNames(
   lapply(ancestry.bootstrap.histogram.chromosomes, function(chromosome) {
     make.bootstrap.ancestry.histogram.plot(
@@ -1071,7 +1079,8 @@ ancestry.bootstrap.all.datatypes.adx.asw.histograms <- setNames(
     }),
   paste0("chr", ancestry.bootstrap.histogram.chromosomes)
   )
-# Retain the chromosome-1 aliases used by existing downstream consumers.
+
+# retain chromosome-1 aliases used by existing downstream consumers.
 ancestry.bootstrap.tcd.1kg.histogram <-
   ancestry.bootstrap.tcd.1kg.histograms$chr1
 ancestry.bootstrap.all.datatypes.adx.asw.histogram <-
@@ -1169,11 +1178,45 @@ print(ancestry.bootstrap.tcd.1kg.histograms$chr2)
 print(ancestry.bootstrap.tcd.1kg.histograms$chr3)
 print(ancestry.bootstrap.tcd.1kg.histograms$chr4)
 print(ancestry.bootstrap.tcd.1kg.histograms$chr5)
+print(ancestry.bootstrap.tcd.1kg.histograms$chr6)
+print(ancestry.bootstrap.tcd.1kg.histograms$chr7)
+print(ancestry.bootstrap.tcd.1kg.histograms$chr8)
+print(ancestry.bootstrap.tcd.1kg.histograms$chr9)
+print(ancestry.bootstrap.tcd.1kg.histograms$chr10)
+print(ancestry.bootstrap.tcd.1kg.histograms$chr11)
+print(ancestry.bootstrap.tcd.1kg.histograms$chr12)
+print(ancestry.bootstrap.tcd.1kg.histograms$chr13)
+print(ancestry.bootstrap.tcd.1kg.histograms$chr14)
+print(ancestry.bootstrap.tcd.1kg.histograms$chr15)
+print(ancestry.bootstrap.tcd.1kg.histograms$chr16)
+print(ancestry.bootstrap.tcd.1kg.histograms$chr17)
+print(ancestry.bootstrap.tcd.1kg.histograms$chr18)
+print(ancestry.bootstrap.tcd.1kg.histograms$chr19)
+print(ancestry.bootstrap.tcd.1kg.histograms$chr20)
+print(ancestry.bootstrap.tcd.1kg.histograms$chr21)
+print(ancestry.bootstrap.tcd.1kg.histograms$chr22)
 print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr1)
 print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr2)
 print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr3)
 print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr4)
 print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr5)
+print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr6)
+print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr7)
+print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr8)
+print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr9)
+print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr10)
+print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr11)
+print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr12)
+print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr13)
+print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr14)
+print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr15)
+print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr16)
+print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr17)
+print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr18)
+print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr19)
+print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr20)
+print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr21)
+print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr22)
 print(ancestry.bootstrap.empirical.95.chromosome.comparisons)
 print(ancestry.bootstrap.empirical.95.genome.comparisons)
 print(ancestry.bootstrap.empirical.bonferroni.chromosome.comparisons)

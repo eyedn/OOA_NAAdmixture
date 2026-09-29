@@ -671,7 +671,7 @@ make.ld.simulation.contrast.plot <- function(
       "ADX simulation LD differences"
       }
     )
-  return(ggplot(
+  plot <- ggplot(
     data$simulation,
     aes(distance_bin_bp, difference, fill = contrast)
     ) +
@@ -681,27 +681,43 @@ make.ld.simulation.contrast.plot <- function(
     geom_line(linewidth = 1) +
     geom_point(
       data = data$simulation,
-      aes(color = point.color, fill = contrast), shape = 21, size = 1.8,
-      stroke = LD.CONTRAST.LINEWIDTH / 2, inherit.aes = FALSE
+      aes(
+        distance_bin_bp, difference, color = point.color, fill = contrast
+        ),
+      shape = 21, size = 2.5,
+      stroke = LD.CONTRAST.LINEWIDTH, inherit.aes = FALSE
       ) +
     facet_wrap(~contrast, nrow = 1) +
     scale_color_manual(
-      values = c(colors, red = "red"), breaks = contrasts, guide = "none"
+      values = c(colors, red = "red"), breaks = contrasts,
+      labels = if (contrast.type == "population") {
+        PLOT.STYLES$contrast.labels
+        } else {
+        contrasts
+        }
       ) +
     scale_fill_manual(values = colors, breaks = contrasts, guide = "none") +
+    guides(
+      color = guide_legend(
+        override.aes = list(
+          shape = 21, fill = unname(colors[contrasts]),
+          color = unname(colors[contrasts])
+          )
+        )
+      ) +
     scale_x_continuous(
       limits = c(5000, 200000), breaks = LD.PLOT.DISTANCE.BINS
       ) +
     labs(x = "Distance between SNPs (bp)", y = "Difference", title = title) +
     theme_bw(base_size = PLOT.BASE.SIZE) +
     theme(panel.grid.minor = element_blank())
-    )
+  return(plot)
   }
 
 
 # construct a direct empirical LD population-difference plot without intervals
 make.ld.population.empirical.contrast.plot <- function(data) {
-  return(ggplot(data, aes(distance_bin_bp, difference, color = contrast)) +
+  plot <- ggplot(data, aes(distance_bin_bp, difference, color = contrast)) +
     geom_hline(yintercept = 0, linetype = "dashed") +
     geom_line(linewidth = 1) +
     facet_wrap(~contrast, nrow = 1) +
@@ -718,7 +734,7 @@ make.ld.population.empirical.contrast.plot <- function(data) {
       ) +
     theme_bw(base_size = PLOT.BASE.SIZE) +
     theme(panel.grid.minor = element_blank())
-    )
+  return(plot)
   }
 
 

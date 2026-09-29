@@ -675,16 +675,17 @@ make.sfs.contrast.plot <- function(data, interval.label, title) {
     ) +
     geom_hline(yintercept = 0, linetype = "dashed") +
     geom_errorbar(
-      aes(ymin = ci.lower, ymax = ci.upper), position = SFS.DODGE,
-      width = 0.25, linewidth = DENSE.BAR.LINEWIDTH
+      aes(ymin = ci.lower, ymax = ci.upper, color = contrast),
+      position = SFS.DODGE, width = 0.25,
+      linewidth = DENSE.BAR.LINEWIDTH, show.legend = FALSE
       ) +
     geom_point(
       aes(
         minor.allele.count, difference, color = point.color,
         fill = contrast, group = contrast
         ),
-      shape = 21, position = SFS.DODGE, size = 2,
-      stroke = DENSE.BAR.LINEWIDTH / 2, inherit.aes = FALSE
+      shape = 21, position = SFS.DODGE, size = 2.5,
+      stroke = DENSE.BAR.LINEWIDTH, inherit.aes = FALSE
       ) +
     scale_x_continuous(breaks = seq_len(DISPLAY.BIN.MAX)) +
     scale_color_manual(
@@ -696,7 +697,15 @@ make.sfs.contrast.plot <- function(data, interval.label, title) {
       x = "Minor allele count bin", y = "Left population/source minus right",
       color = NULL, title = title, subtitle = paste(interval.label, "interval")
       ) +
-    guides(color = guide_legend(nrow = 1, byrow = TRUE)) +
+    guides(
+      color = guide_legend(
+        nrow = 1, byrow = TRUE,
+        override.aes = list(
+          shape = 21, fill = unname(SFS.CONTRAST.COLORS[contrasts]),
+          color = unname(SFS.CONTRAST.COLORS[contrasts])
+          )
+        )
+      ) +
     theme_bw(base_size = PLOT.BASE.SIZE) +
     theme(legend.position = "top", panel.grid.minor = element_blank())
   if ("data.type" %in% names(simulation)) {
@@ -722,17 +731,31 @@ make.sfs.empirical.contrast.plot <- function(data) {
     aes(minor.allele.count, difference, color = contrast, group = contrast)
     ) +
     geom_hline(yintercept = 0, linetype = "dashed") +
-    geom_point(position = SFS.DODGE, size = 2) +
+    geom_point(
+      aes(minor.allele.count, difference, color = contrast, fill = contrast,
+        group = contrast),
+      shape = 21, position = SFS.DODGE, size = 2.5,
+      stroke = DENSE.BAR.LINEWIDTH, inherit.aes = FALSE
+      ) +
     scale_x_continuous(breaks = seq_len(DISPLAY.BIN.MAX)) +
     scale_color_manual(
       values = SFS.CONTRAST.COLORS[contrasts],
       labels = SFS.CONTRAST.LABELS[contrasts]
       ) +
+    scale_fill_manual(values = SFS.CONTRAST.COLORS[contrasts], guide = "none") +
     labs(
       x = "Minor allele count bin", y = "Left population minus right",
       color = NULL, title = "Empirical population contrasts"
       ) +
-    guides(color = guide_legend(nrow = 1, byrow = TRUE)) +
+    guides(
+      color = guide_legend(
+        nrow = 1, byrow = TRUE,
+        override.aes = list(
+          shape = 21, fill = unname(SFS.CONTRAST.COLORS[contrasts]),
+          color = unname(SFS.CONTRAST.COLORS[contrasts])
+          )
+        )
+      ) +
     facet_grid(measure ~ ., scales = "free_y") +
     theme_bw(base_size = PLOT.BASE.SIZE) +
     theme(legend.position = "top", panel.grid.minor = element_blank())
@@ -1004,7 +1027,8 @@ sfs.bootstrap.proportion.plots <- imap(list(
     show.all = FALSE
     ))
   })
-# Persist chromosome-1 bootstrap count and proportion plots before printing.
+
+# persist chromosome-1 bootstrap count and proportion plots before printing.
 dir.create(OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
 saveRDS(sfs.bootstrap.count.plots$tcd.1kg, file.path(
   OUTPUT.DIR, "sfs.bootstrap.count.tcd.1kg.rds"

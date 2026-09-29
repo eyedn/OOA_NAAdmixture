@@ -602,10 +602,7 @@ prepare.diversity.population.empirical.contrast.plot.data <- function(
       chrom = factor(chrom, levels = chromosomes),
       contrast = factor(contrast, levels = contrasts),
       stat = factor(stat, levels = c("pi", "theta")),
-      plot.x = as.numeric(chrom) + (as.numeric(contrast) - 2) * 0.25,
-      point.color = if_else(
-        ci.lower > 0 | ci.upper < 0, "red", as.character(contrast)
-        )
+      plot.x = as.numeric(chrom) + (as.numeric(contrast) - 2) * 0.25
       )
   genome <- empirical %>%
     filter(chrom == "all", contrast %in% contrasts) %>%
@@ -691,12 +688,13 @@ make.diversity.contrast.plot <- function(
     }
   plot <- plot +
     geom_errorbar(
-      aes(ymin = ci.lower, ymax = ci.upper), width = 0.08,
-      linewidth = CATEGORICAL.BAR.LINEWIDTH
+      aes(ymin = ci.lower, ymax = ci.upper, color = contrast), width = 0.08,
+      linewidth = CATEGORICAL.BAR.LINEWIDTH, show.legend = FALSE
       ) +
     geom_point(
-      aes(color = point.color, fill = contrast), shape = 21, size = 2.2,
-      stroke = CATEGORICAL.BAR.LINEWIDTH / 2, inherit.aes = FALSE
+      aes(plot.x, difference, color = point.color, fill = contrast),
+      shape = 21, size = 2.5,
+      stroke = CATEGORICAL.BAR.LINEWIDTH, inherit.aes = FALSE
       ) +
     facet.layer +
     scale_color_manual(
@@ -710,6 +708,14 @@ make.diversity.contrast.plot <- function(
     scale_fill_manual(values = contrast.colors, guide = "none") +
     scale_linetype_manual(
       values = PLOT.STYLES$contrast.linetypes, guide = "none"
+      ) +
+    guides(
+      color = guide_legend(
+        override.aes = list(
+          shape = 21, fill = unname(contrast.colors[contrasts]),
+          color = unname(contrast.colors[contrasts])
+          )
+        )
       ) +
     scale_x_continuous(
       breaks = seq_along(CHROMOSOMES), labels = CHROMOSOMES
@@ -738,13 +744,18 @@ make.diversity.contrast.plot <- function(
 # construct an empirical-only diversity population contrast plot
 make.diversity.population.empirical.contrast.plot <- function(data) {
   contrasts <- DIVERSITY.POPULATION.CONTRASTS$contrast
-  return(ggplot(data$chromosome, aes(plot.x, difference, color = contrast)) +
+  plot <- ggplot(data$chromosome, aes(plot.x, difference)) +
     geom_hline(
       data = data$genome,
       aes(yintercept = difference, color = contrast, linetype = contrast),
-      alpha = 0.5, linewidth = CATEGORICAL.BAR.LINEWIDTH
+      alpha = 0.5, linewidth = CATEGORICAL.BAR.LINEWIDTH,
+      show.legend = FALSE
       ) +
-    geom_point(size = 2.2) +
+    geom_point(
+      aes(plot.x, difference, color = contrast, fill = contrast),
+      shape = 21, size = 2.5, stroke = CATEGORICAL.BAR.LINEWIDTH,
+      inherit.aes = FALSE
+      ) +
     facet_grid(
       rows = vars(stat), scales = "free_y",
       labeller = labeller(stat = c(pi = "π", theta = "θ[w]"))
@@ -753,8 +764,17 @@ make.diversity.population.empirical.contrast.plot <- function(data) {
       values = PLOT.STYLES$contrast.colors, breaks = contrasts,
       labels = PLOT.STYLES$contrast.labels
       ) +
+    scale_fill_manual(values = PLOT.STYLES$contrast.colors, guide = "none") +
     scale_linetype_manual(
       values = PLOT.STYLES$contrast.linetypes, guide = "none"
+      ) +
+    guides(
+      color = guide_legend(
+        override.aes = list(
+          shape = 21, fill = unname(PLOT.STYLES$contrast.colors),
+          color = unname(PLOT.STYLES$contrast.colors)
+          )
+        )
       ) +
     scale_x_continuous(
       breaks = seq_along(CHROMOSOMES), labels = CHROMOSOMES
@@ -767,7 +787,8 @@ make.diversity.population.empirical.contrast.plot <- function(data) {
     theme(
       legend.position = "top", legend.title = element_blank(),
       strip.text = element_text(face = "bold")
-      ))
+      )
+  return(plot)
   }
 
 
@@ -1228,6 +1249,7 @@ diversity.bootstrap.plots <- imap(list(
     tag
     ))
   })
+
 # persist every plot before printing figures at the end of the script
 dir.create(OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
 saveRDS(diversity.bootstrap.plots$tc.tcd.1kg, file.path(

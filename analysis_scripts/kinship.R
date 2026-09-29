@@ -788,15 +788,18 @@ make.kinship.contrast.plot <- function(data, interval.label, title) {
     simulation, aes(xmid, difference, group = contrast)
     ) +
     geom_hline(yintercept = 0, linetype = "dashed") +
-    geom_errorbar(aes(ymin = ci.lower, ymax = ci.upper), position = dodge,
-      width = 0, linewidth = DENSE.BAR.LINEWIDTH) +
+    geom_errorbar(
+      aes(ymin = ci.lower, ymax = ci.upper, color = contrast),
+      position = dodge, width = 0, linewidth = DENSE.BAR.LINEWIDTH,
+      show.legend = FALSE
+      ) +
     geom_point(
       aes(
         xmid, difference, color = point.color, fill = contrast,
         group = contrast
         ),
-      shape = 21, position = dodge, size = 2,
-      stroke = DENSE.BAR.LINEWIDTH / 2, inherit.aes = FALSE
+      shape = 21, position = dodge, size = 2.5,
+      stroke = DENSE.BAR.LINEWIDTH, inherit.aes = FALSE
       ) +
     coord_cartesian(xlim = KINSHIP.CONTRAST.X.LIMITS) +
     scale_color_manual(
@@ -808,7 +811,15 @@ make.kinship.contrast.plot <- function(data, interval.label, title) {
     labs(x = "Pairwise KING kinship", y = "Left minus right fraction of pairs",
       color = NULL, title = title,
       subtitle = paste(interval.label, "interval")) +
-    guides(color = guide_legend(nrow = 1, byrow = TRUE)) +
+    guides(
+      color = guide_legend(
+        nrow = 1, byrow = TRUE,
+        override.aes = list(
+          shape = 21, fill = unname(KINSHIP.CONTRAST.COLORS[contrasts]),
+          color = unname(KINSHIP.CONTRAST.COLORS[contrasts])
+          )
+        )
+      ) +
     theme_bw(base_size = PLOT.BASE.SIZE) +
     theme(legend.position = "top", panel.grid.minor = element_blank())
   if ("data.type" %in% names(simulation)) {
