@@ -644,7 +644,12 @@ prepare.diversity.simulation.contrast.plot.data <- function(
       plot.x = as.numeric(chrom) + (as.numeric(contrast) - 2) * 0.25
       ) %>%
     group_by(stat) %>%
-    mutate(simulated.outside = ci.lower > 0 | ci.upper < 0) %>%
+    mutate(
+      simulated.outside = ci.lower > 0 | ci.upper < 0,
+      point.color = if_else(
+        simulated.outside, "red", as.character(contrast)
+        )
+      ) %>%
     ungroup()
   return(list(
     simulation = simulation,
@@ -671,6 +676,9 @@ make.diversity.contrast.plot <- function(
     } else {
     PLOT.STYLES$simulation.contrast.colors
     }
+  active.contrasts <- contrasts[
+    contrasts %in% unique(as.character(simulation$contrast))
+    ]
   plot <- ggplot(simulation, aes(plot.x, difference)) +
     geom_hline(yintercept = 0, linetype = "dashed")
   facet.layer <- if (contrast.type == "population") {
@@ -698,11 +706,11 @@ make.diversity.contrast.plot <- function(
       ) +
     facet.layer +
     scale_color_manual(
-      values = c(contrast.colors, red = "red"), breaks = contrasts,
+      values = c(contrast.colors, red = "red"), breaks = active.contrasts,
       labels = if (contrast.type == "population") {
-        PLOT.STYLES$contrast.labels
+        PLOT.STYLES$contrast.labels[active.contrasts]
         } else {
-        contrasts
+        active.contrasts
         }
       ) +
     scale_fill_manual(values = contrast.colors, guide = "none") +
@@ -712,8 +720,8 @@ make.diversity.contrast.plot <- function(
     guides(
       color = guide_legend(
         override.aes = list(
-          shape = 21, fill = unname(contrast.colors[contrasts]),
-          color = unname(contrast.colors[contrasts])
+          shape = 21, fill = unname(contrast.colors[active.contrasts]),
+          color = unname(contrast.colors[active.contrasts])
           )
         )
       ) +
@@ -744,6 +752,9 @@ make.diversity.contrast.plot <- function(
 # construct an empirical-only diversity population contrast plot
 make.diversity.population.empirical.contrast.plot <- function(data) {
   contrasts <- DIVERSITY.POPULATION.CONTRASTS$contrast
+  active.contrasts <- contrasts[
+    contrasts %in% unique(as.character(data$chromosome$contrast))
+    ]
   plot <- ggplot(data$chromosome, aes(plot.x, difference)) +
     geom_hline(
       data = data$genome,
@@ -761,8 +772,8 @@ make.diversity.population.empirical.contrast.plot <- function(data) {
       labeller = labeller(stat = c(pi = "π", theta = "θ[w]"))
       ) +
     scale_color_manual(
-      values = PLOT.STYLES$contrast.colors, breaks = contrasts,
-      labels = PLOT.STYLES$contrast.labels
+      values = PLOT.STYLES$contrast.colors, breaks = active.contrasts,
+      labels = PLOT.STYLES$contrast.labels[active.contrasts]
       ) +
     scale_fill_manual(values = PLOT.STYLES$contrast.colors, guide = "none") +
     scale_linetype_manual(
@@ -771,8 +782,9 @@ make.diversity.population.empirical.contrast.plot <- function(data) {
     guides(
       color = guide_legend(
         override.aes = list(
-          shape = 21, fill = unname(PLOT.STYLES$contrast.colors),
-          color = unname(PLOT.STYLES$contrast.colors)
+          shape = 21,
+          fill = unname(PLOT.STYLES$contrast.colors[active.contrasts]),
+          color = unname(PLOT.STYLES$contrast.colors[active.contrasts])
           )
         )
       ) +

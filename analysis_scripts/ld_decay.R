@@ -663,6 +663,9 @@ make.ld.simulation.contrast.plot <- function(
     } else {
     PLOT.STYLES$simulation.contrast.colors
     }
+  active.contrasts <- contrasts[
+    contrasts %in% unique(as.character(data$simulation$contrast))
+    ]
   title <- paste(
     if (interval.type == "bonferroni") "Bonferroni" else "95%",
     if (contrast.type == "population") {
@@ -689,19 +692,21 @@ make.ld.simulation.contrast.plot <- function(
       ) +
     facet_wrap(~contrast, nrow = 1) +
     scale_color_manual(
-      values = c(colors, red = "red"), breaks = contrasts,
+      values = c(colors, red = "red"), breaks = active.contrasts,
       labels = if (contrast.type == "population") {
-        PLOT.STYLES$contrast.labels
+        PLOT.STYLES$contrast.labels[active.contrasts]
         } else {
-        contrasts
+        active.contrasts
         }
       ) +
-    scale_fill_manual(values = colors, breaks = contrasts, guide = "none") +
+    scale_fill_manual(
+      values = colors, breaks = active.contrasts, guide = "none"
+      ) +
     guides(
       color = guide_legend(
         override.aes = list(
-          shape = 21, fill = unname(colors[contrasts]),
-          color = unname(colors[contrasts])
+          shape = 21, fill = unname(colors[active.contrasts]),
+          color = unname(colors[active.contrasts])
           )
         )
       ) +

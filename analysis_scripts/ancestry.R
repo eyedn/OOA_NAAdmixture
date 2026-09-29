@@ -900,6 +900,10 @@ prepare.ancestry.bootstrap.contrast.plot.data <- function(
 make.ancestry.bootstrap.contrast.plot <- function(
     data, title, facet.statistics = TRUE
   ) {
+  contrasts <- levels(data$contrast)
+  active.contrasts <- contrasts[
+    contrasts %in% unique(as.character(data$contrast))
+    ]
   plot <- ggplot(
     data,
     aes(plot.x, difference, group = contrast)
@@ -920,8 +924,8 @@ make.ancestry.bootstrap.contrast.plot <- function(
       ) +
     scale_color_manual(
       values = c(PLOT.STYLES$contrast.colors, red = "red"),
-      breaks = names(PLOT.STYLES$contrast.colors),
-      labels = PLOT.STYLES$contrast.labels
+      breaks = active.contrasts,
+      labels = PLOT.STYLES$contrast.labels[active.contrasts]
       ) +
     scale_fill_manual(
       values = PLOT.STYLES$contrast.colors, guide = "none"
@@ -935,8 +939,9 @@ make.ancestry.bootstrap.contrast.plot <- function(
     guides(
       color = guide_legend(
         override.aes = list(
-          shape = 21, fill = unname(PLOT.STYLES$contrast.colors),
-          color = unname(PLOT.STYLES$contrast.colors)
+          shape = 21,
+          fill = unname(PLOT.STYLES$contrast.colors[active.contrasts]),
+          color = unname(PLOT.STYLES$contrast.colors[active.contrasts])
           )
         )
       ) +

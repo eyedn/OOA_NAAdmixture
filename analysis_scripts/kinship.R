@@ -783,6 +783,9 @@ prepare.kinship.contrast.plot.data <- function(
 make.kinship.contrast.plot <- function(data, interval.label, title) {
   simulation <- data$simulation
   contrasts <- levels(simulation$contrast)
+  active.contrasts <- contrasts[
+    contrasts %in% unique(as.character(simulation$contrast))
+    ]
   dodge <- position_dodge(KINSHIP.BIN.WIDTH)
   plot <- ggplot(
     simulation, aes(xmid, difference, group = contrast)
@@ -803,10 +806,11 @@ make.kinship.contrast.plot <- function(data, interval.label, title) {
       ) +
     coord_cartesian(xlim = KINSHIP.CONTRAST.X.LIMITS) +
     scale_color_manual(
-      values = c(KINSHIP.CONTRAST.COLORS, red = "red"), breaks = contrasts,
-      labels = KINSHIP.CONTRAST.LABELS[contrasts]
+      values = c(KINSHIP.CONTRAST.COLORS, red = "red"),
+      breaks = active.contrasts,
+      labels = KINSHIP.CONTRAST.LABELS[active.contrasts]
       ) +
-    scale_fill_manual(values = KINSHIP.CONTRAST.COLORS[contrasts],
+    scale_fill_manual(values = KINSHIP.CONTRAST.COLORS[active.contrasts],
       guide = "none") +
     labs(x = "Pairwise KING kinship", y = "Left minus right fraction of pairs",
       color = NULL, title = title,
@@ -815,8 +819,9 @@ make.kinship.contrast.plot <- function(data, interval.label, title) {
       color = guide_legend(
         nrow = 1, byrow = TRUE,
         override.aes = list(
-          shape = 21, fill = unname(KINSHIP.CONTRAST.COLORS[contrasts]),
-          color = unname(KINSHIP.CONTRAST.COLORS[contrasts])
+          shape = 21,
+          fill = unname(KINSHIP.CONTRAST.COLORS[active.contrasts]),
+          color = unname(KINSHIP.CONTRAST.COLORS[active.contrasts])
           )
         )
       ) +

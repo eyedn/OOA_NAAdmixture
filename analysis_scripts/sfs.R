@@ -669,6 +669,9 @@ prepare.sfs.contrast.plot.data <- function(
 make.sfs.contrast.plot <- function(data, interval.label, title) {
   simulation <- data$simulation
   contrasts <- levels(simulation$contrast)
+  active.contrasts <- contrasts[
+    contrasts %in% unique(as.character(simulation$contrast))
+    ]
   plot <- ggplot(
     simulation,
     aes(minor.allele.count, difference, group = contrast)
@@ -690,9 +693,12 @@ make.sfs.contrast.plot <- function(data, interval.label, title) {
     scale_x_continuous(breaks = seq_len(DISPLAY.BIN.MAX)) +
     scale_color_manual(
       values = c(SFS.CONTRAST.COLORS, red = "red"),
-      breaks = contrasts, labels = SFS.CONTRAST.LABELS[contrasts]
+      breaks = active.contrasts,
+      labels = SFS.CONTRAST.LABELS[active.contrasts]
       ) +
-    scale_fill_manual(values = SFS.CONTRAST.COLORS[contrasts], guide = "none") +
+    scale_fill_manual(
+      values = SFS.CONTRAST.COLORS[active.contrasts], guide = "none"
+      ) +
     labs(
       x = "Minor allele count bin", y = "Left population/source minus right",
       color = NULL, title = title, subtitle = paste(interval.label, "interval")
@@ -701,8 +707,9 @@ make.sfs.contrast.plot <- function(data, interval.label, title) {
       color = guide_legend(
         nrow = 1, byrow = TRUE,
         override.aes = list(
-          shape = 21, fill = unname(SFS.CONTRAST.COLORS[contrasts]),
-          color = unname(SFS.CONTRAST.COLORS[contrasts])
+          shape = 21,
+          fill = unname(SFS.CONTRAST.COLORS[active.contrasts]),
+          color = unname(SFS.CONTRAST.COLORS[active.contrasts])
           )
         )
       ) +
@@ -723,6 +730,9 @@ make.sfs.contrast.plot <- function(data, interval.label, title) {
 # build direct empirical selected-chromosome contrast reference plot
 make.sfs.empirical.contrast.plot <- function(data) {
   contrasts <- SFS.EMPIRICAL.CONTRASTS$contrast
+  active.contrasts <- contrasts[
+    contrasts %in% unique(as.character(data$contrast))
+    ]
   plot <- ggplot(
     data %>% mutate(
       contrast = factor(contrast, levels = contrasts),
@@ -739,10 +749,13 @@ make.sfs.empirical.contrast.plot <- function(data) {
       ) +
     scale_x_continuous(breaks = seq_len(DISPLAY.BIN.MAX)) +
     scale_color_manual(
-      values = SFS.CONTRAST.COLORS[contrasts],
-      labels = SFS.CONTRAST.LABELS[contrasts]
+      values = SFS.CONTRAST.COLORS[active.contrasts],
+      breaks = active.contrasts,
+      labels = SFS.CONTRAST.LABELS[active.contrasts]
       ) +
-    scale_fill_manual(values = SFS.CONTRAST.COLORS[contrasts], guide = "none") +
+    scale_fill_manual(
+      values = SFS.CONTRAST.COLORS[active.contrasts], guide = "none"
+      ) +
     labs(
       x = "Minor allele count bin", y = "Left population minus right",
       color = NULL, title = "Empirical population contrasts"
@@ -751,8 +764,9 @@ make.sfs.empirical.contrast.plot <- function(data) {
       color = guide_legend(
         nrow = 1, byrow = TRUE,
         override.aes = list(
-          shape = 21, fill = unname(SFS.CONTRAST.COLORS[contrasts]),
-          color = unname(SFS.CONTRAST.COLORS[contrasts])
+          shape = 21,
+          fill = unname(SFS.CONTRAST.COLORS[active.contrasts]),
+          color = unname(SFS.CONTRAST.COLORS[active.contrasts])
           )
         )
       ) +
