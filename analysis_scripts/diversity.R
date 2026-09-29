@@ -576,7 +576,12 @@ prepare.diversity.population.contrast.plot.data <- function(
       )
   markers <- simulation %>%
     group_by(data.type, stat) %>%
-    mutate(simulated.outside = ci.lower > 0 | ci.upper < 0) %>%
+    mutate(
+      simulated.outside = ci.lower > 0 | ci.upper < 0,
+      point.color = if_else(
+        simulated.outside, "red", as.character(contrast)
+        )
+      ) %>%
     ungroup()
   return(list(
     simulation = markers,
@@ -597,7 +602,10 @@ prepare.diversity.population.empirical.contrast.plot.data <- function(
       chrom = factor(chrom, levels = chromosomes),
       contrast = factor(contrast, levels = contrasts),
       stat = factor(stat, levels = c("pi", "theta")),
-      plot.x = as.numeric(chrom) + (as.numeric(contrast) - 2) * 0.25
+      plot.x = as.numeric(chrom) + (as.numeric(contrast) - 2) * 0.25,
+      point.color = if_else(
+        ci.lower > 0 | ci.upper < 0, "red", as.character(contrast)
+        )
       )
   genome <- empirical %>%
     filter(chrom == "all", contrast %in% contrasts) %>%
@@ -666,7 +674,7 @@ make.diversity.contrast.plot <- function(
     } else {
     PLOT.STYLES$simulation.contrast.colors
     }
-  plot <- ggplot(simulation, aes(plot.x, difference, color = contrast)) +
+  plot <- ggplot(simulation, aes(plot.x, difference)) +
     geom_hline(yintercept = 0, linetype = "dashed")
   facet.layer <- if (contrast.type == "population") {
     facet_grid(
@@ -686,15 +694,13 @@ make.diversity.contrast.plot <- function(
       aes(ymin = ci.lower, ymax = ci.upper), width = 0.08,
       linewidth = CATEGORICAL.BAR.LINEWIDTH
       ) +
-    geom_point(size = 2.2) +
     geom_point(
-      data = data$red.markers,
-      aes(plot.x, difference, fill = contrast), shape = 21, color = "red",
-      size = 2.2, stroke = CATEGORICAL.BAR.LINEWIDTH, inherit.aes = FALSE
+      aes(color = point.color, fill = contrast), shape = 21, size = 2.2,
+      stroke = CATEGORICAL.BAR.LINEWIDTH / 2, inherit.aes = FALSE
       ) +
     facet.layer +
     scale_color_manual(
-      values = contrast.colors, breaks = contrasts,
+      values = c(contrast.colors, red = "red"), breaks = contrasts,
       labels = if (contrast.type == "population") {
         PLOT.STYLES$contrast.labels
         } else {
@@ -723,8 +729,6 @@ make.diversity.contrast.plot <- function(
     theme_bw(base_size = PLOT.BASE.SIZE) +
     theme(
       legend.position = "top", legend.title = element_blank(),
-      panel.grid.minor = element_blank(),
-      strip.background = element_blank(),
       strip.text = element_text(face = "bold")
       )
   return(plot)
@@ -762,7 +766,6 @@ make.diversity.population.empirical.contrast.plot <- function(data) {
     theme_bw(base_size = PLOT.BASE.SIZE) +
     theme(
       legend.position = "top", legend.title = element_blank(),
-      panel.grid.minor = element_blank(), strip.background = element_blank(),
       strip.text = element_text(face = "bold")
       ))
   }
@@ -1066,8 +1069,6 @@ make.diversity.plot <- function(
       legend.direction = "horizontal",
       legend.box = "horizontal",
       legend.title = element_blank(),
-      panel.grid.minor = element_blank(),
-      strip.background = element_blank(),
       strip.text = element_text(face = "bold")
       )
 

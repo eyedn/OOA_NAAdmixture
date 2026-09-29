@@ -763,7 +763,10 @@ prepare.kinship.contrast.plot.data <- function(
     xmid, contrast, difference, ci.lower = .data[[lower]],
     ci.upper = .data[[upper]]) %>% mutate(
       contrast = factor(contrast, levels = contrasts),
-      outside.zero = ci.lower > 0 | ci.upper < 0
+      outside.zero = ci.lower > 0 | ci.upper < 0,
+      point.color = if_else(
+        outside.zero, "red", as.character(contrast)
+        )
       )
   if ("data.type" %in% names(displayed)) {
     displayed <- displayed %>% mutate(data.type = factor(data.type,
@@ -782,21 +785,24 @@ make.kinship.contrast.plot <- function(data, interval.label, title) {
   contrasts <- levels(simulation$contrast)
   dodge <- position_dodge(KINSHIP.BIN.WIDTH)
   plot <- ggplot(
-    simulation, aes(xmid, difference, color = contrast, group = contrast)
+    simulation, aes(xmid, difference, group = contrast)
     ) +
     geom_hline(yintercept = 0, linetype = "dashed") +
     geom_errorbar(aes(ymin = ci.lower, ymax = ci.upper), position = dodge,
       width = 0, linewidth = DENSE.BAR.LINEWIDTH) +
-    geom_point(position = dodge, size = 2) +
     geom_point(
-      data = data$red.markers,
-      aes(xmid, difference, fill = contrast, group = contrast),
-      shape = 21, color = "red", position = dodge, size = 2,
-      stroke = DENSE.BAR.LINEWIDTH, inherit.aes = FALSE
+      aes(
+        xmid, difference, color = point.color, fill = contrast,
+        group = contrast
+        ),
+      shape = 21, position = dodge, size = 2,
+      stroke = DENSE.BAR.LINEWIDTH / 2, inherit.aes = FALSE
       ) +
     coord_cartesian(xlim = KINSHIP.CONTRAST.X.LIMITS) +
-    scale_color_manual(values = KINSHIP.CONTRAST.COLORS[contrasts],
-      labels = KINSHIP.CONTRAST.LABELS[contrasts]) +
+    scale_color_manual(
+      values = c(KINSHIP.CONTRAST.COLORS, red = "red"), breaks = contrasts,
+      labels = KINSHIP.CONTRAST.LABELS[contrasts]
+      ) +
     scale_fill_manual(values = KINSHIP.CONTRAST.COLORS[contrasts],
       guide = "none") +
     labs(x = "Pairwise KING kinship", y = "Left minus right fraction of pairs",

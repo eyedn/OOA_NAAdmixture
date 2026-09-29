@@ -485,13 +485,21 @@ make.bootstrap.ancestry.bar.plot <- function(data, data.types, title) {
   }
 
 
-# construct chromosome-1 simulation and genome-wide asw histograms.
-make.bootstrap.ancestry.histogram.plot <- function(data, data.types, title) {
+# construct one simulated-chromosome and genome-wide asw histogram.
+make.bootstrap.ancestry.histogram.plot <- function(
+    data, data.types, simulated.chromosome, title
+  ) {
+  if (length(simulated.chromosome) != 1L ||
+      !is.finite(as.numeric(simulated.chromosome))) {
+    stop("Ancestry histogram requires one finite simulated chromosome")
+    }
+  simulated.chromosome <- as.character(simulated.chromosome)
   plotted <- data %>%
     filter(
       as.character(data.type) %in% data.types,
       (as.character(chrom) == "all" & data.type == "Empirical") |
-        (as.character(chrom) == "1" & data.type != "Empirical")
+        (as.character(chrom) == simulated.chromosome &
+          data.type != "Empirical")
       ) %>%
     mutate(data.type = factor(
       as.character(data.type),
@@ -870,6 +878,7 @@ prepare.ancestry.bootstrap.contrast.plot.data <- function(
       contrast = factor(contrast, levels = config$contrasts),
       statistic = factor(statistic, levels = statistics),
       significant = ci.lower > 0 | ci.upper < 0,
+      point.color = if_else(significant, "red", as.character(contrast)),
       contrast.color = unname(PLOT.STYLES$contrast.colors[as.character(
         contrast
         )]),
@@ -893,7 +902,7 @@ make.ancestry.bootstrap.contrast.plot <- function(
   ) {
   plot <- ggplot(
     data,
-    aes(plot.x, difference, color = contrast, group = contrast)
+    aes(plot.x, difference, group = contrast)
     ) +
     geom_hline(yintercept = 0, linetype = "dashed") +
     geom_errorbar(
@@ -901,15 +910,17 @@ make.ancestry.bootstrap.contrast.plot <- function(
       width = CATEGORICAL.BAR.WIDTH * 0.2,
       linewidth = CATEGORICAL.BAR.LINEWIDTH
       ) +
-    geom_point(size = 2.2) +
     geom_point(
-      data = filter(data, significant),
-      aes(x = plot.x, y = difference, fill = contrast, group = contrast),
-      shape = 21, color = "red", size = 2.2,
-      stroke = CATEGORICAL.BAR.LINEWIDTH, inherit.aes = FALSE
+      aes(
+        plot.x, difference, color = point.color, fill = contrast,
+        group = contrast
+        ),
+      shape = 21, size = 2.2,
+      stroke = CATEGORICAL.BAR.LINEWIDTH / 2, inherit.aes = FALSE
       ) +
     scale_color_manual(
-      values = PLOT.STYLES$contrast.colors,
+      values = c(PLOT.STYLES$contrast.colors, red = "red"),
+      breaks = names(PLOT.STYLES$contrast.colors),
       labels = PLOT.STYLES$contrast.labels
       ) +
     scale_fill_manual(
@@ -1034,16 +1045,37 @@ ancestry.bootstrap.all.datatypes.adx.asw.bar <-
   ancestry.bootstrap.summary, SOURCE.LEVELS,
   "African ancestry: all ADX sources and ASW"
   )
-ancestry.bootstrap.tcd.1kg.histogram <- make.bootstrap.ancestry.histogram.plot(
-  ancestry.bootstrap.histograms,
-  c("Simulation_2T12Consistent_simDown", "Empirical"),
-  "Chromosome 1 simulations and genome-wide ASW: TCD and ASW"
+ancestry.bootstrap.histogram.chromosomes <- as.character(1:5)
+ancestry.bootstrap.tcd.1kg.histograms <- setNames(
+  lapply(ancestry.bootstrap.histogram.chromosomes, function(chromosome) {
+    make.bootstrap.ancestry.histogram.plot(
+      ancestry.bootstrap.histograms,
+      c("Simulation_2T12Consistent_simDown", "Empirical"), chromosome,
+      paste0(
+        "Chromosome ", chromosome,
+        " simulations and genome-wide ASW: TCD and ASW"
+        )
+      )
+    }),
+  paste0("chr", ancestry.bootstrap.histogram.chromosomes)
   )
+ancestry.bootstrap.all.datatypes.adx.asw.histograms <- setNames(
+  lapply(ancestry.bootstrap.histogram.chromosomes, function(chromosome) {
+    make.bootstrap.ancestry.histogram.plot(
+      ancestry.bootstrap.histograms, SOURCE.LEVELS, chromosome,
+      paste0(
+        "Chromosome ", chromosome,
+        " simulations and genome-wide ASW: all ADX sources and ASW"
+        )
+      )
+    }),
+  paste0("chr", ancestry.bootstrap.histogram.chromosomes)
+  )
+# Retain the chromosome-1 aliases used by existing downstream consumers.
+ancestry.bootstrap.tcd.1kg.histogram <-
+  ancestry.bootstrap.tcd.1kg.histograms$chr1
 ancestry.bootstrap.all.datatypes.adx.asw.histogram <-
-  make.bootstrap.ancestry.histogram.plot(
-    ancestry.bootstrap.histograms, SOURCE.LEVELS,
-    "Chromosome 1 simulations and genome-wide ASW: all ADX sources and ASW"
-    )
+  ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr1
 ancestry.bootstrap.empirical.95.chromosome.comparisons <-
   make.ancestry.bootstrap.contrast.plot(
     prepare.ancestry.bootstrap.contrast.plot.data(
@@ -1103,6 +1135,12 @@ saveRDS(ancestry.bootstrap.tcd.1kg.histogram, file.path(
 saveRDS(ancestry.bootstrap.all.datatypes.adx.asw.histogram, file.path(
   OUTPUT.DIR, "ancestry.bootstrap.all.datatypes.adx.asw.histogram.rds"
   ))
+saveRDS(ancestry.bootstrap.tcd.1kg.histograms, file.path(
+  OUTPUT.DIR, "ancestry.bootstrap.tcd.1kg.histograms.rds"
+  ))
+saveRDS(ancestry.bootstrap.all.datatypes.adx.asw.histograms, file.path(
+  OUTPUT.DIR, "ancestry.bootstrap.all.datatypes.adx.asw.histograms.rds"
+  ))
 saveRDS(ancestry.bootstrap.empirical.95.chromosome.comparisons, file.path(
   OUTPUT.DIR, "ancestry.bootstrap.empirical.95.chromosome.comparisons.rds"
   ))
@@ -1126,8 +1164,16 @@ saveRDS(ancestry.bootstrap.simulation.bonferroni.comparisons, file.path(
   ))
 print(ancestry.bootstrap.tcd.1kg.bar)
 print(ancestry.bootstrap.all.datatypes.adx.asw.bar)
-print(ancestry.bootstrap.tcd.1kg.histogram)
-print(ancestry.bootstrap.all.datatypes.adx.asw.histogram)
+print(ancestry.bootstrap.tcd.1kg.histograms$chr1)
+print(ancestry.bootstrap.tcd.1kg.histograms$chr2)
+print(ancestry.bootstrap.tcd.1kg.histograms$chr3)
+print(ancestry.bootstrap.tcd.1kg.histograms$chr4)
+print(ancestry.bootstrap.tcd.1kg.histograms$chr5)
+print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr1)
+print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr2)
+print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr3)
+print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr4)
+print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr5)
 print(ancestry.bootstrap.empirical.95.chromosome.comparisons)
 print(ancestry.bootstrap.empirical.95.genome.comparisons)
 print(ancestry.bootstrap.empirical.bonferroni.chromosome.comparisons)

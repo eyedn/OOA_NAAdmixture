@@ -38,6 +38,7 @@ PLOT.CONFIGS <- list(
   )
 BOOTSTRAP.LEGEND.VIEWS <- c("all.lines", "role.interval")
 PLOT.BASE.SIZE <- 24
+LD.CONTRAST.LINEWIDTH <- 1
 LD.PLOT.DISTANCE.BINS <- seq(5000, 200000, by = 5000)
 LD.POPULATION.CONTRAST.BOOTSTRAP.REPLICATES <- 1000L
 LD.POPULATION.CONTRAST.FAMILY.SIZE <- 120L
@@ -598,6 +599,9 @@ prepare.ld.population.contrast.plot.data <- function(
     mutate(
       contrast = factor(
         contrast, levels = LD.POPULATION.CONTRASTS$contrast
+        ),
+      point.color = if_else(
+        ci.lower > 0 | ci.upper < 0, "red", as.character(contrast)
         )
       )
   return(list(
@@ -630,6 +634,9 @@ prepare.ld.simulation.contrast.plot.data <- function(
     mutate(
       contrast = factor(
         contrast, levels = LD.SIMULATION.CONTRASTS$contrast
+        ),
+      point.color = if_else(
+        ci.lower > 0 | ci.upper < 0, "red", as.character(contrast)
         )
       )
   return(list(
@@ -666,15 +673,21 @@ make.ld.simulation.contrast.plot <- function(
     )
   return(ggplot(
     data$simulation,
-    aes(distance_bin_bp, difference, color = contrast, fill = contrast)
+    aes(distance_bin_bp, difference, fill = contrast)
     ) +
     geom_hline(yintercept = 0, linetype = "dashed") +
     geom_ribbon(aes(ymin = ci.lower, ymax = ci.upper), alpha = 0.2,
       color = NA) +
     geom_line(linewidth = 1) +
-    geom_point(data = data$red.markers, color = "red", size = 1.8) +
-    facet_wrap(~contrast, nrow = 1, scales = "free_y") +
-    scale_color_manual(values = colors, breaks = contrasts, guide = "none") +
+    geom_point(
+      data = data$simulation,
+      aes(color = point.color, fill = contrast), shape = 21, size = 1.8,
+      stroke = LD.CONTRAST.LINEWIDTH / 2, inherit.aes = FALSE
+      ) +
+    facet_wrap(~contrast, nrow = 1) +
+    scale_color_manual(
+      values = c(colors, red = "red"), breaks = contrasts, guide = "none"
+      ) +
     scale_fill_manual(values = colors, breaks = contrasts, guide = "none") +
     scale_x_continuous(
       limits = c(5000, 200000), breaks = LD.PLOT.DISTANCE.BINS
@@ -691,7 +704,7 @@ make.ld.population.empirical.contrast.plot <- function(data) {
   return(ggplot(data, aes(distance_bin_bp, difference, color = contrast)) +
     geom_hline(yintercept = 0, linetype = "dashed") +
     geom_line(linewidth = 1) +
-    facet_wrap(~contrast, nrow = 1, scales = "free_y") +
+    facet_wrap(~contrast, nrow = 1) +
     scale_color_manual(
       values = PLOT.STYLES$contrast.colors,
       breaks = LD.POPULATION.CONTRASTS$contrast, guide = "none"

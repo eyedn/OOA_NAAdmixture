@@ -648,7 +648,10 @@ prepare.sfs.contrast.plot.data <- function(
     mutate(
       contrast = factor(contrast, levels = contrasts),
       measure = factor(measure, levels = c("count", "proportion")),
-      outside.zero = ci.lower > 0 | ci.upper < 0
+      outside.zero = ci.lower > 0 | ci.upper < 0,
+      point.color = if_else(
+        outside.zero, "red", as.character(contrast)
+        )
       )
   if ("data.type" %in% names(displayed)) {
     displayed <- displayed %>% mutate(data.type = factor(
@@ -668,26 +671,25 @@ make.sfs.contrast.plot <- function(data, interval.label, title) {
   contrasts <- levels(simulation$contrast)
   plot <- ggplot(
     simulation,
-    aes(minor.allele.count, difference, color = contrast, group = contrast)
+    aes(minor.allele.count, difference, group = contrast)
     ) +
     geom_hline(yintercept = 0, linetype = "dashed") +
     geom_errorbar(
       aes(ymin = ci.lower, ymax = ci.upper), position = SFS.DODGE,
       width = 0.25, linewidth = DENSE.BAR.LINEWIDTH
       ) +
-    geom_point(position = SFS.DODGE, size = 2) +
     geom_point(
-      data = data$red.markers,
       aes(
-        minor.allele.count, difference, fill = contrast, group = contrast
+        minor.allele.count, difference, color = point.color,
+        fill = contrast, group = contrast
         ),
-      shape = 21, color = "red", position = SFS.DODGE, size = 2,
-      stroke = DENSE.BAR.LINEWIDTH, inherit.aes = FALSE
+      shape = 21, position = SFS.DODGE, size = 2,
+      stroke = DENSE.BAR.LINEWIDTH / 2, inherit.aes = FALSE
       ) +
     scale_x_continuous(breaks = seq_len(DISPLAY.BIN.MAX)) +
     scale_color_manual(
-      values = SFS.CONTRAST.COLORS[contrasts],
-      labels = SFS.CONTRAST.LABELS[contrasts]
+      values = c(SFS.CONTRAST.COLORS, red = "red"),
+      breaks = contrasts, labels = SFS.CONTRAST.LABELS[contrasts]
       ) +
     scale_fill_manual(values = SFS.CONTRAST.COLORS[contrasts], guide = "none") +
     labs(
