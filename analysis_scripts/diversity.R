@@ -39,7 +39,7 @@ PLOT.BASE.SIZE <- 24
 CATEGORICAL.BAR.DODGE <- 0.9
 CATEGORICAL.BAR.WIDTH <- 0.8
 CATEGORICAL.BAR.LINEWIDTH <- 1
-DIVERSITY.POPULATION.CONTRAST.FAMILY.SIZE <- 264L
+DIVERSITY.POPULATION.CONTRAST.FAMILY.SIZE <- 66L
 DIVERSITY.POPULATION.CONTRAST.BOOTSTRAP.REPLICATES <- 1000L
 DIVERSITY.POPULATION.CONTRASTS <- tribble(
   ~contrast, ~simulation.left, ~simulation.right,
@@ -321,7 +321,9 @@ make.diversity.population.contrast.tables <- function(
         })
       })
     })
-  if (nrow(tables) != 2L * DIVERSITY.POPULATION.CONTRAST.FAMILY.SIZE) {
+  expected.rows <- length(SOURCE.LEVELS[seq_len(4L)]) * 2L *
+    DIVERSITY.POPULATION.CONTRAST.FAMILY.SIZE
+  if (nrow(tables) != expected.rows) {
     stop("Population contrast bootstrap table does not match its family size")
     }
   return(tables)
@@ -368,9 +370,9 @@ make.diversity.population.empirical.contrasts <- function(
   }
 
 
-# prepare one source and interval type for a contrast plot
+# prepare all source-specific values for one contrast interval type
 prepare.diversity.population.contrast.plot.data <- function(
-    simulation, empirical, source, interval.type = c("95", "bonferroni"),
+    simulation, empirical, interval.type = c("95", "bonferroni"),
     chromosomes = CHROMOSOMES
   ) {
   interval.type <- match.arg(interval.type)
@@ -388,11 +390,11 @@ prepare.diversity.population.contrast.plot.data <- function(
   contrasts <- DIVERSITY.POPULATION.CONTRASTS$contrast
   simulation <- simulation %>%
     filter(
-      data.type == source, chrom %in% chromosomes,
+      data.type %in% SOURCE.LEVELS[seq_len(4L)], chrom %in% chromosomes,
       contrast %in% contrasts
       ) %>%
     transmute(
-      stat, chrom, contrast, difference,
+      data.type, stat, chrom, contrast, difference,
       ci.lower = .data[[lower.column]], ci.upper = .data[[upper.column]]
       )
   empirical.chromosome <- empirical %>%
@@ -405,6 +407,7 @@ prepare.diversity.population.contrast.plot.data <- function(
     left_join(empirical.chromosome, by = c("stat", "chrom", "contrast")) %>%
     left_join(empirical.genome, by = c("stat", "contrast")) %>%
     mutate(
+      data.type = factor(data.type, levels = SOURCE.LEVELS[seq_len(4L)]),
       chrom = factor(chrom, levels = chromosomes),
       contrast = factor(contrast, levels = contrasts),
       stat = factor(stat, levels = c("pi", "theta")),
@@ -415,7 +418,7 @@ prepare.diversity.population.contrast.plot.data <- function(
     stop("Population contrast plot data are missing empirical values")
     }
   markers <- simulation %>%
-    group_by(stat) %>%
+    group_by(data.type, stat) %>%
     mutate(
       interval.span = pmax(
         max(ci.upper) - min(ci.lower),
@@ -441,8 +444,11 @@ prepare.diversity.population.contrast.plot.data <- function(
   }
 
 
-# construct a source-specific population contrast plot
-make.diversity.population.contrast.plot <- function(data, source.label) {
+# construct one combined chromosome-reference population contrast plot
+make.diversity.population.contrast.chromosome.plot <- function(
+    data, interval.type = c("95", "bonferroni")
+  ) {
+  interval.type <- match.arg(interval.type)
   simulation <- data$simulation
   contrasts <- DIVERSITY.POPULATION.CONTRASTS$contrast
   plot <- ggplot(simulation, aes(plot.x, difference, color = contrast)) +
@@ -457,15 +463,62 @@ make.diversity.population.contrast.plot <- function(data, source.label) {
       aes(plot.x, difference, fill = contrast), shape = 23,
       color = "#B9584A", size = 3, inherit.aes = FALSE
       ) +
-    geom_hline(
-      data = data$empirical.genome,
-      aes(yintercept = empirical.genome, color = contrast,
-        linetype = contrast), linewidth = CATEGORICAL.BAR.LINEWIDTH,
-      ) +
     geom_text(
       data = data$red.markers,
       aes(plot.x, red.marker.position, label = "*"), color = "red",
       size = 5, inherit.aes = FALSE
+      ) +
+    facet_grid(
+      rows = vars(data.type, stat), scales = "free_y",
+      labeller = labeller(
+        data.type = SOURCE.LABELS,
+        stat = c(pi = "π", theta = "θ[w]")
+        )
+      ) +
+    scale_color_manual(
+      values = PLOT.STYLES$contrast.colors,
+      breaks = contrasts, labels = PLOT.STYLES$contrast.labels
+      ) +
+    scale_fill_manual(values = PLOT.STYLES$contrast.colors, guide = "none") +
+    scale_x_continuous(
+      breaks = seq_along(CHROMOSOMES), labels = CHROMOSOMES
+      ) +
+    scale_y_continuous(expand = expansion(mult = c(0.05, 0.17))) +
+    labs(
+      x = "Chromosome", y = "Difference", color = "Contrast",
+      title = paste(
+        if (interval.type == "bonferroni") "Bonferroni" else "95%",
+        "population diversity differences: chromosome by chromosome"
+        )
+      ) +
+    theme_bw(base_size = PLOT.BASE.SIZE) +
+    theme(
+      legend.position = "bottom", panel.grid.minor = element_blank(),
+      strip.background = element_blank(),
+      strip.text = element_text(face = "bold")
+      )
+  return(plot)
+  }
+
+
+# construct one combined genome-reference population contrast plot
+make.diversity.population.contrast.genome.plot <- function(
+    data, interval.type = c("95", "bonferroni")
+  ) {
+  interval.type <- match.arg(interval.type)
+  simulation <- data$simulation
+  contrasts <- DIVERSITY.POPULATION.CONTRASTS$contrast
+  plot <- ggplot(simulation, aes(plot.x, difference, color = contrast)) +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    geom_errorbar(
+      aes(ymin = ci.lower, ymax = ci.upper), width = 0.08,
+      linewidth = CATEGORICAL.BAR.LINEWIDTH
+      ) +
+    geom_point(size = 2.2) +
+    geom_hline(
+      data = data$empirical.genome,
+      aes(yintercept = empirical.genome, color = contrast,
+        linetype = contrast), linewidth = CATEGORICAL.BAR.LINEWIDTH,
       ) +
     geom_text(
       data = data$blue.markers,
@@ -473,14 +526,16 @@ make.diversity.population.contrast.plot <- function(data, source.label) {
       size = 5, inherit.aes = FALSE
       ) +
     facet_grid(
-      stat ~ ., scales = "free_y",
-      labeller = labeller(stat = c(pi = "π", theta = "θ[w]"))
+      rows = vars(data.type, stat), scales = "free_y",
+      labeller = labeller(
+        data.type = SOURCE.LABELS,
+        stat = c(pi = "π", theta = "θ[w]")
+        )
       ) +
     scale_color_manual(
       values = PLOT.STYLES$contrast.colors,
       breaks = contrasts, labels = PLOT.STYLES$contrast.labels
       ) +
-    scale_fill_manual(values = PLOT.STYLES$contrast.colors, guide = "none") +
     scale_linetype_manual(
       values = PLOT.STYLES$contrast.linetypes, guide = "none"
       ) +
@@ -490,7 +545,10 @@ make.diversity.population.contrast.plot <- function(data, source.label) {
     scale_y_continuous(expand = expansion(mult = c(0.05, 0.17))) +
     labs(
       x = "Chromosome", y = "Difference", color = "Contrast",
-      title = paste0(source.label, " Population Diversity Contrasts")
+      title = paste(
+        if (interval.type == "bonferroni") "Bonferroni" else "95%",
+        "population diversity differences: chromosome by genome-wide"
+        )
       ) +
     theme_bw(base_size = PLOT.BASE.SIZE) +
     theme(
@@ -674,29 +732,6 @@ build.diversity.plot.data <- function(
   }
 
 
-# retain normalized values or scale all diversity estimates by their span
-rescale.diversity.plot.values <- function(data, value.view) {
-  if (!value.view %in% c("normalized", "unscaled")) {
-    stop("Unsupported diversity value view: ", value.view)
-    }
-  if (!"span" %in% names(data)) {
-    stop("Diversity plot data are missing span")
-    }
-  if (any(!is.finite(data$span) | data$span <= 0)) {
-    stop("Diversity plot spans must be positive and finite")
-    }
-  if (value.view == "normalized") {
-    return(data)
-    }
-  scaled <- data %>% mutate(estimate = estimate * span)
-  if (all(c("lower", "upper") %in% names(scaled))) {
-    scaled <- scaled %>%
-      mutate(lower = lower * span, upper = upper * span)
-    }
-  return(scaled)
-  }
-
-
 # retain one configured diversity view and its eligible empirical references
 filter.diversity.plot.view <- function(
     points, genome.lines, data.types, tag
@@ -745,15 +780,13 @@ filter.diversity.plot.view <- function(
 
 # construct one configured selected-chromosome diversity plot
 make.diversity.plot <- function(
-    points, genome.lines, styles, data.types, tag, value.view = "normalized"
+    points, genome.lines, styles, data.types, tag
   ) {
   view <- filter.diversity.plot.view(
     points, genome.lines, data.types, tag
     )
-  points <- rescale.diversity.plot.values(view$points, value.view)
-  genome.lines <- rescale.diversity.plot.values(
-    view$genome.lines, value.view
-    )
+  points <- view$points
+  genome.lines <- view$genome.lines
   points <- filter(points, mask == "Intergenic")
   genome.lines <- filter(genome.lines, mask == "Intergenic")
   dodge <- position_dodge(width = CATEGORICAL.BAR.DODGE)
@@ -793,35 +826,26 @@ make.diversity.plot <- function(
       drop = TRUE
       )
   
-  if (value.view == "normalized") {
-    plot <- plot + 
-      ggfx::with_outer_glow(
-        geom_hline(
-          data = genome.lines,
-          aes(yintercept = estimate, color = pop),
-          linetype = "longdash",
-          linewidth = CATEGORICAL.BAR.LINEWIDTH
+  plot <- plot +
+    ggfx::with_outer_glow(
+      geom_hline(
+        data = genome.lines,
+        aes(yintercept = estimate, color = pop),
+        linetype = "longdash",
+        linewidth = CATEGORICAL.BAR.LINEWIDTH
         ),
-        colour = "black",
-        sigma = 0,
-        expand = 3
+      colour = "black",
+      sigma = 0,
+      expand = 3
       ) +
-      scale_y_continuous(
-        labels = scales::label_number(accuracy = 0.00001)
+    scale_y_continuous(
+      labels = scales::label_number(accuracy = 0.00001)
       )
-  } else {
-    plot <- plot +
-      scale_y_log10()
-  }
   
   plot <- plot +
     labs(
       x = "Chromosome", y = NULL,
-      title = if (value.view == "normalized") {
-        "Genetic Diversity Across Selected Chromosomes"
-        } else {
-        "Span-Unscaled Genetic Diversity Across Selected Chromosomes"
-        },
+      title = "Genetic Diversity Across Selected Chromosomes",
       color = NULL, fill = NULL, shape = NULL
       ) +
     guides(
@@ -916,23 +940,32 @@ population.contrast.empirical.tables <-
   make.diversity.population.empirical.contrasts(
     population.contrast.empirical, CHROMOSOMES
     )
-population.contrast.sources <- c(
-  tc = SOURCE.LEVELS[[1L]], tcd = SOURCE.LEVELS[[2L]],
-  lg = SOURCE.LEVELS[[3L]], lgd = SOURCE.LEVELS[[4L]]
-  )
-population.contrast.plots <- imap(
-  population.contrast.sources, function(source, tag) {
-    imap(c("95", "bonferroni"), function(interval.type, interval.tag) {
-      plot.data <- prepare.diversity.population.contrast.plot.data(
-        population.contrast.tables, population.contrast.empirical.tables,
-        source, interval.type, CHROMOSOMES
-        )
-      return(make.diversity.population.contrast.plot(
-        plot.data, SOURCE.LABELS[[source]]
-        ))
-      })
-    }
-  )
+population.contrast.95.data <-
+  prepare.diversity.population.contrast.plot.data(
+    population.contrast.tables, population.contrast.empirical.tables, "95",
+    CHROMOSOMES
+    )
+population.contrast.bonferroni.data <-
+  prepare.diversity.population.contrast.plot.data(
+    population.contrast.tables, population.contrast.empirical.tables,
+    "bonferroni", CHROMOSOMES
+    )
+population.contrast.95.chromosome.comparisons <-
+  make.diversity.population.contrast.chromosome.plot(
+    population.contrast.95.data, "95"
+    )
+population.contrast.95.genome.comparisons <-
+  make.diversity.population.contrast.genome.plot(
+    population.contrast.95.data, "95"
+    )
+population.contrast.bonferroni.chromosome.comparisons <-
+  make.diversity.population.contrast.chromosome.plot(
+    population.contrast.bonferroni.data, "bonferroni"
+    )
+population.contrast.bonferroni.genome.comparisons <-
+  make.diversity.population.contrast.genome.plot(
+    population.contrast.bonferroni.data, "bonferroni"
+    )
 simulation.diversity.summary <- bind_rows(
   sim.tc.diversity,
   simDown.tc.intergenic.diversity,
@@ -966,18 +999,6 @@ diversity.bootstrap.plots <- imap(list(
     tag
     ))
   })
-diversity.bootstrap.unscaled.plots <- imap(list(
-  tc.tcd.1kg = PLOT.CONFIGS$tc.tcd.1kg,
-  all.datatypes.adx.asw = PLOT.CONFIGS$all.datatypes.adx.asw
-  ), function(data.types, tag) {
-  return(make.diversity.plot(
-    diversity.plot.data$points,
-    diversity.plot.data$genome.lines,
-    PLOT.STYLES, data.types, tag,
-    value.view = "unscaled"
-    ))
-  })
-
 # persist every plot before printing figures at the end of the script
 dir.create(OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
 saveRDS(diversity.bootstrap.plots$tc.tcd.1kg, file.path(
@@ -986,36 +1007,24 @@ saveRDS(diversity.bootstrap.plots$tc.tcd.1kg, file.path(
 saveRDS(diversity.bootstrap.plots$all.datatypes.adx.asw, file.path(
   OUTPUT.DIR, "diversity.bootstrap.all.datatypes.adx.asw.rds"
   ))
-saveRDS(diversity.bootstrap.unscaled.plots$tc.tcd.1kg, file.path(
-  OUTPUT.DIR, "diversity.bootstrap.tc.tcd.1kg.unscaled.rds"
+saveRDS(population.contrast.95.chromosome.comparisons, file.path(
+  OUTPUT.DIR, "diversity.population.contrasts.95.chromosome.comparisons.rds"
   ))
-saveRDS(diversity.bootstrap.unscaled.plots$all.datatypes.adx.asw, file.path(
-  OUTPUT.DIR, "diversity.bootstrap.all.datatypes.adx.asw.unscaled.rds"
+saveRDS(population.contrast.95.genome.comparisons, file.path(
+  OUTPUT.DIR, "diversity.population.contrasts.95.genome.comparisons.rds"
   ))
-contrast.output.files <- c(
-  tc.95 = "diversity.population.contrasts.tc.95.chromosome.genome.rds",
-  tc.bonferroni =
-    "diversity.population.contrasts.tc.bonferroni.chromosome.genome.rds",
-  tcd.95 = "diversity.population.contrasts.tcd.95.chromosome.genome.rds",
-  tcd.bonferroni =
-    "diversity.population.contrasts.tcd.bonferroni.chromosome.genome.rds",
-  lg.95 = "diversity.population.contrasts.lg.95.chromosome.genome.rds",
-  lg.bonferroni =
-    "diversity.population.contrasts.lg.bonferroni.chromosome.genome.rds",
-  lgd.95 = "diversity.population.contrasts.lgd.95.chromosome.genome.rds",
-  lgd.bonferroni =
-    "diversity.population.contrasts.lgd.bonferroni.chromosome.genome.rds"
-  )
-iwalk(contrast.output.files, function(file.name, key) {
-  keys <- str_split(key, fixed("."), simplify = TRUE)
-  saveRDS(
-    population.contrast.plots[[keys[[1L]]]][[keys[[2L]]]],
-    file.path(OUTPUT.DIR, file.name)
-    )
-  })
+saveRDS(population.contrast.bonferroni.chromosome.comparisons, file.path(
+  OUTPUT.DIR,
+  "diversity.population.contrasts.bonferroni.chromosome.comparisons.rds"
+  ))
+saveRDS(population.contrast.bonferroni.genome.comparisons, file.path(
+  OUTPUT.DIR,
+  "diversity.population.contrasts.bonferroni.genome.comparisons.rds"
+  ))
 
 print(diversity.bootstrap.plots$tc.tcd.1kg)
 print(diversity.bootstrap.plots$all.datatypes.adx.asw)
-print(diversity.bootstrap.unscaled.plots$tc.tcd.1kg)
-print(diversity.bootstrap.unscaled.plots$all.datatypes.adx.asw)
-walk(population.contrast.plots, walk, print)
+print(population.contrast.95.chromosome.comparisons)
+print(population.contrast.95.genome.comparisons)
+print(population.contrast.bonferroni.chromosome.comparisons)
+print(population.contrast.bonferroni.genome.comparisons)
