@@ -41,6 +41,7 @@ CATEGORICAL.BAR.WIDTH <- 0.8
 CATEGORICAL.BAR.LINEWIDTH <- 1
 DIVERSITY.POPULATION.CONTRAST.FAMILY.SIZE <- 66L
 DIVERSITY.POPULATION.CONTRAST.BOOTSTRAP.REPLICATES <- 1000L
+DIVERSITY.POPULATION.CONTRAST.SOURCES <- SOURCE.LEVELS[c(1L, 2L)]
 DIVERSITY.POPULATION.CONTRASTS <- tribble(
   ~contrast, ~simulation.left, ~simulation.right,
   ~empirical.left, ~empirical.right,
@@ -180,7 +181,7 @@ validate.diversity.population.contrast.simulation <- function(
       paste(missing.columns, collapse = ", "))
     }
   chromosomes <- as.character(chromosomes)
-  sources <- SOURCE.LEVELS[seq_len(4L)]
+  sources <- DIVERSITY.POPULATION.CONTRAST.SOURCES
   populations <- unique(c(
     DIVERSITY.POPULATION.CONTRASTS$simulation.left,
     DIVERSITY.POPULATION.CONTRASTS$simulation.right
@@ -291,7 +292,7 @@ make.diversity.population.contrast.tables <- function(
       )
     }
   set.seed(seed)
-  tables <- map_dfr(SOURCE.LEVELS[seq_len(4L)], function(source) {
+  tables <- map_dfr(DIVERSITY.POPULATION.CONTRAST.SOURCES, function(source) {
     map_dfr(c("pi", "theta"), function(statistic) {
       map_dfr(chromosomes, function(chromosome) {
         map_dfr(seq_len(nrow(DIVERSITY.POPULATION.CONTRASTS)), function(index) {
@@ -321,7 +322,7 @@ make.diversity.population.contrast.tables <- function(
         })
       })
     })
-  expected.rows <- length(SOURCE.LEVELS[seq_len(4L)]) * 2L *
+  expected.rows <- length(DIVERSITY.POPULATION.CONTRAST.SOURCES) * 2L *
     DIVERSITY.POPULATION.CONTRAST.FAMILY.SIZE
   if (nrow(tables) != expected.rows) {
     stop("Population contrast bootstrap table does not match its family size")
@@ -390,7 +391,8 @@ prepare.diversity.population.contrast.plot.data <- function(
   contrasts <- DIVERSITY.POPULATION.CONTRASTS$contrast
   simulation <- simulation %>%
     filter(
-      data.type %in% SOURCE.LEVELS[seq_len(4L)], chrom %in% chromosomes,
+      data.type %in% DIVERSITY.POPULATION.CONTRAST.SOURCES,
+      chrom %in% chromosomes,
       contrast %in% contrasts
       ) %>%
     transmute(
@@ -407,7 +409,9 @@ prepare.diversity.population.contrast.plot.data <- function(
     left_join(empirical.chromosome, by = c("stat", "chrom", "contrast")) %>%
     left_join(empirical.genome, by = c("stat", "contrast")) %>%
     mutate(
-      data.type = factor(data.type, levels = SOURCE.LEVELS[seq_len(4L)]),
+      data.type = factor(
+        data.type, levels = DIVERSITY.POPULATION.CONTRAST.SOURCES
+        ),
       chrom = factor(chrom, levels = chromosomes),
       contrast = factor(contrast, levels = contrasts),
       stat = factor(stat, levels = c("pi", "theta")),
