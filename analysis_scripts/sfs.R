@@ -644,22 +644,27 @@ prepare.sfs.contrast.plot.data <- function(
       ) %>%
     mutate(
       contrast = factor(contrast, levels = contrasts),
-      measure = factor(measure, levels = c("count", "proportion"))
+      measure = factor(measure, levels = c("count", "proportion")),
+      outside.zero = ci.lower > 0 | ci.upper < 0
       )
   if ("data.type" %in% names(displayed)) {
     displayed <- displayed %>% mutate(data.type = factor(
       data.type, levels = SFS.POPULATION.CONTRAST.SOURCES
       ))
     }
-  return(displayed)
+  return(list(
+    simulation = displayed,
+    red.markers = filter(displayed, outside.zero)
+    ))
   }
 
 
 # build selected-chromosome contrast plot with a zero reference and dodging
 make.sfs.contrast.plot <- function(data, interval.label, title) {
-  contrasts <- levels(data$contrast)
+  simulation <- data$simulation
+  contrasts <- levels(simulation$contrast)
   plot <- ggplot(
-    data,
+    simulation,
     aes(minor.allele.count, difference, color = contrast, group = contrast)
     ) +
     geom_hline(yintercept = 0, linetype = "dashed") +
@@ -668,11 +673,20 @@ make.sfs.contrast.plot <- function(data, interval.label, title) {
       width = 0.25, linewidth = DENSE.BAR.LINEWIDTH
       ) +
     geom_point(position = SFS.DODGE, size = 2) +
+    geom_point(
+      data = data$red.markers,
+      aes(
+        minor.allele.count, difference, fill = contrast, group = contrast
+        ),
+      shape = 21, color = "red", position = SFS.DODGE, size = 2,
+      stroke = DENSE.BAR.LINEWIDTH, inherit.aes = FALSE
+      ) +
     scale_x_continuous(breaks = seq_len(DISPLAY.BIN.MAX)) +
     scale_color_manual(
       values = SFS.CONTRAST.COLORS[contrasts],
       labels = SFS.CONTRAST.LABELS[contrasts]
       ) +
+    scale_fill_manual(values = SFS.CONTRAST.COLORS[contrasts], guide = "none") +
     labs(
       x = "Minor allele count bin", y = "Left population/source minus right",
       color = NULL, title = title, subtitle = paste(interval.label, "interval")
@@ -680,8 +694,10 @@ make.sfs.contrast.plot <- function(data, interval.label, title) {
     guides(color = guide_legend(nrow = 1, byrow = TRUE)) +
     theme_bw(base_size = PLOT.BASE.SIZE) +
     theme(legend.position = "top", panel.grid.minor = element_blank())
-  if ("data.type" %in% names(data)) {
-    plot <- plot + facet_grid(measure ~ data.type, scales = "free_y")
+  if ("data.type" %in% names(simulation)) {
+    plot <- plot + facet_grid(
+      rows = vars(data.type, measure), scales = "free_y"
+      )
     } else {
     plot <- plot + facet_grid(measure ~ ., scales = "free_y")
     }
