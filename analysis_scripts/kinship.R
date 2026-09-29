@@ -762,37 +762,53 @@ prepare.kinship.contrast.plot.data <- function(
   displayed <- data %>% transmute(across(any_of("data.type")), xmin, xmax,
     xmid, contrast, difference, ci.lower = .data[[lower]],
     ci.upper = .data[[upper]]) %>% mutate(
-      contrast = factor(contrast, levels = contrasts))
+      contrast = factor(contrast, levels = contrasts),
+      outside.zero = ci.lower > 0 | ci.upper < 0
+      )
   if ("data.type" %in% names(displayed)) {
     displayed <- displayed %>% mutate(data.type = factor(data.type,
       levels = KINSHIP.POPULATION.CONTRAST.SOURCES))
     }
-  return(displayed)
+  return(list(
+    simulation = displayed,
+    red.markers = filter(displayed, outside.zero)
+    ))
   }
 
 
 # build a fixed-bin kinship contrast plot with zero reference and intervals
 make.kinship.contrast.plot <- function(data, interval.label, title) {
-  contrasts <- levels(data$contrast)
+  simulation <- data$simulation
+  contrasts <- levels(simulation$contrast)
   dodge <- position_dodge(KINSHIP.BIN.WIDTH)
   plot <- ggplot(
-    data, aes(xmid, difference, color = contrast, group = contrast)
+    simulation, aes(xmid, difference, color = contrast, group = contrast)
     ) +
     geom_hline(yintercept = 0, linetype = "dashed") +
     geom_errorbar(aes(ymin = ci.lower, ymax = ci.upper), position = dodge,
       width = 0, linewidth = DENSE.BAR.LINEWIDTH) +
     geom_point(position = dodge, size = 2) +
+    geom_point(
+      data = data$red.markers,
+      aes(xmid, difference, fill = contrast, group = contrast),
+      shape = 21, color = "red", position = dodge, size = 2,
+      stroke = DENSE.BAR.LINEWIDTH, inherit.aes = FALSE
+      ) +
     coord_cartesian(xlim = KINSHIP.CONTRAST.X.LIMITS) +
     scale_color_manual(values = KINSHIP.CONTRAST.COLORS[contrasts],
       labels = KINSHIP.CONTRAST.LABELS[contrasts]) +
+    scale_fill_manual(values = KINSHIP.CONTRAST.COLORS[contrasts],
+      guide = "none") +
     labs(x = "Pairwise KING kinship", y = "Left minus right fraction of pairs",
       color = NULL, title = title,
       subtitle = paste(interval.label, "interval")) +
     guides(color = guide_legend(nrow = 1, byrow = TRUE)) +
     theme_bw(base_size = PLOT.BASE.SIZE) +
     theme(legend.position = "top", panel.grid.minor = element_blank())
-  if ("data.type" %in% names(data)) {
-    plot <- plot + facet_grid(. ~ data.type)
+  if ("data.type" %in% names(simulation)) {
+    plot <- plot + facet_grid(
+      . ~ data.type, labeller = labeller(data.type = SOURCE.LABELS)
+      )
     }
   return(plot)
   }

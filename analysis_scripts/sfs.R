@@ -30,6 +30,9 @@ SOURCE.LEVELS <- c(
   "Simulation_largeGrowth", "Simulation_largeGrowth_simDown",
   "Empirical"
   )
+SOURCE.LABELS <- setNames(
+  c("T.C.", "T.C.D.", "L.G.", "L.G.D.", "Emp."), SOURCE.LEVELS
+  )
 POPULATION.LEVELS <- c("AFR", "ADX", "EUR", "YRI", "ASW", "CEU")
 PLOT.CONFIGS <- list(
   tcd.1kg = SOURCE.LEVELS[c(2, 5)],
@@ -696,7 +699,8 @@ make.sfs.contrast.plot <- function(data, interval.label, title) {
     theme(legend.position = "top", panel.grid.minor = element_blank())
   if ("data.type" %in% names(simulation)) {
     plot <- plot + facet_grid(
-      rows = vars(data.type, measure), scales = "free_y"
+      rows = vars(data.type, measure), scales = "free_y",
+      labeller = labeller(data.type = SOURCE.LABELS)
       )
     } else {
     plot <- plot + facet_grid(measure ~ ., scales = "free_y")
