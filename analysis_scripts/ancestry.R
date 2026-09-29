@@ -31,8 +31,8 @@ EMPIRICAL.K <- 2L
 RANDOM.SEED <- 123L
 DOWNSAMPLE.SIZE <- 50L
 BOOTSTRAP.REPLICATES <- 1000L
-ANCESTRY.BOOTSTRAP.CHROMOSOME.FAMILY.SIZE <- 308L
-ANCESTRY.BOOTSTRAP.GENOME.ASW.FAMILY.SIZE <- 176L
+ANCESTRY.BOOTSTRAP.CHROMOSOME.FAMILY.SIZE <- 396L
+ANCESTRY.BOOTSTRAP.GENOME.ASW.FAMILY.SIZE <- 264L
 HISTOGRAM.BREAKS <- seq(0, 1, by = 0.05)
 PLOT.EMPIRICAL.METHOD <- "ADMIXTURE"
 PLOT.SAMPLE.SET <- "downsampled"
@@ -61,8 +61,8 @@ PLOT.STYLES <- list(
   contrast.colors = c(
     `TC-Emp` = "#9A83CE", `TCD-Emp` = "#6F55B5",
     `LG-Emp` = "#32146F", `LGD-Emp` = "#4B1FA8",
-    `TC-TCD` = "#6F55B5", `LG-LGD` = "#4B1FA8",
-    `TC-LG` = "#9A83CE"
+    `TC-TCD` = "#BDBDBD", `LG-LGD` = "#737373",
+    `TC-LG` = "#000000"
     ),
   contrast.labels = c(
     `TC-Emp` = "T.C. - ASW", `TCD-Emp` = "T.C.D. - ASW",
@@ -248,12 +248,29 @@ apply.downsample.ids <- function(
   }
 
 
-# create mean and sd inputs for bootstrap comparison tables.
+# evaluate ancestry statistics and reject undefined skewness explicitly.
+calculate.ancestry.statistics <- function(values) {
+  statistics <- c(
+    mean = mean(values),
+    sd = sd(values),
+    skew = e1071::skewness(values)
+    )
+  if (any(!is.finite(statistics))) {
+    stop("Ancestry mean, SD, and skewness must be finite")
+    }
+  return(statistics)
+  }
+
+
+# create mean, sd, and skew inputs for bootstrap comparison tables.
 summarize.ancestry.comparison <- function(data) {
   summary <- data %>%
     filter(!is.na(afr.q)) %>%
     group_by(rep, chrom, data.type, method, sample.set) %>%
-    summarise(mean = mean(afr.q), sd = sd(afr.q), .groups = "drop")
+    group_modify(function(group, key) {
+      return(as_tibble_row(calculate.ancestry.statistics(group$afr.q)))
+      }) %>%
+    ungroup()
   return(summary)
   }
 
@@ -320,7 +337,7 @@ select.bootstrap.ancestry.ids <- function(
   }
 
 
-# build simulation intervals and empirical bootstrap mean and sd summaries.
+# build simulation intervals and empirical bootstrap statistic summaries.
 summarize.bootstrap.ancestry <- function(
     data, downsample.size, seed, replicates
   ) {
@@ -330,8 +347,11 @@ summarize.bootstrap.ancestry <- function(
   simulation <- filter.bootstrap.ancestry.simulation(data) %>%
     inner_join(selected, by = c("data.type", "rep", "chrom", "sample_id")) %>%
     group_by(data.type, rep, chrom) %>%
-    summarise(mean = mean(afr.q), sd = sd(afr.q), .groups = "drop") %>%
-    pivot_longer(c(mean, sd), names_to = "stat", values_to = "value") %>%
+    group_modify(function(group, key) {
+      return(as_tibble_row(calculate.ancestry.statistics(group$afr.q)))
+      }) %>%
+    ungroup() %>%
+    pivot_longer(c(mean, sd, skew), names_to = "stat", values_to = "value") %>%
     summarize.bootstrap.interval(c("data.type", "rep", "chrom", "stat"),
       "value")
   empirical <- data %>%
@@ -346,10 +366,12 @@ summarize.bootstrap.ancestry <- function(
   empirical <- empirical %>%
     group_by(data.type, chrom) %>%
     group_modify(function(group, key) {
-      observed <- c(mean = mean(group$afr.q), sd = sd(group$afr.q))
+      observed <- calculate.ancestry.statistics(group$afr.q)
       estimates <- map_dfr(names(observed), function(statistic) {
         values <- replicate(replicates, {
-          match.fun(statistic)(sample(group$afr.q, nrow(group), replace = TRUE))
+          calculate.ancestry.statistics(sample(
+            group$afr.q, nrow(group), replace = TRUE
+            ))[[statistic]]
           })
         tibble(
           stat = statistic, mean = observed[[statistic]],
@@ -464,6 +486,53 @@ make.bootstrap.ancestry.bar.plot <- function(data, data.types, title) {
   }
 
 
+# construct selected-chromosome skewness bars with an asw reference.
+make.bootstrap.ancestry.skew.bar.plot <- function(data, data.types, title) {
+  plotted <- data %>%
+    filter(
+      as.character(data.type) %in% data.types,
+      chrom %in% SELECTED.CHROMOSOMES, stat == "skew"
+      ) %>%
+    mutate(data.type = factor(
+      as.character(data.type),
+      levels = order.active.levels(data.type, SOURCE.LEVELS)
+      ))
+  genome <- data %>%
+    filter(data.type == "Empirical", chrom == "all", stat == "skew")
+  dodge <- position_dodge(width = CATEGORICAL.BAR.DODGE)
+  plot <- ggplot(plotted, aes(chrom, mean, fill = data.type)) +
+    geom_rect(
+      data = genome, aes(ymin = lower, ymax = upper),
+      xmin = -Inf, xmax = Inf, inherit.aes = FALSE,
+      fill = PLOT.STYLES$empirical.colors[[PLOT.EMPIRICAL.METHOD]],
+      alpha = 0.15
+      ) +
+    geom_col(
+      position = dodge, width = CATEGORICAL.BAR.WIDTH,
+      linewidth = CATEGORICAL.BAR.LINEWIDTH, color = "black"
+      ) +
+    geom_errorbar(
+      aes(ymin = lower, ymax = upper), position = dodge, width = 0,
+      linewidth = CATEGORICAL.BAR.LINEWIDTH, na.rm = TRUE
+      ) +
+    with_outer_glow(
+      geom_hline(
+        data = genome, aes(yintercept = mean), linetype = "longdash",
+        color = PLOT.STYLES$empirical.colors[[PLOT.EMPIRICAL.METHOD]],
+        linewidth = 1
+        ),
+      colour = "black", sigma = 0, expand = 3
+      ) +
+    scale_fill_manual(values = PLOT.STYLES$colors,
+      labels = PLOT.STYLES$labels) +
+    labs(title = title, x = "Chromosome", y = "African ancestry skewness",
+      fill = NULL) +
+    theme_bw(base_size = PLOT.BASE.SIZE) +
+    theme(legend.position = "top", panel.grid.minor = element_blank())
+  return(plot)
+  }
+
+
 # construct chromosome-1 simulation and genome-wide asw histograms.
 make.bootstrap.ancestry.histogram.plot <- function(data, data.types, title) {
   plotted <- data %>%
@@ -510,7 +579,8 @@ prepare.ancestry.bootstrap.comparison.data <- function(
     stop("Bootstrap ancestry comparisons require chromosomes 1-22")
     }
   required.summary <- c(
-    "data.type", "method", "sample.set", "chrom", "rep", "mean", "sd"
+    "data.type", "method", "sample.set", "chrom", "rep", "mean", "sd",
+    "skew"
     )
   missing.summary <- setdiff(required.summary, names(summary.data))
   if (length(missing.summary)) {
@@ -528,8 +598,8 @@ prepare.ancestry.bootstrap.comparison.data <- function(
     mutate(chrom = as.character(chrom)) %>%
     inner_join(source.config, by = c("data.type", "method")) %>%
     filter(sample.set == sample.set.input, chrom %in% chromosomes) %>%
-    select(source, chrom, rep, mean, sd)
-  if (any(!is.finite(unlist(simulation[c("mean", "sd")]))) ||
+    select(source, chrom, rep, mean, sd, skew)
+  if (any(!is.finite(unlist(simulation[c("mean", "sd", "skew")]))) ||
       any(!is.finite(simulation$rep))) {
     stop("Bootstrap ancestry comparison summaries must be finite")
     }
@@ -584,8 +654,9 @@ prepare.ancestry.bootstrap.comparison.data <- function(
     }
   empirical <- individual.data %>%
     mutate(
-      chrom = as.character(chrom), 
-      sample_id = as.character(vcf_sample_id)) %>%
+      chrom = as.character(chrom),
+      sample_id = as.character(sample_id)
+      ) %>%
     filter(
       data.type == "Empirical", role == "ASW", method == empirical.method,
       chrom %in% c(chromosomes, "all")
@@ -674,14 +745,14 @@ bootstrap.ancestry.simulation.difference <- function(
 bootstrap.ancestry.empirical.difference <- function(
     simulation.values, empirical.values, statistic, bootstrap.replicates
   ) {
-  statistic.function <- match.fun(statistic)
   draws <- replicate(bootstrap.replicates, {
     mean(sample(simulation.values, length(simulation.values), replace = TRUE)) -
-      statistic.function(sample(
+      calculate.ancestry.statistics(sample(
         empirical.values, length(empirical.values), replace = TRUE
-        ))
+        ))[[statistic]]
     })
-  difference <- mean(simulation.values) - statistic.function(empirical.values)
+  difference <- mean(simulation.values) -
+    calculate.ancestry.statistics(empirical.values)[[statistic]]
   return(list(draws = draws, difference = difference))
   }
 
@@ -746,14 +817,21 @@ make.ancestry.bootstrap.comparison.tables <- function(
     ANCESTRY.BOOTSTRAP.CONTRASTS, right.source == "Emp"
     )
   set.seed(seed)
-  chromosome.tables <- map_dfr(c("mean", "sd"), function(statistic) {
+  chromosome.tables <- bind_rows(
+    map_dfr(c("mean", "sd"), function(statistic) {
     make.ancestry.bootstrap.comparison.table(
       data$simulation, data$empirical, ANCESTRY.BOOTSTRAP.CONTRASTS,
       chromosomes, statistic, identity, "chromosome",
       ANCESTRY.BOOTSTRAP.CHROMOSOME.FAMILY.SIZE, bootstrap.replicates
       )
-    })
-  genome.tables <- map_dfr(c("mean", "sd"), function(statistic) {
+    }),
+    make.ancestry.bootstrap.comparison.table(
+      data$simulation, data$empirical, genome.contrasts, chromosomes, "skew",
+      identity, "chromosome", ANCESTRY.BOOTSTRAP.CHROMOSOME.FAMILY.SIZE,
+      bootstrap.replicates
+      )
+    )
+  genome.tables <- map_dfr(c("mean", "sd", "skew"), function(statistic) {
     make.ancestry.bootstrap.comparison.table(
       data$simulation, data$empirical, genome.contrasts, chromosomes,
       statistic, function(chromosome) "all", "genome",
@@ -796,7 +874,8 @@ write.ancestry.bootstrap.comparison.tables <- function(
 # prepare one contrast family for nominal or Bonferroni interval plotting.
 prepare.ancestry.bootstrap.contrast.plot.data <- function(
     tables, contrast.family, interval.type = c("95", "bonferroni"),
-    reference.scope = c("chromosome", "genome")
+    reference.scope = c("chromosome", "genome"),
+    statistics = c("mean", "sd")
   ) {
   interval.type <- match.arg(interval.type)
   if (contrast.family == "empirical") {
@@ -816,6 +895,9 @@ prepare.ancestry.bootstrap.contrast.plot.data <- function(
     stop("Unsupported bootstrap contrast family: ", contrast.family)
     }
   config <- contrast.config[[contrast.family]]
+  if (!all(statistics %in% c("mean", "sd", "skew"))) {
+    stop("Unsupported ancestry bootstrap statistic")
+    }
   lower.column <- if (interval.type == "95") {
     "ci.95.lower"
     } else {
@@ -836,13 +918,13 @@ prepare.ancestry.bootstrap.contrast.plot.data <- function(
     tables$chromosome.comparisons
     }
   plotted <- data %>%
-    filter(contrast %in% config$contrasts) %>%
+    filter(contrast %in% config$contrasts, statistic %in% statistics) %>%
     mutate(
       ci.lower = .data[[lower.column]],
       ci.upper = .data[[upper.column]],
       chromosome = factor(chromosome, levels = config$chromosome.levels),
       contrast = factor(contrast, levels = config$contrasts),
-      statistic = factor(statistic, levels = c("mean", "sd")),
+      statistic = factor(statistic, levels = statistics),
       significant = ci.lower > 0 | ci.upper < 0,
       contrast.color = unname(PLOT.STYLES$contrast.colors[as.character(
         contrast
@@ -871,7 +953,9 @@ prepare.ancestry.bootstrap.contrast.plot.data <- function(
 
 
 # construct a faceted bootstrap contrast plot from prepared comparison data.
-make.ancestry.bootstrap.contrast.plot <- function(data, title) {
+make.ancestry.bootstrap.contrast.plot <- function(
+    data, title, facet.statistics = TRUE
+  ) {
   plot <- ggplot(
     data,
     aes(plot.x, difference, color = contrast, group = contrast)
@@ -890,10 +974,6 @@ make.ancestry.bootstrap.contrast.plot <- function(data, title) {
         ),
       color = "red", inherit.aes = FALSE, size = 5
       ) +
-    scale_x_continuous(
-      breaks = seq_along(levels(data$chromosome)),
-      labels = levels(data$chromosome)
-      ) +
     scale_color_manual(
       values = PLOT.STYLES$contrast.colors,
       labels = PLOT.STYLES$contrast.labels
@@ -910,17 +990,40 @@ make.ancestry.bootstrap.contrast.plot <- function(data, title) {
       strip.background = element_rect(fill = "grey92"),
       panel.grid.minor = element_blank()
       )
-  if (all(is.na(data$facet.label))) {
-    plot <- plot + facet_grid(
-      rows = vars(statistic), scales = "free_y",
-      labeller = as_labeller(c(mean = "Mean", sd = "SD"))
-      )
+  if (all(data$reference.scope == "genome")) {
+    plot <- plot +
+      scale_x_continuous(breaks = NULL, labels = NULL) +
+      labs(x = NULL) +
+      theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
     } else {
-    plot <- plot + facet_wrap(
-      vars(facet.label), ncol = 1, scales = "free_y", strip.position = "right"
-      )
+    plot <- plot +
+      scale_x_continuous(
+        breaks = seq_along(levels(data$chromosome)),
+        labels = levels(data$chromosome)
+        )
+    }
+  if (facet.statistics) {
+    if (all(is.na(data$facet.label))) {
+      plot <- plot + facet_grid(
+        rows = vars(statistic), scales = "free_y",
+        labeller = as_labeller(c(mean = "Mean", sd = "SD"))
+        )
+      } else {
+      plot <- plot + facet_wrap(
+        vars(facet.label), ncol = 1, scales = "free_y",
+        strip.position = "right"
+        )
+      }
     }
   return(plot)
+  }
+
+
+# construct an unfaceted empirical skewness contrast plot.
+make.ancestry.bootstrap.skew.contrast.plot <- function(data, title) {
+  return(make.ancestry.bootstrap.contrast.plot(
+    data, title, facet.statistics = FALSE
+    ))
   }
 
 
@@ -1008,6 +1111,11 @@ ancestry.bootstrap.all.datatypes.adx.asw.bar <-
   bootstrap.ancestry.summary, SOURCE.LEVELS,
   "African ancestry: all ADX sources and ASW"
   )
+ancestry.bootstrap.all.datatypes.adx.asw.skew.bar <-
+  make.bootstrap.ancestry.skew.bar.plot(
+  bootstrap.ancestry.summary, SOURCE.LEVELS,
+  "African ancestry skewness: all ADX sources and ASW"
+  )
 ancestry.bootstrap.tcd.1kg.histogram <- make.bootstrap.ancestry.histogram.plot(
   bootstrap.ancestry.histograms,
   c("Simulation_2T12Consistent_simDown", "Empirical"),
@@ -1048,6 +1156,44 @@ ancestry.bootstrap.empirical.bonferroni.genome.comparisons <-
       ),
     "Bonferroni bootstrap ancestry differences: chromosome by whole-genome ASW"
     )
+ancestry.bootstrap.empirical.skew.95.chromosome.comparisons <-
+  make.ancestry.bootstrap.skew.contrast.plot(
+    prepare.ancestry.bootstrap.contrast.plot.data(
+      ancestry.bootstrap.comparison.tables, "empirical", "95", "chromosome",
+      statistics = "skew"
+      ),
+    "Bootstrap ancestry skewness differences: chromosome by chromosome"
+    )
+ancestry.bootstrap.empirical.skew.95.genome.comparisons <-
+  make.ancestry.bootstrap.skew.contrast.plot(
+    prepare.ancestry.bootstrap.contrast.plot.data(
+      ancestry.bootstrap.comparison.tables, "empirical", "95", "genome",
+      statistics = "skew"
+      ),
+    "Bootstrap ancestry skewness differences: chromosome by whole-genome ASW"
+    )
+ancestry.bootstrap.empirical.skew.bonferroni.chromosome.comparisons <-
+  make.ancestry.bootstrap.skew.contrast.plot(
+    prepare.ancestry.bootstrap.contrast.plot.data(
+      ancestry.bootstrap.comparison.tables, "empirical", "bonferroni",
+      "chromosome", statistics = "skew"
+      ),
+    paste(
+      "Bonferroni bootstrap ancestry skewness differences:",
+      "chromosome by chromosome"
+      )
+    )
+ancestry.bootstrap.empirical.skew.bonferroni.genome.comparisons <-
+  make.ancestry.bootstrap.skew.contrast.plot(
+    prepare.ancestry.bootstrap.contrast.plot.data(
+      ancestry.bootstrap.comparison.tables, "empirical", "bonferroni",
+      "genome", statistics = "skew"
+      ),
+    paste(
+      "Bonferroni bootstrap ancestry skewness differences:",
+      "chromosome by whole-genome ASW"
+      )
+    )
 ancestry.bootstrap.simulation.95.comparisons <-
   make.ancestry.bootstrap.contrast.plot(
     prepare.ancestry.bootstrap.contrast.plot.data(
@@ -1071,6 +1217,9 @@ saveRDS(ancestry.bootstrap.tcd.1kg.bar, file.path(
 saveRDS(ancestry.bootstrap.all.datatypes.adx.asw.bar, file.path(
   OUTPUT.DIR, "ancestry.bootstrap.all.datatypes.adx.asw.bar.rds"
   ))
+saveRDS(ancestry.bootstrap.all.datatypes.adx.asw.skew.bar, file.path(
+  OUTPUT.DIR, "ancestry.bootstrap.all.datatypes.adx.asw.skew.bar.rds"
+  ))
 saveRDS(ancestry.bootstrap.tcd.1kg.histogram, file.path(
   OUTPUT.DIR, "ancestry.bootstrap.tcd.1kg.histogram.rds"
   ))
@@ -1092,6 +1241,25 @@ saveRDS(ancestry.bootstrap.empirical.bonferroni.chromosome.comparisons,
 saveRDS(ancestry.bootstrap.empirical.bonferroni.genome.comparisons, file.path(
   OUTPUT.DIR, "ancestry.bootstrap.empirical.bonferroni.genome.comparisons.rds"
   ))
+saveRDS(ancestry.bootstrap.empirical.skew.95.chromosome.comparisons, file.path(
+  OUTPUT.DIR,
+  "ancestry.bootstrap.empirical.skew.95.chromosome.comparisons.rds"
+  ))
+saveRDS(ancestry.bootstrap.empirical.skew.95.genome.comparisons, file.path(
+  OUTPUT.DIR, "ancestry.bootstrap.empirical.skew.95.genome.comparisons.rds"
+  ))
+saveRDS(ancestry.bootstrap.empirical.skew.bonferroni.chromosome.comparisons,
+  file.path(
+    OUTPUT.DIR,
+    "ancestry.bootstrap.empirical.skew.bonferroni.chromosome.comparisons.rds"
+    )
+  )
+saveRDS(ancestry.bootstrap.empirical.skew.bonferroni.genome.comparisons,
+  file.path(
+    OUTPUT.DIR,
+    "ancestry.bootstrap.empirical.skew.bonferroni.genome.comparisons.rds"
+    )
+  )
 saveRDS(ancestry.bootstrap.simulation.95.comparisons, file.path(
   OUTPUT.DIR, "ancestry.bootstrap.simulation.95.comparisons.rds"
   ))
@@ -1100,11 +1268,16 @@ saveRDS(ancestry.bootstrap.simulation.bonferroni.comparisons, file.path(
   ))
 print(ancestry.bootstrap.tcd.1kg.bar)
 print(ancestry.bootstrap.all.datatypes.adx.asw.bar)
+print(ancestry.bootstrap.all.datatypes.adx.asw.skew.bar)
 print(ancestry.bootstrap.tcd.1kg.histogram)
 print(ancestry.bootstrap.all.datatypes.adx.asw.histogram)
 print(ancestry.bootstrap.empirical.95.chromosome.comparisons)
 print(ancestry.bootstrap.empirical.95.genome.comparisons)
 print(ancestry.bootstrap.empirical.bonferroni.chromosome.comparisons)
 print(ancestry.bootstrap.empirical.bonferroni.genome.comparisons)
+print(ancestry.bootstrap.empirical.skew.95.chromosome.comparisons)
+print(ancestry.bootstrap.empirical.skew.95.genome.comparisons)
+print(ancestry.bootstrap.empirical.skew.bonferroni.chromosome.comparisons)
+print(ancestry.bootstrap.empirical.skew.bonferroni.genome.comparisons)
 print(ancestry.bootstrap.simulation.95.comparisons)
 print(ancestry.bootstrap.simulation.bonferroni.comparisons)
