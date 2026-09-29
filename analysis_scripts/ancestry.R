@@ -938,15 +938,6 @@ prepare.ancestry.bootstrap.contrast.plot.data <- function(
           CATEGORICAL.BAR.DODGE / n_distinct(contrast)
       ) %>%
     ungroup() %>%
-    group_by(statistic) %>%
-    mutate(
-      interval.span = pmax(
-        max(ci.upper) - min(ci.lower), max(abs(c(ci.lower, ci.upper))) * 0.05,
-        0.01
-        ),
-      marker.position = ci.upper + interval.span * 0.06
-      ) %>%
-    ungroup() %>%
     arrange(statistic, chromosome, contrast)
   return(plotted)
   }
@@ -967,21 +958,23 @@ make.ancestry.bootstrap.contrast.plot <- function(
       linewidth = CATEGORICAL.BAR.LINEWIDTH
       ) +
     geom_point(size = 2.2) +
-    geom_text(
+    geom_point(
       data = filter(data, significant),
-      aes(
-        x = plot.x, y = marker.position, label = "*", group = contrast
-        ),
-      color = "red", inherit.aes = FALSE, size = 5
+      aes(x = plot.x, y = difference, fill = contrast, group = contrast),
+      shape = 21, color = "red", size = 2.2,
+      stroke = CATEGORICAL.BAR.LINEWIDTH, inherit.aes = FALSE
       ) +
     scale_color_manual(
       values = PLOT.STYLES$contrast.colors,
       labels = PLOT.STYLES$contrast.labels
       ) +
+    scale_fill_manual(
+      values = PLOT.STYLES$contrast.colors, guide = "none"
+      ) +
     scale_y_continuous(expand = expansion(mult = c(0.05, 0.15))) +
     labs(
       x = "Chromosome",
-      y = "Difference", color = "Contrast",
+      y = "Difference", color = NULL,
       title = title
       ) +
     scale_x_continuous(
@@ -990,7 +983,8 @@ make.ancestry.bootstrap.contrast.plot <- function(
       ) +
     theme_bw(base_size = PLOT.BASE.SIZE) +
     theme(
-      legend.position = "bottom",
+      legend.position = "top",
+      legend.title = element_blank(),
       strip.background = element_rect(fill = "grey92"),
       panel.grid.minor = element_blank()
       )
