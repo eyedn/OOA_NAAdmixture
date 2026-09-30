@@ -8,10 +8,6 @@
 # kinship.R
 # ______________________________________________________________________________
 
-# pattern: Mixed (unavoidable)
-# Reason: This analysis script combines Parquet I/O, bootstrap calculations,
-# and plot persistence.
-
 
 # set up ----
 options(scipen = 999)

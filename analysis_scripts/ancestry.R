@@ -8,10 +8,6 @@
 # ancestry.R
 # ______________________________________________________________________________
 
-# pattern: Mixed (unavoidable)
-# Reason: This analysis script combines Parquet I/O, bootstrap calculations,
-# and plot persistence.
-
 
 # set up ----
 options(scipen = 999)
@@ -1264,7 +1260,7 @@ print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr1)
 # print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr22)
 # print(ancestry.bootstrap.empirical.95.chromosome.comparisons)
 # print(ancestry.bootstrap.empirical.95.genome.comparisons)
-print(ancestry.bootstrap.empirical.bonferroni.chromosome.comparisons)
+# print(ancestry.bootstrap.empirical.bonferroni.chromosome.comparisons)
 print(ancestry.bootstrap.empirical.bonferroni.genome.comparisons)
 # print(ancestry.bootstrap.simulation.95.comparisons)
 print(ancestry.bootstrap.simulation.bonferroni.comparisons)

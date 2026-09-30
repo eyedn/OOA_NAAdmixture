@@ -8,10 +8,6 @@
 # diversity.R
 # ______________________________________________________________________________
 
-# pattern: Mixed (unavoidable)
-# Reason: This analysis script combines Parquet I/O, bootstrap calculations,
-# and plot persistence.
-
 
 # set up ----
 options(scipen = 999)
@@ -1297,7 +1293,7 @@ print(diversity.bootstrap.plots$all.datatypes.adx.asw)
 # print(diversity.population.contrast.plots$tc.tcd$`95`)
 print(diversity.population.contrast.plots$tc.tcd$bonferroni)
 # print(diversity.population.contrast.plots$lg.lgd$`95`)
-print(diversity.population.contrast.plots$lg.lgd$bonferroni)
+# print(diversity.population.contrast.plots$lg.lgd$bonferroni)
 print(diversity.population.contrast.plots$empirical)
 # print(diversity.simulation.contrast.plots$`95`)
 print(diversity.simulation.contrast.plots$bonferroni)

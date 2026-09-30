@@ -8,10 +8,6 @@
 # ld_decay.R
 # ______________________________________________________________________________
 
-# pattern: Mixed (unavoidable)
-# Reason: This analysis script combines Parquet I/O, bootstrap calculations,
-# and plot persistence.
-
 
 # set up ----
 options(scipen = 999)
@@ -1007,10 +1003,10 @@ saveRDS(ld.simulation.contrast.plots$bonferroni, file.path(
   ))
 
 print(ld.bootstrap.tcd.1kg.all.lines)
-print(ld.bootstrap.tcd.1kg.role.interval)
+# print(ld.bootstrap.tcd.1kg.role.interval)
 print(ld.bootstrap.tcd.1kg.datatype.interval)
 print(ld.bootstrap.all.datatypes.adx.asw.all.lines)
-print(ld.bootstrap.all.datatypes.adx.asw.datatype.interval)
+# print(ld.bootstrap.all.datatypes.adx.asw.datatype.interval)
 # print(ld.population.contrast.plots$tc$`95`)
 print(ld.population.contrast.plots$tc$bonferroni)
 # print(ld.population.contrast.plots$tcd$`95`)
