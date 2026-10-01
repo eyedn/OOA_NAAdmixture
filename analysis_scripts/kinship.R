@@ -44,7 +44,7 @@ PLOT.BASE.SIZE <- 24
 CATEGORICAL.BAR.LINEWIDTH <- 1
 DENSE.BAR.WIDTH.MULTIPLIER <- 0.8
 DENSE.BAR.LINEWIDTH <- 0.75
-KINSHIP.CONTRAST.BOOTSTRAP.REPLICATES <- 1000L
+KINSHIP.CONTRAST.BOOTSTRAP.REPLICATES <- 100000L
 # per comparison-set Bonferroni family: 3 contrasts x 25 bins.
 KINSHIP.CONTRAST.FAMILY.SIZE <- 75L
 KINSHIP.CONTRAST.X.LIMITS <- c(-0.20, 0.05)
@@ -57,10 +57,10 @@ KINSHIP.POPULATION.CONTRASTS <- tribble(
   )
 KINSHIP.SIMULATION.CONTRAST.SOURCES <- SOURCE.LEVELS[1:4]
 KINSHIP.SIMULATION.CONTRASTS <- tribble(
-  ~contrast, ~left.source, ~right.source,
-  "T.C. - T.C.D.", SOURCE.LEVELS[[1L]], SOURCE.LEVELS[[2L]],
-  "L.G. - L.G.D.", SOURCE.LEVELS[[3L]], SOURCE.LEVELS[[4L]],
-  "T.C. - L.G.", SOURCE.LEVELS[[1L]], SOURCE.LEVELS[[3L]]
+  ~contrast, ~left.source, ~right.source, ~paired,
+  "T.C. - T.C.D.", SOURCE.LEVELS[[1L]], SOURCE.LEVELS[[2L]], TRUE,
+  "L.G. - L.G.D.", SOURCE.LEVELS[[3L]], SOURCE.LEVELS[[4L]], TRUE,
+  "T.C. - L.G.", SOURCE.LEVELS[[1L]], SOURCE.LEVELS[[3L]], FALSE
   )
 KINSHIP.EMPIRICAL.CONTRASTS <- tribble(
   ~contrast, ~left.pop, ~right.pop,
@@ -349,7 +349,8 @@ filter.bootstrap.kinship.plot.view <- function(data, data.types, tag) {
 
 # construct TCD/1kG and all-datatype ADX/ASW kinship plots with intervals
 make.bootstrap.kinship.plot <- function(
-    data, breaks, data.types, title, x.limits, tag
+    data, breaks, data.types, title, x.limits, tag,
+    facet.by.datatype = FALSE
   ) {
   if (length(x.limits) != 2L || any(!is.finite(x.limits))) {
     stop("Kinship x limits must contain two finite values")
@@ -377,6 +378,12 @@ make.bootstrap.kinship.plot <- function(
     labs(title = title, x = "Pairwise KING kinship", y = "Fraction of pairs",
       fill = NULL) +
     guides(fill = guide_legend(order = 1, nrow = 1, byrow = TRUE))
+  if (facet.by.datatype) {
+    plot <- plot + facet_wrap(
+      ~data.type,
+      labeller = labeller(data.type = SOURCE.LABELS)
+      )
+    }
   return(apply.standard.plot.theme(plot))
   }
 
@@ -579,7 +586,9 @@ select.kinship.contrast.bins <- function(data) {
 
 
 # require complete finite per-replicate simulation fractions for contrasts
-validate.kinship.contrast.input <- function(data, sources, populations) {
+validate.kinship.contrast.input <- function(
+    data, sources, populations, canonical.reps = TRUE
+  ) {
   required.columns <- c("data.type", "rep", "chrom", "pop", "xmin",
     "xmax", "xmid", "fraction")
   missing.columns <- setdiff(required.columns, names(data))
@@ -593,15 +602,26 @@ validate.kinship.contrast.input <- function(data, sources, populations) {
     select.kinship.contrast.bins() %>%
     mutate(data.type = as.character(data.type), chrom = as.character(chrom),
       pop = as.character(pop))
-  expected <- crossing(data.type = sources, rep = seq_len(50L),
-    chrom = SELECTED.CHROMOSOMES, pop = populations,
-    xmin = sort(unique(data$xmin)))
   counts <- data %>% count(data.type, rep, chrom, pop, xmin,
     name = "fraction.count")
-  invalid <- expected %>% left_join(counts,
-    by = c("data.type", "rep", "chrom", "pop", "xmin")) %>%
-    mutate(fraction.count = replace_na(fraction.count, 0L)) %>%
-    filter(fraction.count != 1L)
+  invalid <- if (canonical.reps) {
+    expected <- crossing(data.type = sources, rep = seq_len(50L),
+      chrom = SELECTED.CHROMOSOMES, pop = populations,
+      xmin = sort(unique(data$xmin)))
+    expected %>% left_join(counts,
+      by = c("data.type", "rep", "chrom", "pop", "xmin")) %>%
+      mutate(fraction.count = replace_na(fraction.count, 0L)) %>%
+      filter(fraction.count != 1L)
+    } else {
+    counts %>%
+      group_by(data.type, chrom, pop, xmin) %>%
+      summarize(
+        replicate.count = n(),
+        duplicate.count = sum(fraction.count != 1L),
+        .groups = "drop"
+        ) %>%
+      filter(replicate.count != 50L | duplicate.count != 0L)
+    }
   if (nrow(invalid) || any(!is.finite(data$fraction))) {
     stop("Kinship contrast inputs require exactly one finite fraction for ",
       "every source, replicate, population, and bin")
@@ -610,19 +630,27 @@ validate.kinship.contrast.input <- function(data, sources, populations) {
   }
 
 
-# bootstrap a paired left-minus-right kinship fraction difference
+# bootstrap kinship fraction differences with the requested resampling
 summarize.kinship.contrast.bootstrap <- function(
     left.values, right.values, bootstrap.replicates,
-    family.size = KINSHIP.CONTRAST.FAMILY.SIZE
+    family.size = KINSHIP.CONTRAST.FAMILY.SIZE, paired = TRUE
   ) {
   if (length(left.values) != 50L || length(right.values) != 50L ||
       any(!is.finite(left.values)) || any(!is.finite(right.values))) {
-    stop("Kinship contrast bootstraps require 50 finite paired values")
+    stop("Kinship contrast bootstraps require 50 finite values")
     }
   draws <- replicate(bootstrap.replicates, {
-    indices <- sample(seq_along(left.values), length(left.values),
-      replace = TRUE)
-    mean(left.values[indices] - right.values[indices])
+    if (paired) {
+      indices <- sample(seq_along(left.values), length(left.values),
+        replace = TRUE)
+      mean(left.values[indices] - right.values[indices])
+      } else {
+      left.indices <- sample(seq_along(left.values), length(left.values),
+        replace = TRUE)
+      right.indices <- sample(seq_along(right.values), length(right.values),
+        replace = TRUE)
+      mean(left.values[left.indices]) - mean(right.values[right.indices])
+      }
     })
   nominal <- quantile(draws, c(0.025, 0.975), names = FALSE)
   bonferroni.quantile <- 0.05 / (2 * family.size)
@@ -669,13 +697,13 @@ make.kinship.population.contrast.tables <- function(
   }
 
 
-# construct paired ADX simulation-source contrast intervals from histograms
+# independently resample T.C.-L.G.; retain paired source contrasts otherwise
 make.kinship.simulation.contrast.tables <- function(
     data, bootstrap.replicates = KINSHIP.CONTRAST.BOOTSTRAP.REPLICATES,
     seed = RANDOM.SEED
   ) {
   data <- validate.kinship.contrast.input(data,
-    KINSHIP.SIMULATION.CONTRAST.SOURCES, "ADX")
+    KINSHIP.SIMULATION.CONTRAST.SOURCES, "ADX", canonical.reps = FALSE)
   set.seed(seed)
   tables <- map_dfr(
     seq_len(nrow(KINSHIP.SIMULATION.CONTRASTS)), function(index) {
@@ -685,13 +713,13 @@ make.kinship.simulation.contrast.tables <- function(
         xmin == bin) %>% arrange(rep)
       right <- data %>% filter(data.type == contrast$right.source,
         xmin == bin) %>% arrange(rep)
-      if (!identical(left$rep, right$rep)) {
+      if (contrast$paired && !identical(left$rep, right$rep)) {
         stop("Paired kinship contrast replicate IDs must match")
         }
       bind_cols(tibble(xmin = bin, xmax = left$xmax[[1L]],
         xmid = left$xmid[[1L]], contrast = contrast$contrast),
         summarize.kinship.contrast.bootstrap(left$fraction, right$fraction,
-          bootstrap.replicates))
+          bootstrap.replicates, paired = contrast$paired))
       })
       })
   return(tables)
@@ -948,6 +976,18 @@ kinship.bootstrap.all.datatypes.adx.asw <- make.bootstrap.kinship.plot(
   "Pairwise KING kinship: chromosome 1 all ADX sources and ASW",
   x.limits = c(-0.2, 0.05), tag = "all.datatypes.adx.asw"
   )
+kinship.bootstrap.tcd.1kg.datatype.interval <- make.bootstrap.kinship.plot(
+  kinship.summary, kinship.breaks, PLOT.CONFIGS$tcd.1kg,
+  "Pairwise KING kinship: chromosome 1 TCD and 1kG",
+  x.limits = c(-0.1, 0.05), tag = "tcd.1kg", facet.by.datatype = TRUE
+  )
+kinship.bootstrap.all.datatypes.adx.asw.datatype.interval <-
+  make.bootstrap.kinship.plot(
+    kinship.summary, kinship.breaks, PLOT.CONFIGS$all.datatypes.adx.asw,
+    "Pairwise KING kinship: chromosome 1 all ADX sources and ASW",
+    x.limits = c(-0.2, 0.05), tag = "all.datatypes.adx.asw",
+    facet.by.datatype = TRUE
+    )
 
 # persist bootstrap plots before printing figures at the end of the script
 dir.create(OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
@@ -959,6 +999,12 @@ saveRDS(kinship.bootstrap.tcd.1kg, file.path(
   ))
 saveRDS(kinship.bootstrap.all.datatypes.adx.asw, file.path(
   OUTPUT.DIR, "kinship.bootstrap.all.datatypes.adx.asw.rds"
+  ))
+saveRDS(kinship.bootstrap.tcd.1kg.datatype.interval, file.path(
+  OUTPUT.DIR, "kinship.bootstrap.tcd.1kg.datatype.interval.rds"
+  ))
+saveRDS(kinship.bootstrap.all.datatypes.adx.asw.datatype.interval, file.path(
+  OUTPUT.DIR, "kinship.bootstrap.all.datatypes.adx.asw.datatype.interval.rds"
   ))
 saveRDS(kinship.population.contrast.plots$`95`, file.path(
   OUTPUT.DIR, "kinship.population.contrasts.95.rds"
@@ -981,6 +1027,8 @@ saveRDS(kinship.empirical.contrast.plots$bonferroni, file.path(
 
 print(kinship.bootstrap.tcd.1kg)
 print(kinship.bootstrap.all.datatypes.adx.asw)
+print(kinship.bootstrap.tcd.1kg.datatype.interval)
+print(kinship.bootstrap.all.datatypes.adx.asw.datatype.interval)
 # print(kinship.population.contrast.plots$`95`)
 print(kinship.population.contrast.plots$bonferroni)
 # print(kinship.simulation.contrast.plots$`95`)

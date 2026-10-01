@@ -90,7 +90,7 @@ PLOT.BASE.SIZE <- 24
 CATEGORICAL.BAR.LINEWIDTH <- 1
 DENSE.BAR.WIDTH.MULTIPLIER <- 0.8
 DENSE.BAR.LINEWIDTH <- 0.75
-SFS.CONTRAST.BOOTSTRAP.REPLICATES <- 1000L
+SFS.CONTRAST.BOOTSTRAP.REPLICATES <- 100000L
 # per count/proportion Bonferroni family.
 SFS.CONTRAST.FAMILY.SIZE <- 45L
 SFS.POPULATION.CONTRAST.SOURCES <- SOURCE.LEVELS[1:2]
@@ -102,10 +102,10 @@ SFS.POPULATION.CONTRASTS <- tribble(
   )
 SFS.SIMULATION.CONTRAST.SOURCES <- SOURCE.LEVELS[1:4]
 SFS.SIMULATION.CONTRASTS <- tribble(
-  ~contrast, ~left.source, ~right.source,
-  "T.C. - T.C.D.", SOURCE.LEVELS[[1L]], SOURCE.LEVELS[[2L]],
-  "L.G. - L.G.D.", SOURCE.LEVELS[[3L]], SOURCE.LEVELS[[4L]],
-  "T.C. - L.G.", SOURCE.LEVELS[[1L]], SOURCE.LEVELS[[3L]]
+  ~contrast, ~left.source, ~right.source, ~paired,
+  "T.C. - T.C.D.", SOURCE.LEVELS[[1L]], SOURCE.LEVELS[[2L]], TRUE,
+  "L.G. - L.G.D.", SOURCE.LEVELS[[3L]], SOURCE.LEVELS[[4L]], TRUE,
+  "T.C. - L.G.", SOURCE.LEVELS[[1L]], SOURCE.LEVELS[[3L]], FALSE
   )
 SFS.EMPIRICAL.CONTRASTS <- tribble(
   ~contrast, ~left.pop, ~right.pop,
@@ -435,7 +435,9 @@ summarize.sfs.analysis <- function(data) {
 
 
 # require complete, unique, finite selected-chromosome contrast inputs
-validate.sfs.contrast.input <- function(data, sources, populations) {
+validate.sfs.contrast.input <- function(
+    data, sources, populations, canonical.reps = TRUE
+  ) {
   required.columns <- c(
     "data.type", "rep", "chrom", "pop", "minor.allele.count",
     "count", "proportion"
@@ -452,21 +454,33 @@ validate.sfs.contrast.input <- function(data, sources, populations) {
       data.type = as.character(data.type),
       chrom = as.character(chrom), pop = as.character(pop)
       )
-  expected <- crossing(
-    data.type = sources, rep = seq_len(50L),
-    chrom = SELECTED.CHROMOSOMES, pop = populations,
-    minor.allele.count = seq_len(DISPLAY.BIN.MAX)
-    )
   counts <- data %>%
     count(data.type, rep, chrom, pop, minor.allele.count,
       name = "value.count")
-  invalid <- expected %>%
-    left_join(
-      counts,
-      by = c("data.type", "rep", "chrom", "pop", "minor.allele.count")
-      ) %>%
-    mutate(value.count = replace_na(value.count, 0L)) %>%
-    filter(value.count != 1L)
+  invalid <- if (canonical.reps) {
+    expected <- crossing(
+      data.type = sources, rep = seq_len(50L),
+      chrom = SELECTED.CHROMOSOMES, pop = populations,
+      minor.allele.count = seq_len(DISPLAY.BIN.MAX)
+      )
+    expected %>%
+      left_join(
+        counts,
+        by = c("data.type", "rep", "chrom", "pop",
+          "minor.allele.count")
+        ) %>%
+      mutate(value.count = replace_na(value.count, 0L)) %>%
+      filter(value.count != 1L)
+    } else {
+    counts %>%
+      group_by(data.type, chrom, pop, minor.allele.count) %>%
+      summarize(
+        replicate.count = n(),
+        duplicate.count = sum(value.count != 1L),
+        .groups = "drop"
+        ) %>%
+      filter(replicate.count != 50L | duplicate.count != 0L)
+    }
   if (nrow(invalid) || any(!is.finite(data$count)) ||
       any(!is.finite(data$proportion))) {
     stop("SFS contrast inputs require exactly one finite value for every ",
@@ -476,19 +490,27 @@ validate.sfs.contrast.input <- function(data, sources, populations) {
   }
 
 
-# bootstrap a paired left-minus-right selected-chromosome SFS difference
+# bootstrap selected-chromosome SFS differences with the requested resampling
 summarize.sfs.contrast.bootstrap <- function(
     left.values, right.values, bootstrap.replicates,
-    family.size = SFS.CONTRAST.FAMILY.SIZE
+    family.size = SFS.CONTRAST.FAMILY.SIZE, paired = TRUE
   ) {
   if (length(left.values) != 50L || length(right.values) != 50L ||
       any(!is.finite(left.values)) || any(!is.finite(right.values))) {
-    stop("SFS contrast bootstraps require 50 finite paired values")
+    stop("SFS contrast bootstraps require 50 finite values")
     }
   draws <- replicate(bootstrap.replicates, {
-    indices <- sample(seq_along(left.values), length(left.values),
-      replace = TRUE)
-    mean(left.values[indices] - right.values[indices])
+    if (paired) {
+      indices <- sample(seq_along(left.values), length(left.values),
+        replace = TRUE)
+      mean(left.values[indices] - right.values[indices])
+      } else {
+      left.indices <- sample(seq_along(left.values), length(left.values),
+        replace = TRUE)
+      right.indices <- sample(seq_along(right.values), length(right.values),
+        replace = TRUE)
+      mean(left.values[left.indices]) - mean(right.values[right.indices])
+      }
     })
   nominal <- quantile(draws, c(0.025, 0.975), names = FALSE)
   bonferroni.quantile <- 0.05 / (2 * family.size)
@@ -547,13 +569,13 @@ make.sfs.population.contrast.tables <- function(
   }
 
 
-# construct paired ADX source contrast intervals for count and proportion
+# independently resample T.C.-L.G.; retain paired source contrasts otherwise
 make.sfs.simulation.contrast.tables <- function(
     data, bootstrap.replicates = SFS.CONTRAST.BOOTSTRAP.REPLICATES,
     seed = 1L
   ) {
   data <- validate.sfs.contrast.input(
-    data, SFS.SIMULATION.CONTRAST.SOURCES, "ADX"
+    data, SFS.SIMULATION.CONTRAST.SOURCES, "ADX", canonical.reps = FALSE
     )
   set.seed(seed)
   tables <- map_dfr(seq_len(nrow(SFS.SIMULATION.CONTRASTS)), function(index) {
@@ -566,7 +588,7 @@ make.sfs.simulation.contrast.tables <- function(
         right <- data %>% filter(
           data.type == contrast$right.source, minor.allele.count == bin
           ) %>% arrange(rep)
-        if (!identical(left$rep, right$rep)) {
+        if (contrast$paired && !identical(left$rep, right$rep)) {
           stop("Paired SFS contrast replicate IDs must match")
           }
         bind_cols(
@@ -575,7 +597,8 @@ make.sfs.simulation.contrast.tables <- function(
             measure = measure
             ),
           summarize.sfs.contrast.bootstrap(
-            left[[measure]], right[[measure]], bootstrap.replicates
+            left[[measure]], right[[measure]], bootstrap.replicates,
+            paired = contrast$paired
             )
           )
         })
@@ -832,7 +855,7 @@ filter.plot.view <- function(data, data.types, tag) {
 # build one scoped shared dodged-bar SFS plot
 make.sfs.plot <- function(
     data, value.column, y.label, pseudo.log, data.types, tag,
-    show.all = FALSE
+    show.all = FALSE, facet.by.datatype = FALSE
   ) {
   displayed <- filter.plot.view(data, data.types, tag) %>%
     filter(
@@ -895,6 +918,12 @@ make.sfs.plot <- function(
         )
     } else {
     plot <- plot + scale_y_continuous()
+    }
+  if (facet.by.datatype) {
+    plot <- plot + facet_wrap(
+      ~data.type,
+      labeller = labeller(data.type = SFS.SOURCE.LABELS)
+      )
     }
   return(apply.standard.plot.theme(plot))
   }
@@ -1047,6 +1076,24 @@ sfs.bootstrap.proportion.plots <- imap(list(
     show.all = FALSE
     ))
   })
+sfs.bootstrap.count.datatype.interval.plots <- imap(list(
+  tcd.1kg = PLOT.CONFIGS$tcd.1kg,
+  all.datatypes.adx.asw = PLOT.CONFIGS$all.datatypes.adx.asw
+  ), function(data.types, tag) {
+  return(make.sfs.plot(
+    sfs.summaries$count, "mean", "Projected site count", TRUE,
+    data.types, tag, show.all = FALSE, facet.by.datatype = TRUE
+    ))
+  })
+sfs.bootstrap.proportion.datatype.interval.plots <- imap(list(
+  tcd.1kg = PLOT.CONFIGS$tcd.1kg,
+  all.datatypes.adx.asw = PLOT.CONFIGS$all.datatypes.adx.asw
+  ), function(data.types, tag) {
+  return(make.sfs.plot(
+    sfs.summaries$proportion, "mean", "Proportion of segregating sites",
+    FALSE, data.types, tag, show.all = FALSE, facet.by.datatype = TRUE
+    ))
+  })
 
 # persist chromosome-1 bootstrap count and proportion plots before printing.
 dir.create(OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
@@ -1062,6 +1109,22 @@ saveRDS(sfs.bootstrap.proportion.plots$tcd.1kg, file.path(
 saveRDS(sfs.bootstrap.proportion.plots$all.datatypes.adx.asw, file.path(
   OUTPUT.DIR, "sfs.bootstrap.proportion.all.datatypes.adx.asw.rds"
   ))
+saveRDS(sfs.bootstrap.count.datatype.interval.plots$tcd.1kg, file.path(
+  OUTPUT.DIR, "sfs.bootstrap.count.tcd.1kg.datatype.interval.rds"
+  ))
+saveRDS(sfs.bootstrap.count.datatype.interval.plots$all.datatypes.adx.asw,
+  file.path(OUTPUT.DIR,
+    "sfs.bootstrap.count.all.datatypes.adx.asw.datatype.interval.rds"
+    ))
+saveRDS(sfs.bootstrap.proportion.datatype.interval.plots$tcd.1kg, file.path(
+  OUTPUT.DIR, "sfs.bootstrap.proportion.tcd.1kg.datatype.interval.rds"
+  ))
+saveRDS(
+  sfs.bootstrap.proportion.datatype.interval.plots$all.datatypes.adx.asw,
+  file.path(OUTPUT.DIR,
+    "sfs.bootstrap.proportion.all.datatypes.adx.asw.datatype.interval.rds"
+    )
+  )
 saveRDS(sfs.population.contrast.plots$tc.tcd$`95`, file.path(
   OUTPUT.DIR, "sfs.population.contrasts.tc.tcd.95.rds"
   ))
@@ -1082,6 +1145,10 @@ print(sfs.bootstrap.count.plots$tcd.1kg)
 print(sfs.bootstrap.count.plots$all.datatypes.adx.asw)
 print(sfs.bootstrap.proportion.plots$tcd.1kg)
 print(sfs.bootstrap.proportion.plots$all.datatypes.adx.asw)
+print(sfs.bootstrap.count.datatype.interval.plots$tcd.1kg)
+print(sfs.bootstrap.count.datatype.interval.plots$all.datatypes.adx.asw)
+print(sfs.bootstrap.proportion.datatype.interval.plots$tcd.1kg)
+print(sfs.bootstrap.proportion.datatype.interval.plots$all.datatypes.adx.asw)
 # print(sfs.population.contrast.plots$tc.tcd$`95`)
 print(sfs.population.contrast.plots$tc.tcd$bonferroni)
 print(sfs.population.contrast.plots$empirical)

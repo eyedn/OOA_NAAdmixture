@@ -30,7 +30,7 @@ SIMULATION.K <- 2L
 EMPIRICAL.K <- 2L
 RANDOM.SEED <- 123L
 DOWNSAMPLE.SIZE <- 50L
-BOOTSTRAP.REPLICATES <- 1000L
+BOOTSTRAP.REPLICATES <- 100000L
 # per-statistic Bonferroni family for chromosome-level ancestry comparisons.
 ANCESTRY.BOOTSTRAP.CHROMOSOME.FAMILY.SIZE <- 154L
 # per-statistic Bonferroni family for chromosome versus genome-wide ASW.
