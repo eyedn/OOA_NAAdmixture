@@ -911,7 +911,7 @@ prepare.ancestry.bootstrap.contrast.plot.data <- function(
       contrast = factor(contrast, levels = config$contrasts),
       statistic = factor(statistic, levels = statistics),
       significant = ci.lower > 0 | ci.upper < 0,
-      point.color = if_else(significant, "red", as.character(contrast)),
+      point.color = if_else(significant, "red", "black"),
       contrast.color = unname(PLOT.STYLES$contrast.colors[as.character(
         contrast
         )]),
@@ -950,10 +950,10 @@ make.ancestry.bootstrap.contrast.plot <- function(
     geom_point(
       aes(fill = contrast, color = point.color),
       position = position_dodge(width = CATEGORICAL.BAR.DODGE),
-      shape = 21, size = 2.5, stroke = CATEGORICAL.BAR.LINEWIDTH
+      shape = 21, size = 3, stroke = CATEGORICAL.BAR.LINEWIDTH
       ) +
     scale_color_manual(
-      values = c(red = "red", PLOT.STYLES$contrast.colors),
+      values = c(red = "red", black = "black", PLOT.STYLES$contrast.colors),
       guide = "none") +
     scale_fill_manual(
       values = PLOT.STYLES$contrast.colors, breaks = active.contrasts,
@@ -961,7 +961,8 @@ make.ancestry.bootstrap.contrast.plot <- function(
       ) +
     scale_y_continuous(expand = expansion(mult = c(0.05, 0.15))) +
     labs(
-      x = "Chromosome", y = "Difference", color = NULL, title = title,
+      x = "Chromosome", y = "Difference", color = NULL, fill = NULL,
+      title = title,
       subtitle = ancestry.inference.subtitle()
       ) +
     guides(

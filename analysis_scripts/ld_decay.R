@@ -616,7 +616,7 @@ prepare.ld.population.contrast.plot.data <- function(
         contrast, levels = LD.POPULATION.CONTRASTS$contrast
         ),
       point.color = if_else(
-        ci.lower > 0 | ci.upper < 0, "red", as.character(contrast)
+        ci.lower > 0 | ci.upper < 0, "red", "black"
         )
       )
   return(list(
@@ -651,7 +651,7 @@ prepare.ld.simulation.contrast.plot.data <- function(
         contrast, levels = LD.SIMULATION.CONTRASTS$contrast
         ),
       point.color = if_else(
-        ci.lower > 0 | ci.upper < 0, "red", as.character(contrast)
+        ci.lower > 0 | ci.upper < 0, "red", "black"
         )
       )
   return(list(
@@ -702,11 +702,13 @@ make.ld.simulation.contrast.plot <- function(
       aes(
         distance_bin_bp, difference, color = point.color, fill = contrast
         ),
-      shape = 21, size = 2.5,
+      shape = 21, size = 3,
       stroke = LD.CONTRAST.LINEWIDTH, inherit.aes = FALSE
       ) +
     facet_wrap(~contrast, nrow = 1) +
-    scale_color_manual(values = c(colors, red = "red"), guide = "none") +
+    scale_color_manual(
+      values = c(colors, red = "red", black = "black"), guide = "none"
+      ) +
     scale_fill_manual(
       values = colors, breaks = active.contrasts, guide = "none"
       ) +

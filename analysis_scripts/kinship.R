@@ -779,7 +779,7 @@ prepare.kinship.contrast.plot.data <- function(
       contrast = factor(contrast, levels = contrasts),
       outside.zero = ci.lower > 0 | ci.upper < 0,
       point.color = if_else(
-        outside.zero, "red", as.character(contrast)
+        outside.zero, "red", "black"
         )
       )
   if ("data.type" %in% names(displayed)) {
@@ -812,17 +812,17 @@ make.kinship.contrast.plot <- function(data, interval.label, title) {
       ) +
     geom_point(
       aes(fill = contrast, color = point.color), position = dodge,
-      shape = 21, size = 2.5, stroke = CATEGORICAL.BAR.LINEWIDTH
+      shape = 21, size = 3, stroke = CATEGORICAL.BAR.LINEWIDTH
       ) +
     coord_cartesian(xlim = KINSHIP.CONTRAST.X.LIMITS) +
     scale_color_manual(
-      values = c(red = "red", KINSHIP.CONTRAST.COLORS),
+      values = c(red = "red", black = "black", KINSHIP.CONTRAST.COLORS),
       guide = "none") +
     scale_fill_manual(values = KINSHIP.CONTRAST.COLORS[active.contrasts],
       breaks = active.contrasts,
       labels = KINSHIP.CONTRAST.LABELS[active.contrasts]) +
     labs(x = "Pairwise KING kinship", y = "Left minus right fraction of pairs",
-      color = NULL, title = title,
+      color = NULL, fill = NULL, title = title,
       subtitle = paste(interval.label, "interval")) +
     guides(
       fill = guide_legend(

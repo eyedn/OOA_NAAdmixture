@@ -662,7 +662,7 @@ prepare.diversity.simulation.contrast.plot.data <- function(
     mutate(
       simulated.outside = ci.lower > 0 | ci.upper < 0,
       point.color = if_else(
-        simulated.outside, "red", as.character(contrast)
+        simulated.outside, "red", "black"
         )
       ) %>%
     ungroup()
@@ -717,11 +717,11 @@ make.diversity.contrast.plot <- function(
     geom_point(
       aes(fill = contrast, color = point.color),
       position = position_dodge(width = CATEGORICAL.BAR.DODGE),
-      shape = 21, size = 2.5, stroke = CATEGORICAL.BAR.LINEWIDTH
+      shape = 21, size = 3, stroke = CATEGORICAL.BAR.LINEWIDTH
       ) +
     facet.layer +
     scale_color_manual(
-      values = c(red = "red", contrast.colors),
+      values = c(red = "red", black = "black", contrast.colors),
       guide = "none") +
     scale_fill_manual(
       values = contrast.colors, breaks = active.contrasts,
@@ -747,7 +747,7 @@ make.diversity.contrast.plot <- function(
       ) +
     scale_y_continuous(expand = expansion(mult = c(0.05, 0.17))) +
     labs(
-      x = "Chromosome", y = "Difference", color = NULL,
+      x = "Chromosome", y = "Difference", color = NULL, fill = NULL,
       title = paste(
         if (interval.type == "bonferroni") "Bonferroni" else "95%",
         if (contrast.type == "population") {
@@ -776,10 +776,10 @@ make.diversity.population.empirical.contrast.plot <- function(data) {
       show.legend = FALSE
       ) +
     geom_point(
-      aes(plot.x, difference, fill = contrast, color = contrast),
+      aes(plot.x, difference, fill = contrast),
       position = position_dodge(width = CATEGORICAL.BAR.DODGE),
-      shape = 21, size = 2.5, stroke = CATEGORICAL.BAR.LINEWIDTH,
-      inherit.aes = FALSE
+      shape = 21, size = 3, stroke = CATEGORICAL.BAR.LINEWIDTH,
+      color = "black", inherit.aes = FALSE
       ) +
     facet_grid(
       rows = vars(stat), scales = "free_y",
@@ -789,12 +789,15 @@ make.diversity.population.empirical.contrast.plot <- function(data) {
       values = PLOT.STYLES$contrast.colors, breaks = active.contrasts,
       labels = PLOT.STYLES$contrast.labels[active.contrasts]
       ) +
-    scale_fill_manual(values = PLOT.STYLES$contrast.colors, guide = "none") +
+    scale_fill_manual(
+      values = PLOT.STYLES$contrast.colors, breaks = active.contrasts,
+      labels = PLOT.STYLES$contrast.labels[active.contrasts]
+      ) +
     scale_linetype_manual(
       values = PLOT.STYLES$contrast.linetypes, guide = "none"
       ) +
     guides(
-      color = guide_legend(
+      fill = guide_legend(
         override.aes = list(
           shape = 21,
           fill = unname(PLOT.STYLES$contrast.colors[active.contrasts]),
@@ -806,7 +809,7 @@ make.diversity.population.empirical.contrast.plot <- function(data) {
       breaks = seq_along(CHROMOSOMES), labels = CHROMOSOMES
       ) +
     labs(
-      x = "Chromosome", y = "Difference", color = NULL,
+      x = "Chromosome", y = "Difference", color = NULL, fill = NULL,
       title = "Empirical population diversity differences"
       ) +
     theme(legend.title = element_blank())

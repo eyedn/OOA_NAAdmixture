@@ -666,7 +666,7 @@ prepare.sfs.contrast.plot.data <- function(
       measure = factor(measure, levels = c("count", "proportion")),
       outside.zero = ci.lower > 0 | ci.upper < 0,
       point.color = if_else(
-        outside.zero, "red", as.character(contrast)
+        outside.zero, "red", "black"
         )
       )
   if ("data.type" %in% names(displayed)) {
@@ -700,11 +700,11 @@ make.sfs.contrast.plot <- function(data, interval.label, title) {
       ) +
     geom_point(
       aes(fill = contrast, color = point.color), position = SFS.DODGE,
-      shape = 21, size = 2.5, stroke = CATEGORICAL.BAR.LINEWIDTH
+      shape = 21, size = 3, stroke = CATEGORICAL.BAR.LINEWIDTH
       ) +
     scale_x_continuous(breaks = seq_len(DISPLAY.BIN.MAX)) +
     scale_color_manual(
-      values = c(red = "red", SFS.CONTRAST.COLORS),
+      values = c(red = "red", black = "black", SFS.CONTRAST.COLORS),
       guide = "none") +
     scale_fill_manual(
       values = SFS.CONTRAST.COLORS[active.contrasts],
@@ -713,7 +713,8 @@ make.sfs.contrast.plot <- function(data, interval.label, title) {
       ) +
     labs(
       x = "Minor allele count bin", y = "Left population/source minus right",
-      color = NULL, title = title, subtitle = paste(interval.label, "interval")
+      color = NULL, fill = NULL, title = title,
+      subtitle = paste(interval.label, "interval")
       ) +
     guides(
       fill = guide_legend(
@@ -755,20 +756,17 @@ make.sfs.empirical.contrast.plot <- function(data) {
     geom_point(
       aes(
         minor.allele.count, difference, fill = contrast,
-        color = contrast, group = contrast
+        group = contrast
         ),
       position = SFS.DODGE,
-      shape = 21, size = 2.5, stroke = CATEGORICAL.BAR.LINEWIDTH,
-      inherit.aes = FALSE
+      shape = 21, size = 3, stroke = CATEGORICAL.BAR.LINEWIDTH,
+      color = "black", inherit.aes = FALSE
       ) +
     scale_x_continuous(breaks = seq_len(DISPLAY.BIN.MAX)) +
     scale_fill_manual(
       values = SFS.CONTRAST.COLORS[active.contrasts],
       breaks = active.contrasts,
       labels = SFS.CONTRAST.LABELS[active.contrasts]
-      ) +
-    scale_color_manual(
-      values = SFS.CONTRAST.COLORS[active.contrasts], guide = "none"
       ) +
     labs(
       x = "Minor allele count bin", y = "Left population minus right",
