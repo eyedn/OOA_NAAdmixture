@@ -31,8 +31,10 @@ EMPIRICAL.K <- 2L
 RANDOM.SEED <- 123L
 DOWNSAMPLE.SIZE <- 50L
 BOOTSTRAP.REPLICATES <- 1000L
-ANCESTRY.BOOTSTRAP.CHROMOSOME.FAMILY.SIZE <- 308L
-ANCESTRY.BOOTSTRAP.GENOME.ASW.FAMILY.SIZE <- 176L
+# per-statistic Bonferroni family for chromosome-level ancestry comparisons.
+ANCESTRY.BOOTSTRAP.CHROMOSOME.FAMILY.SIZE <- 154L
+# per-statistic Bonferroni family for chromosome versus genome-wide ASW.
+ANCESTRY.BOOTSTRAP.GENOME.ASW.FAMILY.SIZE <- 88L
 HISTOGRAM.BREAKS <- seq(0, 1, by = 0.05)
 PLOT.EMPIRICAL.METHOD <- "ADMIXTURE"
 PLOT.SAMPLE.SET <- "downsampled"
@@ -811,9 +813,15 @@ make.ancestry.bootstrap.comparison.tables <- function(
       ANCESTRY.BOOTSTRAP.GENOME.ASW.FAMILY.SIZE, bootstrap.replicates
       )
     })
-  if (nrow(chromosome.tables) != ANCESTRY.BOOTSTRAP.CHROMOSOME.FAMILY.SIZE ||
-      nrow(genome.tables) != ANCESTRY.BOOTSTRAP.GENOME.ASW.FAMILY.SIZE) {
-    stop("Bootstrap ancestry comparison family size does not match its table")
+  if (nrow(chromosome.tables) != 308L) {
+    stop(
+      "Bootstrap chromosome ancestry comparison table row count is incorrect"
+      )
+    }
+  if (nrow(genome.tables) != 176L) {
+    stop(
+      "Bootstrap genome-ASW ancestry comparison table row count is incorrect"
+      )
     }
   return(list(
     chromosome.comparisons = chromosome.tables,

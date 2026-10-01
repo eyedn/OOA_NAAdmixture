@@ -42,6 +42,7 @@ PLOT.BASE.SIZE <- 24
 LD.CONTRAST.LINEWIDTH <- 1
 LD.PLOT.DISTANCE.BINS <- seq(5000, 200000, by = 5000)
 LD.POPULATION.CONTRAST.BOOTSTRAP.REPLICATES <- 1000L
+# per displayed comparison-set Bonferroni family: 3 contrasts x 40 bins.
 LD.POPULATION.CONTRAST.FAMILY.SIZE <- 120L
 LD.POPULATION.CONTRAST.SOURCES <- SOURCE.LEVELS[c(1L, 2L)]
 LD.SIMULATION.CONTRAST.SOURCES <- SOURCE.LEVELS[seq_len(4L)]
@@ -720,6 +721,10 @@ make.ld.simulation.contrast.plot <- function(
 
 # construct a direct empirical LD population-difference plot without intervals
 make.ld.population.empirical.contrast.plot <- function(data) {
+  data <- data %>%
+    mutate(contrast = factor(
+      contrast, levels = LD.POPULATION.CONTRASTS$contrast
+      ))
   plot <- ggplot(data, aes(distance_bin_bp, difference, color = contrast)) +
     geom_hline(yintercept = 0, linetype = "dashed", linewidth = 1) +
     geom_line(linewidth = 1) +
