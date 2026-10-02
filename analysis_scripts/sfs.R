@@ -14,6 +14,11 @@ options(scipen = 999)
 library(tidyverse)
 library(nanoparquet)
 library(scales)
+source(if (file.exists("analysis_scripts/bootstrap_parallel.R")) {
+  "analysis_scripts/bootstrap_parallel.R"
+  } else {
+  "bootstrap_parallel.R"
+  })
 
 
 SIM.TC.DATA.DIR <- "~/scratch/OOA_NAAdmixture_2T12Consistent/stats"
@@ -535,36 +540,44 @@ make.sfs.population.contrast.tables <- function(
   data <- validate.sfs.contrast.input(
     data, SFS.POPULATION.CONTRAST.SOURCES, c("AFR", "ADX", "EUR")
     )
-  set.seed(seed)
-  tables <- map_dfr(SFS.POPULATION.CONTRAST.SOURCES, function(source) {
-    map_dfr(seq_len(nrow(SFS.POPULATION.CONTRASTS)), function(index) {
-      contrast <- SFS.POPULATION.CONTRASTS[index, ]
-      map_dfr(c("count", "proportion"), function(measure) {
-        map_dfr(seq_len(DISPLAY.BIN.MAX), function(bin) {
-          left <- data %>% filter(
-            data.type == source, pop == contrast$left.pop,
-            minor.allele.count == bin
-            ) %>% arrange(rep)
-          right <- data %>% filter(
-            data.type == source, pop == contrast$right.pop,
-            minor.allele.count == bin
-            ) %>% arrange(rep)
-          if (!identical(left$rep, right$rep)) {
-            stop("Paired SFS contrast replicate IDs must match")
-            }
-          bind_cols(
-            tibble(
-              data.type = source, minor.allele.count = bin,
-              contrast = contrast$contrast, measure = measure
-              ),
-            summarize.sfs.contrast.bootstrap(
-              left[[measure]], right[[measure]], bootstrap.replicates
-              )
-            )
-          })
-        })
-      })
-    })
+  work <- crossing(
+    data.type = SFS.POPULATION.CONTRAST.SOURCES,
+    contrast.index = seq_len(nrow(SFS.POPULATION.CONTRASTS)),
+    measure = c("count", "proportion"),
+    minor.allele.count = seq_len(DISPLAY.BIN.MAX)
+    ) %>%
+    mutate(contrast.data = map(contrast.index,
+      ~ SFS.POPULATION.CONTRASTS[.x, ])) %>%
+    mutate(
+      left = pmap(list(data.type, contrast.data, minor.allele.count),
+        function(data.type, contrast.data, minor.allele.count) data %>%
+          filter(data.type == .env$data.type,
+            pop == contrast.data$left.pop,
+            minor.allele.count == .env$minor.allele.count) %>% arrange(rep)),
+      right = pmap(list(data.type, contrast.data, minor.allele.count),
+        function(data.type, contrast.data, minor.allele.count) data %>%
+          filter(data.type == .env$data.type,
+            pop == contrast.data$right.pop,
+            minor.allele.count == .env$minor.allele.count) %>% arrange(rep))
+      )
+  if (any(pmap_lgl(work[, c("left", "right")],
+      ~ !identical(..1$rep, ..2$rep)))) {
+    stop("Paired SFS contrast replicate IDs must match")
+    }
+  tables <- bind_rows(bootstrap.parallel.pmap(
+    work,
+    function(data.type, contrast.index, measure, minor.allele.count,
+             contrast.data, left, right) {
+      bind_cols(
+        tibble(data.type = data.type, minor.allele.count = minor.allele.count,
+          contrast = contrast.data$contrast, measure = measure),
+        summarize.sfs.contrast.bootstrap(
+          left[[measure]], right[[measure]], bootstrap.replicates
+          )
+        )
+      },
+    seed = seed
+    ))
   return(tables)
   }
 
@@ -577,33 +590,44 @@ make.sfs.simulation.contrast.tables <- function(
   data <- validate.sfs.contrast.input(
     data, SFS.SIMULATION.CONTRAST.SOURCES, "ADX", canonical.reps = FALSE
     )
-  set.seed(seed)
-  tables <- map_dfr(seq_len(nrow(SFS.SIMULATION.CONTRASTS)), function(index) {
-    contrast <- SFS.SIMULATION.CONTRASTS[index, ]
-    map_dfr(c("count", "proportion"), function(measure) {
-      map_dfr(seq_len(DISPLAY.BIN.MAX), function(bin) {
-        left <- data %>% filter(
-          data.type == contrast$left.source, minor.allele.count == bin
-          ) %>% arrange(rep)
-        right <- data %>% filter(
-          data.type == contrast$right.source, minor.allele.count == bin
-          ) %>% arrange(rep)
-        if (contrast$paired && !identical(left$rep, right$rep)) {
-          stop("Paired SFS contrast replicate IDs must match")
-          }
-        bind_cols(
-          tibble(
-            minor.allele.count = bin, contrast = contrast$contrast,
-            measure = measure
-            ),
-          summarize.sfs.contrast.bootstrap(
-            left[[measure]], right[[measure]], bootstrap.replicates,
-            paired = contrast$paired
-            )
+  work <- crossing(
+    contrast.index = seq_len(nrow(SFS.SIMULATION.CONTRASTS)),
+    measure = c("count", "proportion"),
+    minor.allele.count = seq_len(DISPLAY.BIN.MAX)
+    ) %>%
+    mutate(contrast.data = map(contrast.index,
+      ~ SFS.SIMULATION.CONTRASTS[.x, ])) %>%
+    mutate(
+      left = pmap(list(contrast.data, minor.allele.count),
+        function(contrast.data, minor.allele.count) data %>% filter(
+          data.type == contrast.data$left.source,
+          minor.allele.count == .env$minor.allele.count) %>% arrange(rep)),
+      right = pmap(list(contrast.data, minor.allele.count),
+        function(contrast.data, minor.allele.count) data %>% filter(
+          data.type == contrast.data$right.source,
+          minor.allele.count == .env$minor.allele.count) %>% arrange(rep))
+      )
+  if (any(pmap_lgl(work[, c("left", "right", "contrast.data")],
+      function(left, right, contrast.data) {
+        contrast.data$paired && !identical(left$rep, right$rep)
+        }))) {
+    stop("Paired SFS contrast replicate IDs must match")
+    }
+  tables <- bind_rows(bootstrap.parallel.pmap(
+    work,
+    function(contrast.index, measure, minor.allele.count, contrast.data,
+             left, right) {
+      bind_cols(
+        tibble(minor.allele.count = minor.allele.count,
+          contrast = contrast.data$contrast, measure = measure),
+        summarize.sfs.contrast.bootstrap(
+          left[[measure]], right[[measure]], bootstrap.replicates,
+          paired = contrast.data$paired
           )
-        })
-      })
-    })
+        )
+      },
+    seed = seed
+    ))
   return(tables)
   }
 

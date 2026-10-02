@@ -14,6 +14,11 @@ options(scipen = 999)
 library(tidyverse)
 library(glue)
 library(nanoparquet)
+source(if (file.exists("analysis_scripts/bootstrap_parallel.R")) {
+  "analysis_scripts/bootstrap_parallel.R"
+  } else {
+  "bootstrap_parallel.R"
+  })
 
 
 SIM.TC.DATA.DIR <- "~/scratch/OOA_NAAdmixture_2T12Consistent/stats"
@@ -673,26 +678,40 @@ make.kinship.population.contrast.tables <- function(
   ) {
   data <- validate.kinship.contrast.input(data,
     KINSHIP.POPULATION.CONTRAST.SOURCES, c("AFR", "ADX", "EUR"))
-  set.seed(seed)
-  tables <- map_dfr(KINSHIP.POPULATION.CONTRAST.SOURCES, function(source) {
-    map_dfr(seq_len(nrow(KINSHIP.POPULATION.CONTRASTS)), function(index) {
-      contrast <- KINSHIP.POPULATION.CONTRASTS[index, ]
-      map_dfr(sort(unique(data$xmin)), function(bin) {
-        left <- data %>% filter(data.type == source,
-          pop == contrast$left.pop, xmin == bin) %>% arrange(rep)
-        right <- data %>% filter(data.type == source,
-          pop == contrast$right.pop, xmin == bin) %>% arrange(rep)
-        if (!identical(left$rep, right$rep)) {
-          stop("Paired kinship contrast replicate IDs must match")
-          }
-        bind_cols(tibble(data.type = source, xmin = bin,
-          xmax = left$xmax[[1L]], xmid = left$xmid[[1L]],
-          contrast = contrast$contrast),
-          summarize.kinship.contrast.bootstrap(left$fraction, right$fraction,
-            bootstrap.replicates))
-        })
-      })
-    })
+  work <- crossing(
+    data.type = KINSHIP.POPULATION.CONTRAST.SOURCES,
+    contrast.index = seq_len(nrow(KINSHIP.POPULATION.CONTRASTS)),
+    xmin = sort(unique(data$xmin))
+    ) %>%
+    mutate(contrast.data = map(contrast.index,
+      ~ KINSHIP.POPULATION.CONTRASTS[.x, ])) %>%
+    mutate(
+      left = pmap(list(data.type, contrast.data, xmin),
+        function(data.type, contrast.data, xmin) data %>% filter(
+          data.type == .env$data.type, pop == contrast.data$left.pop,
+          xmin == .env$xmin) %>% arrange(rep)),
+      right = pmap(list(data.type, contrast.data, xmin),
+        function(data.type, contrast.data, xmin) data %>% filter(
+          data.type == .env$data.type, pop == contrast.data$right.pop,
+          xmin == .env$xmin) %>% arrange(rep))
+      )
+  if (any(pmap_lgl(work[, c("left", "right")],
+      ~ !identical(..1$rep, ..2$rep)))) {
+    stop("Paired kinship contrast replicate IDs must match")
+    }
+  tables <- bind_rows(bootstrap.parallel.pmap(
+    work,
+    function(data.type, contrast.index, xmin, contrast.data, left, right) {
+      bind_cols(
+        tibble(data.type = data.type, xmin = xmin, xmax = left$xmax[[1L]],
+          xmid = left$xmid[[1L]], contrast = contrast.data$contrast),
+        summarize.kinship.contrast.bootstrap(
+          left$fraction, right$fraction, bootstrap.replicates
+          )
+        )
+      },
+    seed = seed
+    ))
   return(tables)
   }
 
@@ -704,24 +723,42 @@ make.kinship.simulation.contrast.tables <- function(
   ) {
   data <- validate.kinship.contrast.input(data,
     KINSHIP.SIMULATION.CONTRAST.SOURCES, "ADX", canonical.reps = FALSE)
-  set.seed(seed)
-  tables <- map_dfr(
-    seq_len(nrow(KINSHIP.SIMULATION.CONTRASTS)), function(index) {
-    contrast <- KINSHIP.SIMULATION.CONTRASTS[index, ]
-    map_dfr(sort(unique(data$xmin)), function(bin) {
-      left <- data %>% filter(data.type == contrast$left.source,
-        xmin == bin) %>% arrange(rep)
-      right <- data %>% filter(data.type == contrast$right.source,
-        xmin == bin) %>% arrange(rep)
-      if (contrast$paired && !identical(left$rep, right$rep)) {
-        stop("Paired kinship contrast replicate IDs must match")
-        }
-      bind_cols(tibble(xmin = bin, xmax = left$xmax[[1L]],
-        xmid = left$xmid[[1L]], contrast = contrast$contrast),
-        summarize.kinship.contrast.bootstrap(left$fraction, right$fraction,
-          bootstrap.replicates, paired = contrast$paired))
-      })
-      })
+  work <- crossing(
+    contrast.index = seq_len(nrow(KINSHIP.SIMULATION.CONTRASTS)),
+    xmin = sort(unique(data$xmin))
+    ) %>%
+    mutate(contrast.data = map(contrast.index,
+      ~ KINSHIP.SIMULATION.CONTRASTS[.x, ])) %>%
+    mutate(
+      left = pmap(list(contrast.data, xmin),
+        function(contrast.data, xmin) data %>% filter(
+          data.type == contrast.data$left.source, xmin == .env$xmin
+          ) %>% arrange(rep)),
+      right = pmap(list(contrast.data, xmin),
+        function(contrast.data, xmin) data %>% filter(
+          data.type == contrast.data$right.source, xmin == .env$xmin
+          ) %>% arrange(rep))
+      )
+  if (any(pmap_lgl(work[, c("left", "right", "contrast.data")],
+      function(left, right, contrast.data) {
+        contrast.data$paired && !identical(left$rep, right$rep)
+        }))) {
+    stop("Paired kinship contrast replicate IDs must match")
+    }
+  tables <- bind_rows(bootstrap.parallel.pmap(
+    work,
+    function(contrast.index, xmin, contrast.data, left, right) {
+      bind_cols(
+        tibble(xmin = xmin, xmax = left$xmax[[1L]], xmid = left$xmid[[1L]],
+          contrast = contrast.data$contrast),
+        summarize.kinship.contrast.bootstrap(
+          left$fraction, right$fraction, bootstrap.replicates,
+          paired = contrast.data$paired
+          )
+        )
+      },
+    seed = seed
+    ))
   return(tables)
   }
 
@@ -740,7 +777,6 @@ make.kinship.empirical.contrast.tables <- function(
   if (!all(c("YRI", "ASW", "CEU") %in% unique(data$pop))) {
     stop("Empirical kinship contrast inputs require YRI, ASW, and CEU pairs")
     }
-  set.seed(seed)
   displayed.breaks <- breaks[
     breaks >= KINSHIP.CONTRAST.X.LIMITS[[1L]] - .Machine$double.eps &
       breaks <= KINSHIP.CONTRAST.X.LIMITS[[2L]] + .Machine$double.eps
@@ -748,8 +784,42 @@ make.kinship.empirical.contrast.tables <- function(
   if (length(displayed.breaks) != 26L) {
     stop("Kinship contrast display requires exactly 25 fixed bins")
     }
-  tables <- map_dfr(
-    seq_len(nrow(KINSHIP.EMPIRICAL.CONTRASTS)), function(index) {
+  batch.size <- 10000L
+  batch.count <- ceiling(bootstrap.replicates / batch.size)
+  bin.index <- match(head(displayed.breaks, -1L), head(breaks, -1L))
+  work <- crossing(
+    contrast.index = seq_len(nrow(KINSHIP.EMPIRICAL.CONTRASTS)),
+    batch.index = seq_len(batch.count)
+    ) %>%
+    mutate(
+      contrast.data = map(contrast.index,
+        ~ KINSHIP.EMPIRICAL.CONTRASTS[.x, ]),
+      left = map(contrast.data,
+        ~ filter(data, pop == .x$left.pop)$kinship),
+      right = map(contrast.data,
+        ~ filter(data, pop == .x$right.pop)$kinship),
+      draw.count = pmin(
+        batch.size, bootstrap.replicates - (batch.index - 1L) * batch.size
+        )
+      )
+  batch.draws <- bootstrap.parallel.pmap(
+    work,
+    function(contrast.index, batch.index, contrast.data, left, right,
+             draw.count) {
+      observed <- function(values) {
+        histogram <- hist(values, breaks = breaks, plot = FALSE,
+          include.lowest = TRUE)
+        histogram$counts / length(values)
+        }
+      replicate(draw.count, {
+        observed(sample(left, length(left), replace = TRUE)) -
+          observed(sample(right, length(right), replace = TRUE))
+        })
+      },
+    seed = seed
+    )
+  tables <- map_dfr(seq_len(nrow(KINSHIP.EMPIRICAL.CONTRASTS)),
+      function(index) {
     contrast <- KINSHIP.EMPIRICAL.CONTRASTS[index, ]
     left <- filter(data, pop == contrast$left.pop)$kinship
     right <- filter(data, pop == contrast$right.pop)$kinship
@@ -758,13 +828,10 @@ make.kinship.empirical.contrast.tables <- function(
         include.lowest = TRUE)
       histogram$counts / length(values)
       }
-    left.observed <- observed(left)
-    right.observed <- observed(right)
-    draws <- replicate(bootstrap.replicates, {
-      observed(sample(left, length(left), replace = TRUE)) -
-        observed(sample(right, length(right), replace = TRUE))
-      })
-    bin.index <- match(head(displayed.breaks, -1L), head(breaks, -1L))
+    draws <- do.call(cbind, batch.draws[work$contrast.index == index])
+    if (ncol(draws) != bootstrap.replicates) {
+      stop("Empirical kinship bootstrap draws were not fully reassembled")
+      }
     nominal <- apply(draws[bin.index, , drop = FALSE], 1L, quantile,
       c(0.025, 0.975), names = FALSE)
     bonferroni.quantile <- 0.05 / (2 * KINSHIP.CONTRAST.FAMILY.SIZE)
@@ -775,7 +842,7 @@ make.kinship.empirical.contrast.tables <- function(
       xmax = tail(displayed.breaks, -1L),
       xmid = rowMeans(embed(displayed.breaks, 2L)),
       contrast = contrast$contrast,
-      difference = left.observed[bin.index] - right.observed[bin.index],
+      difference = observed(left)[bin.index] - observed(right)[bin.index],
       ci.95.lower = nominal[1L, ], ci.95.upper = nominal[2L, ],
       bonferroni.ci.lower = bonferroni[1L, ],
       bonferroni.ci.upper = bonferroni[2L, ],

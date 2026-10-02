@@ -13,6 +13,11 @@
 options(scipen = 999)
 library(tidyverse)
 library(nanoparquet)
+source(if (file.exists("analysis_scripts/bootstrap_parallel.R")) {
+  "analysis_scripts/bootstrap_parallel.R"
+  } else {
+  "bootstrap_parallel.R"
+  })
 
 
 SIM.TC.DATA.DIR <- "~/scratch/OOA_NAAdmixture_2T12Consistent/stats"
@@ -320,37 +325,45 @@ make.diversity.population.contrast.tables <- function(
       "integer"
       )
     }
-  set.seed(seed)
-  tables <- map_dfr(DIVERSITY.POPULATION.CONTRAST.SOURCES, function(source) {
-    map_dfr(c("pi", "theta"), function(statistic) {
-      map_dfr(chromosomes, function(chromosome) {
-        map_dfr(seq_len(nrow(DIVERSITY.POPULATION.CONTRASTS)), function(index) {
-          contrast <- DIVERSITY.POPULATION.CONTRASTS[index, ]
-          values <- data %>%
-            filter(
-              data.type == source, stat == statistic, chrom == chromosome,
-              pop %in% c(contrast$simulation.left, contrast$simulation.right)
-              ) %>%
-            arrange(pop, rep)
-          left.values <- values %>%
-            filter(pop == contrast$simulation.left) %>% arrange(rep) %>%
-            pull(value)
-          right.values <- values %>%
-            filter(pop == contrast$simulation.right) %>% arrange(rep) %>%
-            pull(value)
-          return(bind_cols(
-            tibble(
-              data.type = source, stat = statistic, chrom = chromosome,
-              contrast = contrast$contrast
-              ),
-            summarize.diversity.population.contrast.bootstrap(
-              left.values, right.values, bootstrap.replicates
-              )
-            ))
+  work <- crossing(
+    data.type = DIVERSITY.POPULATION.CONTRAST.SOURCES,
+    stat = c("pi", "theta"), chrom = chromosomes,
+    contrast.index = seq_len(nrow(DIVERSITY.POPULATION.CONTRASTS))
+    ) %>%
+    mutate(contrast.data = map(contrast.index,
+      ~ DIVERSITY.POPULATION.CONTRASTS[.x, ])) %>%
+    mutate(
+      left.values = pmap(list(data.type, stat, chrom, contrast.data),
+        function(data.type, stat, chrom, contrast.data) {
+          data %>% filter(
+            data.type == .env$data.type, stat == .env$stat,
+            chrom == .env$chrom,
+            pop == contrast.data$simulation.left
+            ) %>% arrange(rep) %>% pull(value)
+          }),
+      right.values = pmap(list(data.type, stat, chrom, contrast.data),
+        function(data.type, stat, chrom, contrast.data) {
+          data %>% filter(
+            data.type == .env$data.type, stat == .env$stat,
+            chrom == .env$chrom,
+            pop == contrast.data$simulation.right
+            ) %>% arrange(rep) %>% pull(value)
           })
-        })
-      })
-    })
+      )
+  tables <- bind_rows(bootstrap.parallel.pmap(
+    work,
+    function(data.type, stat, chrom, contrast.index, contrast.data,
+             left.values, right.values) {
+      bind_cols(
+        tibble(data.type = data.type, stat = stat, chrom = chrom,
+          contrast = contrast.data$contrast),
+        summarize.diversity.population.contrast.bootstrap(
+          left.values, right.values, bootstrap.replicates
+          )
+        )
+      },
+    seed = seed
+    ))
   expected.rows <- length(DIVERSITY.POPULATION.CONTRAST.SOURCES) * 2L *
     DIVERSITY.POPULATION.CONTRAST.FAMILY.SIZE
   if (nrow(tables) != expected.rows) {
@@ -471,36 +484,42 @@ make.diversity.simulation.contrast.tables <- function(
     stop("Simulation contrast bootstrap replicate count must be a positive ",
       "integer")
     }
-  set.seed(seed)
-  tables <- map_dfr(c("pi", "theta"), function(statistic) {
-    map_dfr(chromosomes, function(chromosome) {
-      map_dfr(seq_len(nrow(DIVERSITY.SIMULATION.CONTRASTS)), function(index) {
-        contrast <- DIVERSITY.SIMULATION.CONTRASTS[index, ]
-        left <- data %>%
-          filter(
-            data.type == contrast$left.source, stat == statistic,
-            chrom == chromosome
-            ) %>%
-          arrange(rep)
-        right <- data %>%
-          filter(
-            data.type == contrast$right.source, stat == statistic,
-            chrom == chromosome
-            ) %>%
-          arrange(rep)
-        if (contrast$paired && !identical(left$rep, right$rep)) {
-          stop("Paired simulation contrast replicate IDs must match")
-          }
-        return(bind_cols(
-          tibble(stat = statistic, chrom = chromosome,
-            contrast = contrast$contrast),
-          summarize.diversity.simulation.contrast.bootstrap(
-            left$value, right$value, bootstrap.replicates, contrast$paired
-            )
-          ))
-        })
-      })
-    })
+  work <- crossing(
+    stat = c("pi", "theta"), chrom = chromosomes,
+    contrast.index = seq_len(nrow(DIVERSITY.SIMULATION.CONTRASTS))
+    ) %>%
+    mutate(contrast.data = map(contrast.index,
+      ~ DIVERSITY.SIMULATION.CONTRASTS[.x, ])) %>%
+    mutate(
+      left = pmap(list(stat, chrom, contrast.data),
+        function(stat, chrom, contrast.data) data %>% filter(
+          data.type == contrast.data$left.source, stat == .env$stat,
+          chrom == .env$chrom
+          ) %>% arrange(rep)),
+      right = pmap(list(stat, chrom, contrast.data),
+        function(stat, chrom, contrast.data) data %>% filter(
+          data.type == contrast.data$right.source, stat == .env$stat,
+          chrom == .env$chrom
+          ) %>% arrange(rep))
+      )
+  if (any(pmap_lgl(work[, c("left", "right", "contrast.data")],
+      function(left, right, contrast.data) {
+        contrast.data$paired && !identical(left$rep, right$rep)
+        }))) {
+    stop("Paired simulation contrast replicate IDs must match")
+    }
+  tables <- bind_rows(bootstrap.parallel.pmap(
+    work,
+    function(stat, chrom, contrast.index, contrast.data, left, right) {
+      bind_cols(
+        tibble(stat = stat, chrom = chrom, contrast = contrast.data$contrast),
+        summarize.diversity.simulation.contrast.bootstrap(
+          left$value, right$value, bootstrap.replicates, contrast.data$paired
+          )
+        )
+      },
+    seed = seed
+    ))
   expected.rows <- nrow(DIVERSITY.SIMULATION.CONTRASTS) * 2L *
     length(chromosomes)
   if (nrow(tables) != expected.rows) {

@@ -14,6 +14,11 @@ options(scipen = 999)
 library(tidyverse)
 library(ggh4x)
 library(nanoparquet)
+source(if (file.exists("analysis_scripts/bootstrap_parallel.R")) {
+  "analysis_scripts/bootstrap_parallel.R"
+  } else {
+  "bootstrap_parallel.R"
+  })
 
 
 SIM.TC.DATA.DIR <- "~/scratch/OOA_NAAdmixture_2T12Consistent/stats"
@@ -742,39 +747,50 @@ bootstrap.ancestry.empirical.difference <- function(
 # build one table against chromosome or genome asw values.
 make.ancestry.bootstrap.comparison.table <- function(
     simulation, empirical, contrasts, chromosomes, statistic, reference.chrom,
-    reference.scope, family.size, bootstrap.replicates
+    reference.scope, family.size, bootstrap.replicates, seed = RANDOM.SEED
   ) {
-  table <- map_dfr(chromosomes, function(chromosome) {
-    map_dfr(seq_len(nrow(contrasts)), function(index) {
-      contrast <- contrasts[index, ]
-      left.values <- simulation %>%
-        filter(source == contrast$left.source, chrom == chromosome) %>%
-        arrange(rep) %>% pull(all_of(statistic))
-      if (contrast$right.source == "Emp") {
-        empirical.values <- empirical %>%
-          filter(chrom == reference.chrom(chromosome)) %>% pull(afr.q)
-        bootstrap <- bootstrap.ancestry.empirical.difference(
+  work <- crossing(
+    chromosome = chromosomes, contrast.index = seq_len(nrow(contrasts))
+    ) %>%
+    mutate(
+      contrast.data = map(contrast.index, ~ contrasts[.x, ]),
+      reference.chromosome = map_chr(chromosome, reference.chrom)
+      ) %>%
+    mutate(
+      left.values = pmap(list(chromosome, contrast.data),
+        function(chromosome, contrast.data) simulation %>% filter(
+          source == contrast.data$left.source, chrom == .env$chromosome
+          ) %>% arrange(rep) %>% pull(all_of(statistic))),
+      right.values = pmap(list(chromosome, contrast.data),
+        function(chromosome, contrast.data) simulation %>% filter(
+          source == contrast.data$right.source, chrom == .env$chromosome
+          ) %>% arrange(rep) %>% pull(all_of(statistic))),
+      empirical.values = map(reference.chromosome,
+        ~ empirical %>% filter(chrom == .x) %>% pull(afr.q))
+      )
+  table <- bind_rows(bootstrap.parallel.pmap(
+    work,
+    function(chromosome, contrast.index, contrast.data, reference.chromosome,
+             left.values, right.values, empirical.values) {
+      bootstrap <- if (contrast.data$right.source == "Emp") {
+        bootstrap.ancestry.empirical.difference(
           left.values, empirical.values, statistic, bootstrap.replicates
           )
         } else {
-        right.values <- simulation %>%
-          filter(source == contrast$right.source, chrom == chromosome) %>%
-          arrange(rep) %>% pull(all_of(statistic))
-        bootstrap <- bootstrap.ancestry.simulation.difference(
-          left.values, right.values, contrast$paired, bootstrap.replicates
+        bootstrap.ancestry.simulation.difference(
+          left.values, right.values, contrast.data$paired, bootstrap.replicates
           )
         }
-      return(bind_cols(
-        tibble(
-          statistic = statistic, contrast = contrast$contrast,
-          chromosome = chromosome, reference.scope = reference.scope
-          ),
+      bind_cols(
+        tibble(statistic = statistic, contrast = contrast.data$contrast,
+          chromosome = chromosome, reference.scope = reference.scope),
         summarize.ancestry.bootstrap.difference(
           bootstrap$draws, bootstrap$difference, family.size
           )
-        ))
-      })
-    })
+        )
+      },
+    seed = seed
+    ))
   return(table)
   }
 
@@ -798,19 +814,22 @@ make.ancestry.bootstrap.comparison.tables <- function(
   genome.contrasts <- filter(
     ANCESTRY.BOOTSTRAP.CONTRASTS, right.source == "Emp"
     )
-  set.seed(seed)
-  chromosome.tables <- map_dfr(c("mean", "sd"), function(statistic) {
+  chromosome.tables <- map2_dfr(c("mean", "sd"), c(0L, 1L),
+      function(statistic, seed.offset) {
     make.ancestry.bootstrap.comparison.table(
       data$simulation, data$empirical, ANCESTRY.BOOTSTRAP.CONTRASTS,
       chromosomes, statistic, identity, "chromosome",
-      ANCESTRY.BOOTSTRAP.CHROMOSOME.FAMILY.SIZE, bootstrap.replicates
+      ANCESTRY.BOOTSTRAP.CHROMOSOME.FAMILY.SIZE, bootstrap.replicates,
+      seed + seed.offset
       )
     })
-  genome.tables <- map_dfr(c("mean", "sd"), function(statistic) {
+  genome.tables <- map2_dfr(c("mean", "sd"), c(2L, 3L),
+      function(statistic, seed.offset) {
     make.ancestry.bootstrap.comparison.table(
       data$simulation, data$empirical, genome.contrasts, chromosomes,
       statistic, function(chromosome) "all", "genome",
-      ANCESTRY.BOOTSTRAP.GENOME.ASW.FAMILY.SIZE, bootstrap.replicates
+      ANCESTRY.BOOTSTRAP.GENOME.ASW.FAMILY.SIZE, bootstrap.replicates,
+      seed + seed.offset
       )
     })
   if (nrow(chromosome.tables) != 308L) {

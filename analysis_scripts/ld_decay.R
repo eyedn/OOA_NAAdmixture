@@ -14,6 +14,11 @@ options(scipen = 999)
 library(tidyverse)
 library(glue)
 library(nanoparquet)
+source(if (file.exists("analysis_scripts/bootstrap_parallel.R")) {
+  "analysis_scripts/bootstrap_parallel.R"
+  } else {
+  "bootstrap_parallel.R"
+  })
 
 
 SIM.TC.DATA.DIR <- "~/scratch/OOA_NAAdmixture_2T12Consistent/stats"
@@ -430,32 +435,39 @@ make.ld.population.contrast.tables <- function(
   data <- validate.ld.contrast.simulation(
     data, LD.POPULATION.CONTRAST.SOURCES, populations
     )
-  set.seed(seed)
-  tables <- map_dfr(LD.POPULATION.CONTRAST.SOURCES, function(source) {
-    map_dfr(seq_len(nrow(LD.POPULATION.CONTRASTS)), function(index) {
-      contrast <- LD.POPULATION.CONTRASTS[index, ]
-      map_dfr(LD.PLOT.DISTANCE.BINS, function(distance.bin) {
-        values <- data %>%
-          filter(
-            data.type == source, distance_bin_bp == distance.bin,
-            pop %in% c(contrast$simulation.left, contrast$simulation.right)
-            )
-        left <- values %>% filter(pop == contrast$simulation.left) %>%
-          arrange(rep)
-        right <- values %>% filter(pop == contrast$simulation.right) %>%
-          arrange(rep)
-        return(bind_cols(
-          tibble(
-            data.type = source, distance_bin_bp = distance.bin,
-            contrast = contrast$contrast
-            ),
-          summarize.ld.population.contrast.bootstrap(
-            left$mean.r2, right$mean.r2, bootstrap.replicates
-            )
-          ))
-        })
-      })
-    })
+  work <- crossing(
+    data.type = LD.POPULATION.CONTRAST.SOURCES,
+    contrast.index = seq_len(nrow(LD.POPULATION.CONTRASTS)),
+    distance_bin_bp = LD.PLOT.DISTANCE.BINS
+    ) %>%
+    mutate(contrast.data = map(contrast.index,
+      ~ LD.POPULATION.CONTRASTS[.x, ])) %>%
+    mutate(
+      left = pmap(list(data.type, contrast.data, distance_bin_bp),
+        function(data.type, contrast.data, distance_bin_bp) data %>%
+          filter(data.type == .env$data.type,
+            distance_bin_bp == .env$distance_bin_bp,
+            pop == contrast.data$simulation.left) %>% arrange(rep)),
+      right = pmap(list(data.type, contrast.data, distance_bin_bp),
+        function(data.type, contrast.data, distance_bin_bp) data %>%
+          filter(data.type == .env$data.type,
+            distance_bin_bp == .env$distance_bin_bp,
+            pop == contrast.data$simulation.right) %>% arrange(rep))
+      )
+  tables <- bind_rows(bootstrap.parallel.pmap(
+    work,
+    function(data.type, contrast.index, distance_bin_bp, contrast.data,
+             left, right) {
+      bind_cols(
+        tibble(data.type = data.type, distance_bin_bp = distance_bin_bp,
+          contrast = contrast.data$contrast),
+        summarize.ld.population.contrast.bootstrap(
+          left$mean.r2, right$mean.r2, bootstrap.replicates
+          )
+        )
+      },
+    seed = seed
+    ))
   if (nrow(tables) != length(LD.POPULATION.CONTRAST.SOURCES) *
       nrow(LD.POPULATION.CONTRASTS) * length(LD.PLOT.DISTANCE.BINS)) {
     stop("LD population contrast bootstrap table does not match family size")
@@ -520,26 +532,36 @@ make.ld.simulation.contrast.tables <- function(
   data <- validate.ld.contrast.simulation(
     data, LD.SIMULATION.CONTRAST.SOURCES, "ADX"
     )
-  set.seed(seed)
-  tables <- map_dfr(seq_len(nrow(LD.SIMULATION.CONTRASTS)), function(index) {
-    contrast <- LD.SIMULATION.CONTRASTS[index, ]
-    map_dfr(LD.PLOT.DISTANCE.BINS, function(distance.bin) {
-      left <- data %>%
-        filter(data.type == contrast$left.source,
-          distance_bin_bp == distance.bin) %>%
-        arrange(rep)
-      right <- data %>%
-        filter(data.type == contrast$right.source,
-          distance_bin_bp == distance.bin) %>%
-        arrange(rep)
-      return(bind_cols(
-        tibble(distance_bin_bp = distance.bin, contrast = contrast$contrast),
+  work <- crossing(
+    contrast.index = seq_len(nrow(LD.SIMULATION.CONTRASTS)),
+    distance_bin_bp = LD.PLOT.DISTANCE.BINS
+    ) %>%
+    mutate(contrast.data = map(contrast.index,
+      ~ LD.SIMULATION.CONTRASTS[.x, ])) %>%
+    mutate(
+      left = pmap(list(contrast.data, distance_bin_bp),
+        function(contrast.data, distance_bin_bp) data %>% filter(
+          data.type == contrast.data$left.source,
+          distance_bin_bp == .env$distance_bin_bp) %>% arrange(rep)),
+      right = pmap(list(contrast.data, distance_bin_bp),
+        function(contrast.data, distance_bin_bp) data %>% filter(
+          data.type == contrast.data$right.source,
+          distance_bin_bp == .env$distance_bin_bp) %>% arrange(rep))
+      )
+  tables <- bind_rows(bootstrap.parallel.pmap(
+    work,
+    function(contrast.index, distance_bin_bp, contrast.data, left, right) {
+      bind_cols(
+        tibble(distance_bin_bp = distance_bin_bp,
+          contrast = contrast.data$contrast),
         summarize.ld.simulation.contrast.bootstrap(
-          left$mean.r2, right$mean.r2, bootstrap.replicates, contrast$paired
+          left$mean.r2, right$mean.r2, bootstrap.replicates,
+          contrast.data$paired
           )
-        ))
-      })
-    })
+        )
+      },
+    seed = seed
+    ))
   if (nrow(tables) != nrow(LD.SIMULATION.CONTRASTS) *
       length(LD.PLOT.DISTANCE.BINS)) {
     stop("LD simulation contrast bootstrap table does not match family size")
