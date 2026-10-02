@@ -49,7 +49,7 @@ SOURCE.LEVELS <- c(
   "Simulation_largeGrowth", "Simulation_largeGrowth_simDown", "Empirical"
   )
 SOURCE.LABELS <- setNames(
-  c("T.C.", "T.C.D.", "L.G.", "L.G.D.", "Emp."), SOURCE.LEVELS
+  c("T.C. ADX", "T.C.D. ADX", "L.G. ADX", "L.G.D. ADX", "ASW"), SOURCE.LEVELS
   )
 PLOT.STYLES <- list(
   colors = c(
@@ -67,10 +67,10 @@ PLOT.STYLES <- list(
     `TC-LG` = "#00606F"
     ),
   contrast.labels = c(
-    `TC-Emp` = "T.C. - ASW", `TCD-Emp` = "T.C.D. - ASW",
-    `LG-Emp` = "L.G. - ASW", `LGD-Emp` = "L.G.D. - ASW",
-    `TC-TCD` = "T.C. - T.C.D.", `LG-LGD` = "L.G. - L.G.D.",
-    `TC-LG` = "T.C. - L.G."
+    `TC-Emp` = "T.C. ADX - ASW", `TCD-Emp` = "T.C.D. ADX- ASW",
+    `LG-Emp` = "L.G. ADX - ASW", `LGD-Emp` = "L.G.D. ADX - ASW",
+    `TC-TCD` = "T.C. ADX - T.C.D.", `LG-LGD` = "L.G. ADX - L.G.D.",
+    `TC-LG` = "T.C. ADX - L.G."
     )
   )
 ANCESTRY.BOOTSTRAP.CONTRASTS <- tribble(
@@ -976,19 +976,22 @@ make.ancestry.bootstrap.contrast.plot <- function(
       ) +
     scale_x_continuous(
       breaks = seq_along(levels(data$chromosome)),
-      labels = levels(data$chromosome)
+      labels = c("1", rep("", 9), "11", rep("", 10), "22")
       ) +
     theme(legend.title = element_blank())
     
   if (facet.statistics) {
     if (all(is.na(data$facet.label))) {
       plot <- plot + facet_grid(
-        rows = vars(statistic), scales = "free_y",
-        labeller = as_labeller(c(mean = "Mean", sd = "SD"))
+        cols = vars(contrast), rows = vars(statistic), scales = "free_y",
+        labeller = labeller(
+          contrast = PLOT.STYLES$contrast.labels,
+          statistic = c(mean = "Mean", sd = "SD"))
         )
       } else {
       plot <- plot + facet_wrap(
-        vars(facet.label), ncol = 1, scales = "free_y",
+        cols = vars(contrast), rowsvars(facet.label), ncol = 1, 
+        scales = "free_y",
         strip.position = "right"
         )
       }
