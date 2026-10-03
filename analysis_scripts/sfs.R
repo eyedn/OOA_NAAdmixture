@@ -10,6 +10,7 @@
 
 
 # set up ----
+setwd("~/OOA_NAAdmixture/analysis_scripts/")
 options(scipen = 999)
 library(tidyverse)
 library(nanoparquet)
@@ -37,7 +38,7 @@ SOURCE.LEVELS <- c(
   "Empirical"
   )
 SOURCE.LABELS <- setNames(
-  c("T.C.", "T.C.D.", "L.G.", "L.G.D.", "Emp."), SOURCE.LEVELS
+  c("T.C.", "T.C.D.", "L.G.", "L.G.D.", "1kG"), SOURCE.LEVELS
   )
 POPULATION.LEVELS <- c("AFR", "ADX", "EUR", "YRI", "ASW", "CEU")
 PLOT.CONFIGS <- list(
@@ -119,10 +120,10 @@ SFS.EMPIRICAL.CONTRASTS <- tribble(
   "ASW-CEU", "ASW", "CEU"
   )
 SFS.CONTRAST.COLORS <- c(
-  "AFR-ADX" = "#BFFBFF", "AFR-EUR" = "#16ACBD", "ADX-EUR" = "#00606F",
-  "T.C. - T.C.D." = "#BFFBFF", "L.G. - L.G.D." = "#16ACBD",
-  "T.C. - L.G." = "#00606F",
-  "YRI-ASW" = "#BFFBFF", "YRI-CEU" = "#16ACBD", "ASW-CEU" = "#00606F"
+  "AFR-ADX" = "#00858C", "AFR-EUR" = "#00555A", "ADX-EUR" = "#002526",
+  "T.C. - T.C.D." = "#00858C", "L.G. - L.G.D." = "#00555A",
+  "T.C. - L.G." = "#002526",
+  "YRI-ASW" = "#00858C", "YRI-CEU" = "#00555A", "ASW-CEU" = "#002526"
   )
 SFS.CONTRAST.LABELS <- c(
   "AFR-ADX" = "AFR - ADX", "AFR-EUR" = "AFR - EUR",
@@ -759,7 +760,7 @@ make.sfs.contrast.plot <- function(data, interval.label, title) {
       labels = SFS.CONTRAST.LABELS[active.contrasts]
       ) +
     labs(
-      x = "Minor allele count bin", y = "Left population/source minus right",
+      x = "Minor allele count bin", y = "Difference",
       color = NULL, fill = NULL, title = title,
       subtitle = paste(interval.label, "interval")
       ) +
@@ -776,11 +777,20 @@ make.sfs.contrast.plot <- function(data, interval.label, title) {
     theme()
   if ("data.type" %in% names(simulation)) {
     plot <- plot + facet_grid(
-      rows = vars(data.type, measure), scales = "free_y",
-      labeller = labeller(data.type = SOURCE.LABELS)
+      cols = vars(contrast), rows = vars(data.type, measure), scales = "free_y",
+      labeller = labeller(
+        contrast = SFS.CONTRAST.LABELS,
+        measure = c("count" = "count", "proportion" = "prop."),
+        data.type = SOURCE.LABELS)
       )
     } else {
-    plot <- plot + facet_grid(measure ~ ., scales = "free_y")
+    plot <- plot + facet_grid(
+      cols = vars(contrast), rows = vars(measure), scales = "free_y",
+      labeller = labeller(
+        contrast = SFS.CONTRAST.LABELS,
+        measure = c("count" = "count", "proportion" = "prop.")
+        )
+      )
     }
   return(apply.standard.plot.theme(plot))
   }
@@ -816,7 +826,7 @@ make.sfs.empirical.contrast.plot <- function(data) {
       labels = SFS.CONTRAST.LABELS[active.contrasts]
       ) +
     labs(
-      x = "Minor allele count bin", y = "Left population minus right",
+      x = "Minor allele count bin", y = "Difference",
       fill = NULL, title = "Empirical population contrasts"
       ) +
     guides(
@@ -829,7 +839,13 @@ make.sfs.empirical.contrast.plot <- function(data) {
           )
         )
       ) +
-    facet_grid(measure ~ ., scales = "free_y") +
+    facet_grid(
+      cols = vars(contrast), rows = vars(measure), scales = "free_y",
+      labeller = labeller(
+        contrast = SFS.CONTRAST.LABELS,
+        measure = c("count" = "count", "proportion" = "prop.")
+        )
+      ) +
     theme()
   return(apply.standard.plot.theme(plot))
   }
@@ -946,7 +962,7 @@ make.sfs.plot <- function(
   if (facet.by.datatype) {
     plot <- plot + facet_wrap(
       ~data.type,
-      labeller = labeller(data.type = SFS.SOURCE.LABELS)
+      labeller = labeller(data.type = SOURCE.LABELS)
       )
     }
   return(apply.standard.plot.theme(plot))
@@ -1047,6 +1063,9 @@ sfs.summaries <- summarize.sfs.analysis(sfs.data)
 sfs.population.contrast.tables <- make.sfs.population.contrast.tables(sfs.data)
 sfs.simulation.contrast.tables <- make.sfs.simulation.contrast.tables(sfs.data)
 sfs.empirical.contrast.table <- make.sfs.empirical.contrast.table(sfs.data)
+
+
+# plotting ----
 sfs.population.contrast.plots <- list(
   tc.tcd = list(
     `95` = make.sfs.contrast.plot(
@@ -1095,7 +1114,7 @@ sfs.bootstrap.proportion.plots <- imap(list(
   ), function(data.types, tag) {
   return(make.sfs.plot(
     sfs.summaries$proportion, "mean",
-    "Proportion of segregating sites", FALSE, data.types,
+    "Prop. of sites", FALSE, data.types,
     tag,
     show.all = FALSE
     ))
@@ -1114,7 +1133,7 @@ sfs.bootstrap.proportion.datatype.interval.plots <- imap(list(
   all.datatypes.adx.asw = PLOT.CONFIGS$all.datatypes.adx.asw
   ), function(data.types, tag) {
   return(make.sfs.plot(
-    sfs.summaries$proportion, "mean", "Proportion of segregating sites",
+    sfs.summaries$proportion, "mean", "Prop. of sites",
     FALSE, data.types, tag, show.all = FALSE, facet.by.datatype = TRUE
     ))
   })
@@ -1164,17 +1183,11 @@ saveRDS(sfs.simulation.contrast.plots$`95`, file.path(
 saveRDS(sfs.simulation.contrast.plots$bonferroni, file.path(
   OUTPUT.DIR, "sfs.simulation.contrasts.bonferroni.rds"
   ))
-
-print(sfs.bootstrap.count.plots$tcd.1kg)
-print(sfs.bootstrap.count.plots$all.datatypes.adx.asw)
-print(sfs.bootstrap.proportion.plots$tcd.1kg)
-print(sfs.bootstrap.proportion.plots$all.datatypes.adx.asw)
 print(sfs.bootstrap.count.datatype.interval.plots$tcd.1kg)
-print(sfs.bootstrap.count.datatype.interval.plots$all.datatypes.adx.asw)
+print(sfs.bootstrap.count.plots$all.datatypes.adx.asw)
 print(sfs.bootstrap.proportion.datatype.interval.plots$tcd.1kg)
-print(sfs.bootstrap.proportion.datatype.interval.plots$all.datatypes.adx.asw)
-# print(sfs.population.contrast.plots$tc.tcd$`95`)
+print(sfs.bootstrap.proportion.plots$all.datatypes.adx.asw)
 print(sfs.population.contrast.plots$tc.tcd$bonferroni)
 print(sfs.population.contrast.plots$empirical)
-# print(sfs.simulation.contrast.plots$`95`)
 print(sfs.simulation.contrast.plots$bonferroni)
+

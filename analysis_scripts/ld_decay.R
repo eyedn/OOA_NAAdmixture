@@ -10,6 +10,7 @@
 
 
 # set up ----
+setwd("~/OOA_NAAdmixture/analysis_scripts/")
 options(scipen = 999)
 library(tidyverse)
 library(glue)
@@ -34,7 +35,7 @@ SOURCE.LEVELS <- c(
   "Simulation_largeGrowth", "Simulation_largeGrowth_simDown",
   "Empirical"
   )
-SOURCE.DISPLAY.LEVELS <- c("T.C.", "T.C.D.", "L.G.", "L.G.D.", "Emp.")
+SOURCE.DISPLAY.LEVELS <- c("T.C.", "T.C.D.", "L.G.", "L.G.D.", "1kG")
 SOURCE.LABELS <- setNames(SOURCE.DISPLAY.LEVELS, SOURCE.LEVELS)
 POPULATION.LEVELS <- c("AFR", "ADX", "EUR", "YRI", "ASW", "CEU")
 PLOT.CONFIGS <- list(
@@ -46,6 +47,7 @@ BOOTSTRAP.LEGEND.VIEWS <- c("all.lines", "role.interval")
 PLOT.BASE.SIZE <- 24
 LD.CONTRAST.LINEWIDTH <- 1
 LD.PLOT.DISTANCE.BINS <- seq(5000, 200000, by = 5000)
+LD.PLOT.DISTANCE.BINS.LABELS <- c(5000, 50000, 100000, 150000, 200000)
 LD.POPULATION.CONTRAST.BOOTSTRAP.REPLICATES <- 100000L
 # per displayed comparison-set Bonferroni family: 3 contrasts x 40 bins.
 LD.POPULATION.CONTRAST.FAMILY.SIZE <- 120L
@@ -76,13 +78,17 @@ PLOT.STYLES <- list(
     Simulation_largeGrowth_simDown = "#4B1FA8"
     ),
   contrast.colors = c(
-    `AFR-ADX` = "#BFFBFF", `AFR-EUR` = "#16ACBD",
-    `ADX-EUR` = "#00606F"
+    `AFR-ADX` = "#00858C", `AFR-EUR` = "#00555A",
+    `ADX-EUR` = "#002526"
     ),
   simulation.contrast.colors = c(
-    "T.C. - T.C.D." = "#BFFBFF", "L.G. - L.G.D." = "#16ACBD",
-    "T.C. - L.G." = "#00606F"
+    "T.C. - T.C.D." = "#00858C", "L.G. - L.G.D." = "#00555A",
+    "T.C. - L.G." = "#002526"
     ),
+  contrast.labels.emp = c(
+    `AFR-ADX` = "YRI - ASW", `AFR-EUR` = "YRI - CEU",
+    `ADX-EUR` = "ASW - CEU"
+  ),
   series.labels = SOURCE.LABELS
   )
 
@@ -628,9 +634,9 @@ prepare.ld.population.contrast.plot.data <- function(
     "bonferroni.ci.upper"
     }
   simulation <- simulation %>%
-    filter(data.type == source) %>%
+    filter(data.type %in% source) %>%
     transmute(
-      distance_bin_bp, contrast, difference,
+      distance_bin_bp, contrast, difference, data.type,
       ci.lower = .data[[lower.column]], ci.upper = .data[[upper.column]]
       ) %>%
     mutate(
@@ -727,7 +733,6 @@ make.ld.simulation.contrast.plot <- function(
       shape = 21, size = 3,
       stroke = LD.CONTRAST.LINEWIDTH, inherit.aes = FALSE
       ) +
-    facet_wrap(~contrast, nrow = 1) +
     scale_color_manual(
       values = c(colors, red = "red", black = "black"), guide = "none"
       ) +
@@ -735,10 +740,22 @@ make.ld.simulation.contrast.plot <- function(
       values = colors, breaks = active.contrasts, guide = "none"
       ) +
     scale_x_continuous(
-      limits = c(5000, 200000), breaks = LD.PLOT.DISTANCE.BINS
+      limits = c(5000, 200000), breaks = LD.PLOT.DISTANCE.BINS.LABELS
       ) +
     labs(x = "Distance between SNPs (bp)", y = "Difference", title = title) +
     theme()
+    
+    if ("data.type" %in% names(data$simulation)) {
+      plot <- plot + facet_grid(
+        cols = vars(contrast), rows = vars(data.type),
+        labeller = labeller(data.type = SOURCE.LABELS)
+      )
+    } else {
+      plot <- plot + facet_grid(
+        cols = vars(contrast), scales = "free_y",
+        labeller = labeller(contrast = SFS.CONTRAST.LABELS)
+      )
+    }
   return(apply.standard.plot.theme(plot, legend.position = "none"))
   }
 
@@ -752,13 +769,16 @@ make.ld.population.empirical.contrast.plot <- function(data) {
   plot <- ggplot(data, aes(distance_bin_bp, difference, color = contrast)) +
     geom_hline(yintercept = 0, linetype = "dashed", linewidth = 1) +
     geom_line(linewidth = 1) +
-    facet_wrap(~contrast, nrow = 1) +
+    facet_grid(
+      cols = vars(contrast), 
+      labeller = labeller(contrast = PLOT.STYLES$contrast.labels.emp)
+      ) +
     scale_color_manual(
       values = PLOT.STYLES$contrast.colors,
       breaks = LD.POPULATION.CONTRASTS$contrast, guide = "none"
       ) +
     scale_x_continuous(
-      limits = c(5000, 200000), breaks = LD.PLOT.DISTANCE.BINS
+      limits = c(5000, 200000), breaks = LD.PLOT.DISTANCE.BINS.LABELS
       ) +
     labs(
       x = "Distance between SNPs (bp)", y = "Difference",
@@ -809,7 +829,7 @@ make.bootstrap.ld.plot <- function(data, data.types, view, title = view) {
   plot <- ggplot(plotted, aes(distance_bin_bp, mean, color = plot.key,
     fill = plot.key, group = interaction(data.type, pop))) +
     scale_x_continuous(
-      limits = c(5000, 200000), breaks = LD.PLOT.DISTANCE.BINS
+      limits = c(5000, 200000), breaks = LD.PLOT.DISTANCE.BINS.LABELS
       ) +
     labs(
       x = "Distance between SNPs (bp)", y = expression("Mean " * r^2),
@@ -924,31 +944,22 @@ ld.population.contrast.tables <- make.ld.population.contrast.tables(
 ld.simulation.contrast.tables <- make.ld.simulation.contrast.tables(
   ld.simulation.selected, LD.POPULATION.CONTRAST.BOOTSTRAP.REPLICATES
   )
+
+
+# plotting ----
 ld.population.contrast.plots <- list(
-  tc = list(
+  tc.tcd = list(
     `95` = make.ld.simulation.contrast.plot(
       prepare.ld.population.contrast.plot.data(
-        ld.population.contrast.tables, "95", SOURCE.LEVELS[[1L]]
+        ld.population.contrast.tables, "95", 
+        c(SOURCE.LEVELS[[1L]], SOURCE.LEVELS[[2L]])
         ),
       "95", "population"
       ),
     bonferroni = make.ld.simulation.contrast.plot(
       prepare.ld.population.contrast.plot.data(
-        ld.population.contrast.tables, "bonferroni", SOURCE.LEVELS[[1L]]
-        ),
-      "bonferroni", "population"
-      )
-    ),
-  tcd = list(
-    `95` = make.ld.simulation.contrast.plot(
-      prepare.ld.population.contrast.plot.data(
-        ld.population.contrast.tables, "95", SOURCE.LEVELS[[2L]]
-        ),
-      "95", "population"
-      ),
-    bonferroni = make.ld.simulation.contrast.plot(
-      prepare.ld.population.contrast.plot.data(
-        ld.population.contrast.tables, "bonferroni", SOURCE.LEVELS[[2L]]
+        ld.population.contrast.tables, "bonferroni",
+        c(SOURCE.LEVELS[[1L]], SOURCE.LEVELS[[2L]])
         ),
       "bonferroni", "population"
       )
@@ -1009,17 +1020,11 @@ saveRDS(ld.bootstrap.all.datatypes.adx.asw.all.lines, file.path(
 saveRDS(ld.bootstrap.all.datatypes.adx.asw.datatype.interval, file.path(
   OUTPUT.DIR, "ld.bootstrap.all.datatypes.adx.asw.datatype.interval.rds"
   ))
-saveRDS(ld.population.contrast.plots$tc$`95`, file.path(
-  OUTPUT.DIR, "ld.population.tc.95.rds"
+saveRDS(ld.population.contrast.plots$tc.tcd$`95`, file.path(
+  OUTPUT.DIR, "ld.population.tc.tcd.95.rds"
   ))
-saveRDS(ld.population.contrast.plots$tc$bonferroni, file.path(
-  OUTPUT.DIR, "ld.population.tc.bonferroni.rds"
-  ))
-saveRDS(ld.population.contrast.plots$tcd$`95`, file.path(
-  OUTPUT.DIR, "ld.population.tcd.95.rds"
-  ))
-saveRDS(ld.population.contrast.plots$tcd$bonferroni, file.path(
-  OUTPUT.DIR, "ld.population.tcd.bonferroni.rds"
+saveRDS(ld.population.contrast.plots$tc.tcd$bonferroni, file.path(
+  OUTPUT.DIR, "ld.population.tc.tcd.bonferroni.rds"
   ))
 saveRDS(ld.population.contrast.plots$empirical, file.path(
   OUTPUT.DIR, "ld.population.empirical.rds"
@@ -1031,15 +1036,8 @@ saveRDS(ld.simulation.contrast.plots$bonferroni, file.path(
   OUTPUT.DIR, "ld.simulation.contrast.bonferroni.rds"
   ))
 
-print(ld.bootstrap.tcd.1kg.all.lines)
-# print(ld.bootstrap.tcd.1kg.role.interval)
 print(ld.bootstrap.tcd.1kg.datatype.interval)
 print(ld.bootstrap.all.datatypes.adx.asw.all.lines)
-# print(ld.bootstrap.all.datatypes.adx.asw.datatype.interval)
-# print(ld.population.contrast.plots$tc$`95`)
-print(ld.population.contrast.plots$tc$bonferroni)
-# print(ld.population.contrast.plots$tcd$`95`)
-print(ld.population.contrast.plots$tcd$bonferroni)
+print(ld.population.contrast.plots$tc.tcd$bonferroni)
 print(ld.population.contrast.plots$empirical)
-# print(ld.simulation.contrast.plots$`95`)
 print(ld.simulation.contrast.plots$bonferroni)

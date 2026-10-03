@@ -10,6 +10,7 @@
 
 
 library(tidyverse)
+library(patchwork)
 
 # functions ----
 # validate that a given value is a single non-negative whole generation.
@@ -987,42 +988,6 @@ cat(
   )
 )
 
-AA.ne.plot <- ggplot(
-  data = AA.ne,
-  aes(x = generation.end.year, y = ne)
-) +
-  geom_line(color = admix.prim, linewidth = 1.1) +
-  geom_point(aes(shape = epoch), size = 2.5) +
-  scale_y_continuous(labels = scales::comma) +
-  scale_x_continuous(
-    breaks = AA.ne$generation.end.year,
-    labels = AA.ne$generation
-  ) +
-  labs(
-    x = "Generation",
-    y = "Effective population size",
-    shape = NULL,
-    title = "Historical generation-level African American Ne",
-    subtitle = paste0(
-      "G1 initialized Ne = ",
-      round(ne.g1, 1),
-      " | G",
-      epoch.config$epoch.3.anchor.generation,
-      " anchor Ne = ",
-      round(epoch.3.anchor.ne, 1),
-      " | G",
-      epoch.config$final.generation,
-      " Ne = ",
-      round(AA.ne$ne[AA.ne$generation == epoch.config$final.generation], 1)
-    )
-  ) +
-  theme_bw()
-
-if (interactive()) {
-  print(AA.ne.plot)
-}
-
-
 # tennessen afr/eur ne trajectory ----
 # constants from `other_scripts/const.sh` and `build_demography.py`
 t.af.years <- 148000
@@ -1081,42 +1046,6 @@ tennessen.ne.long <- tennessen.ne %>%
     values_to = "ne"
   )
 
-tennessen.ne.plot <- ggplot(
-  tennessen.ne.long,
-  aes(x = year, y = ne, color = population)
-) +
-  geom_line(linewidth = 1.1) +
-  scale_y_continuous(labels = scales::comma) +
-  scale_x_continuous(
-    breaks = seq(tennessen.start.year, tennessen.end.year, by = 50)
-  ) +
-  scale_color_manual(
-    values = c(
-      afr = afr.prim,
-      eur = eur.prim
-    ),
-    labels = c(
-      afr = "Tennessen AFR",
-      eur = "Tennessen EUR"
-    )
-  ) +
-  labs(
-    x = "Year",
-    y = "Effective population size",
-    color = NULL,
-    title = paste0(
-      "Tennessen AFR/EUR effective population size, ",
-      tennessen.start.year,
-      "-",
-      tennessen.end.year
-    )
-  ) +
-  theme_bw()
-
-if (interactive()) {
-  print(tennessen.ne.plot)
-}
-
 
 # combined aa/afr/eur ne plot ----
 aa.ne.long <- AA.ne %>%
@@ -1147,13 +1076,6 @@ combined.ne.plot <- ggplot(
     aes(y = ne), data = combined.ne.long %>% filter(population == "aa"),
     linewidth = 1.1
   ) +
-  geom_point(
-    aes(y = ne, shape = epoch),
-    size = 4,
-    stroke = 1.1,
-    fill = admix.sec,
-    color = admix.prim
-  ) +
   geom_line(
     aes(y = import.ne, linetype = "Import-only trajectory"),
     data = combined.ne.long %>% filter(population == "aa"),
@@ -1171,24 +1093,7 @@ combined.ne.plot <- ggplot(
       "Import-only trajectory" = "dashed",
       "American-born-only trajectory" = "dashed"
     ),
-    name = "AA sub-trajectories"
-  ) +
-  scale_shape_manual(
-    values = c(
-      `Epoch 1: Import-influenced sex proportions` = 22,
-      `Epoch 2: WF 'Inbreeding Nb'` = 21,
-      `Epoch 3: Modern exponential growth` = 24
-    ),
-    labels = c(
-      `Epoch 1: Import-influenced sex proportions` =
-        "Founders' sex proportions",
-      `Epoch 2: WF 'Inbreeding Nb'` =
-        "US-born WF + Imports' sex proportions",
-      `Epoch 3: Modern exponential growth` =
-        "Modern exponential growth"
-    ),
-    name = "AA generation-wise calculation method",
-    na.translate = FALSE
+    name = NULL
   ) +
   scale_color_manual(
     values = c(
@@ -1197,11 +1102,11 @@ combined.ne.plot <- ggplot(
       eur = eur.prim
     ),
     labels = c(
-      aa = "Derived AA",
-      afr = "Tennessen AFR",
-      eur = "Tennessen EUR"
+      aa = "ADX",
+      afr = "AFR",
+      eur = "EUR"
     ),
-    name = "Populations"
+    name = NULL
   ) +
   scale_y_continuous(labels = scales::comma) +
   scale_x_continuous(
@@ -1209,7 +1114,7 @@ combined.ne.plot <- ggplot(
   ) +
   labs(
     x = "Year",
-    y = "Effective population size",
+    y = expression(N[e]),
     color = NULL,
     title = paste0(
       "African, European, and African American effective population size, ",
@@ -1218,98 +1123,19 @@ combined.ne.plot <- ggplot(
       tennessen.end.year
     )
   ) +
-  guides(
-    color = guide_legend(order = 1),
-    linetype = guide_legend(order = 2),
-    shape = guide_legend(order = 3)
-  ) +
-  theme_bw(base_size = 18) +
+  theme_bw(base_size = 24) +
   theme(
-    legend.position = c(0.98, 0.02),
-    legend.justification = c(1, 0),
-    legend.background = element_rect(
-      fill = scales::alpha("white", 0.9),
-      color = "black"
-    ),
-    legend.box = "vertical"
-  )
-
-if (interactive()) {
-  print(combined.ne.plot)
-}
-
-# Ne plot for PEQG ----
-line.sizes = 2
-combined.ne.long <- combined.ne.long %>%
-  mutate(generation = as.integer((year - 1625) / gen.time)) %>%
-  filter(generation > 0, year %% gen.time == 0)
-combined.ne.plot <- ggplot(
-  combined.ne.long,
-  aes(x = generation, color = population)
-) +
-  geom_line(
-    aes(y = ne),
-    data = combined.ne.long %>% filter(population != "aa"),
-    linewidth = line.sizes
-  ) +
-  geom_line(
-    aes(y = ne),
-    data = combined.ne.long %>% filter(population == "aa"),
-    linewidth = line.sizes
-  ) +
-  geom_line(
-    aes(y = import.ne),
-    data = combined.ne.long %>% filter(population == "aa"),
-    linewidth = line.sizes,
-    color = afr.sec,
-    linetype = "dashed"
-  ) +
-  geom_line(
-    aes(y = admix.ne),
-    data = combined.ne.long %>% filter(population == "aa"),
-    linewidth = line.sizes,
-    color = admix.sec,
-    linetype = "dashed"
-  ) +
-  scale_color_manual(
-    values = c(
-      aa = admix.prim,
-      afr = afr.prim,
-      eur = eur.prim
-    )
-  ) +
-  scale_y_continuous(
-    breaks = c(0, 100000, 200000, 300000, 400000, 500000),
-    limits = c(0, 550000)
-  ) +
-  scale_x_continuous(
-    breaks = c(0, 5, 10, 15),
-    limits = c(0, 15.5)
-  ) +
-  coord_cartesian(clip = "off") +
-  theme_bw(base_size = 24, base_line_size = line.sizes, base_rect_size = line.sizes) +
-  theme(
-    legend.position = "none",
+    legend.position = "top",
+    legend.direction = "horizontal",
+    legend.box = "horizontal",
     panel.grid.minor = element_blank(),
-    axis.title.x = element_blank(),
-    axis.title.y = element_blank()
+    strip.background = element_blank(),
+    strip.text = element_text(face = "plain")
   )
-
-if (interactive()) {
-  print(combined.ne.plot)
-}
-
-# save Ne figure for PEQG
-pdf(
-  "~/proj/ibd_compare_results/ne_plot.pdf",
-  width = 8,
-  height = 5,
-  family = "Helvetica"
-)
 
 print(combined.ne.plot)
 
-dev.off()
+
 
 # mixing proportions plot ----
 admix.tbl <- tibble(
@@ -1381,56 +1207,18 @@ admix.long <- admix.tbl %>%
 
 
 admix.plot <- ggplot(
-  admix.long,
-  aes(
-    x = generation,
-    y = perc,
-    color = ancestry
-  )
-) +
-  geom_line(
-    linewidth = line.sizes
+  admix.long, aes(x = generation, y = proportion, color = ancestry)
   ) +
+  geom_line() +
   scale_color_manual(
-    values = c(
-      afr = afr.prim,
-      eur = eur.prim,
-      prior.admix = admix.prim
-    )
-  ) +
-  scale_x_continuous(
-    breaks = c(0, 5, 10, 15),
-    limits = c(0, 15.5)
-  ) +
-  scale_y_continuous(
-    breaks = c(0, 25, 50, 75, 100),
-    limits = c(0, 108)
-  ) +
-  coord_cartesian(clip = "off") +
-  theme_bw(
-    base_size = 24,
-    base_line_size = line.sizes,
-    base_rect_size = line.sizes
-  ) +
-  theme(
-    legend.position = "none",
-    panel.grid.minor = element_blank(),
-    axis.title.x = element_blank(),
-    axis.title.y = element_blank()
-  )
-
-if (interactive()) {
-  print(admix.plot)
-}
-
-# save Ne figure for PEQG
-pdf(
-  "~/proj/ibd_compare_results/anc_plot.pdf",
-  width = 8,
-  height = 5,
-  family = "Helvetica"
-)
+    values = c(afr = afr.prim, eur = eur.prim, prior.admix = admix.prim)
+    ) +
+  labs(y = "Ancestry proportion") +
+  scale_x_continuous(breaks = c(1, 5, 10, 15), limits = c(1, 15.5)) +
+  theme_bw(base_size = 24) +
+  theme(legend.position = "none",
+        panel.grid.minor = element_blank(),
+        strip.background = element_blank(),
+        strip.text = element_text(face = "plain"))
 
 print(admix.plot)
-
-dev.off()

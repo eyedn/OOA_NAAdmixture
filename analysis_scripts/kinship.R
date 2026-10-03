@@ -10,6 +10,7 @@
 
 
 # set up ----
+setwd("~/OOA_NAAdmixture/analysis_scripts/")
 options(scipen = 999)
 library(tidyverse)
 library(glue)
@@ -33,7 +34,7 @@ SOURCE.LEVELS <- c(
   "Simulation_largeGrowth", "Simulation_largeGrowth_simDown",
   "Empirical"
   )
-SOURCE.DISPLAY.LEVELS <- c("T.C.", "T.C.D.", "L.G.", "L.G.D.", "Emp.")
+SOURCE.DISPLAY.LEVELS <- c("T.C.", "T.C.D.", "L.G.", "L.G.D.", "1kG")
 SOURCE.LABELS <- setNames(SOURCE.DISPLAY.LEVELS, SOURCE.LEVELS)
 POPULATION.LEVELS <- c("AFR", "ADX", "EUR", "YRI", "ASW", "CEU")
 PLOT.CONFIGS <- list(
@@ -74,10 +75,10 @@ KINSHIP.EMPIRICAL.CONTRASTS <- tribble(
   "ASW-CEU", "ASW", "CEU"
   )
 KINSHIP.CONTRAST.COLORS <- c(
-  "AFR-ADX" = "#BFFBFF", "AFR-EUR" = "#16ACBD", "ADX-EUR" = "#00606F",
-  "T.C. - T.C.D." = "#BFFBFF", "L.G. - L.G.D." = "#16ACBD",
-  "T.C. - L.G." = "#00606F",
-  "YRI-ASW" = "#BFFBFF", "YRI-CEU" = "#16ACBD", "ASW-CEU" = "#00606F"
+  "AFR-ADX" = "#00858C", "AFR-EUR" = "#00555A", "ADX-EUR" = "#002526",
+  "T.C. - T.C.D." = "#00858C", "L.G. - L.G.D." = "#00555A",
+  "T.C. - L.G." = "#002526",
+  "YRI-ASW" = "#00858C", "YRI-CEU" = "#00555A", "ASW-CEU" = "#002526"
   )
 KINSHIP.CONTRAST.LABELS <- c(
   "AFR-ADX" = "AFR - ADX", "AFR-EUR" = "AFR - EUR",
@@ -916,7 +917,7 @@ make.kinship.contrast.plot <- function(data, interval.label, title) {
     scale_fill_manual(values = KINSHIP.CONTRAST.COLORS[active.contrasts],
       breaks = active.contrasts,
       labels = KINSHIP.CONTRAST.LABELS[active.contrasts]) +
-    labs(x = "Pairwise KING kinship", y = "Left minus right fraction of pairs",
+    labs(x = "Pairwise KING kinship", y = "Difference",
       color = NULL, fill = NULL, title = title,
       subtitle = paste(interval.label, "interval")) +
     guides(
@@ -932,8 +933,16 @@ make.kinship.contrast.plot <- function(data, interval.label, title) {
     theme()
   if ("data.type" %in% names(simulation)) {
     plot <- plot + facet_grid(
-      . ~ data.type, labeller = labeller(data.type = SOURCE.LABELS)
+      cols = vars(contrast), rows = vars(data.type), 
+      labeller = labeller(
+        contrast = KINSHIP.CONTRAST.LABELS, data.type = SOURCE.LABELS
+        )
       )
+  } else {
+    plot <- plot + facet_grid(
+      cols = vars(contrast), 
+      labeller = labeller(contrast = KINSHIP.CONTRAST.LABELS)
+    )
     }
   return(apply.standard.plot.theme(plot))
   }
@@ -991,6 +1000,9 @@ kinship.simulation.contrast.tables <- make.kinship.simulation.contrast.tables(
 kinship.empirical.contrast.tables <- make.kinship.empirical.contrast.tables(
   kinship.empirical, kinship.breaks
   )
+
+
+# plotting ----
 kinship.population.contrast.plots <- list(
   `95` = make.kinship.contrast.plot(
     prepare.kinship.contrast.plot.data(
@@ -1092,13 +1104,8 @@ saveRDS(kinship.empirical.contrast.plots$bonferroni, file.path(
   OUTPUT.DIR, "kinship.empirical.contrasts.bonferroni.rds"
   ))
 
-print(kinship.bootstrap.tcd.1kg)
-print(kinship.bootstrap.all.datatypes.adx.asw)
 print(kinship.bootstrap.tcd.1kg.datatype.interval)
-print(kinship.bootstrap.all.datatypes.adx.asw.datatype.interval)
-# print(kinship.population.contrast.plots$`95`)
+print(kinship.bootstrap.all.datatypes.adx.asw)
 print(kinship.population.contrast.plots$bonferroni)
-# print(kinship.simulation.contrast.plots$`95`)
-print(kinship.simulation.contrast.plots$bonferroni)
-# print(kinship.empirical.contrast.plots$`95`)
 print(kinship.empirical.contrast.plots$bonferroni)
+print(kinship.simulation.contrast.plots$bonferroni)

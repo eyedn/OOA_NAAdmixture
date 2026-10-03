@@ -10,6 +10,7 @@
 
 
 # set up ----
+setwd("~/OOA_NAAdmixture/analysis_scripts/")
 options(scipen = 999)
 library(tidyverse)
 library(ggh4x)
@@ -68,14 +69,14 @@ PLOT.STYLES <- list(
   contrast.colors = c(
     `TC-Emp` = "#9A83CE", `TCD-Emp` = "#6F55B5",
     `LG-Emp` = "#32146F", `LGD-Emp` = "#4B1FA8",
-    `TC-TCD` = "#BFFBFF", `LG-LGD` = "#16ACBD",
-    `TC-LG` = "#00606F"
+    `TC-TCD` = "#00858C", `LG-LGD` = "#00555A",
+    `TC-LG` = "#002526" 
     ),
   contrast.labels = c(
     `TC-Emp` = "T.C. ADX - ASW", `TCD-Emp` = "T.C.D. ADX- ASW",
     `LG-Emp` = "L.G. ADX - ASW", `LGD-Emp` = "L.G.D. ADX - ASW",
-    `TC-TCD` = "T.C. ADX - T.C.D.", `LG-LGD` = "L.G. ADX - L.G.D.",
-    `TC-LG` = "T.C. ADX - L.G."
+    `TC-TCD` = "T.C. ADX - T.C.D. ADX", `LG-LGD` = "L.G. ADX - L.G.D. ADX",
+    `TC-LG` = "T.C. ADX - L.G. ADX"
     )
   )
 ANCESTRY.BOOTSTRAP.CONTRASTS <- tribble(
@@ -937,11 +938,7 @@ prepare.ancestry.bootstrap.contrast.plot.data <- function(
       facet.label = factor(NA_character_)
       ) %>%
     group_by(chromosome) %>%
-    mutate(
-      plot.x = as.numeric(chromosome) +
-        (as.numeric(contrast) - (n_distinct(contrast) + 1) / 2) *
-          CATEGORICAL.BAR.DODGE / n_distinct(contrast)
-      ) %>%
+    mutate(plot.x = as.numeric(chromosome)) %>%
     ungroup() %>%
     arrange(statistic, chromosome, contrast)
   return(plotted)
@@ -968,7 +965,6 @@ make.ancestry.bootstrap.contrast.plot <- function(
       ) +
     geom_point(
       aes(fill = contrast, color = point.color),
-      position = position_dodge(width = CATEGORICAL.BAR.DODGE),
       shape = 21, size = 3, stroke = CATEGORICAL.BAR.LINEWIDTH
       ) +
     scale_color_manual(
@@ -1093,15 +1089,18 @@ ancestry.bootstrap.histograms <- summarize.bootstrap.histograms(
   ancestry.individual.data, HISTOGRAM.BREAKS, RANDOM.SEED,
   BOOTSTRAP.REPLICATES
   )
+
+
+# plotting ----
 ancestry.bootstrap.tcd.1kg.bar <- make.bootstrap.ancestry.bar.plot(
   ancestry.bootstrap.summary,
   c("Simulation_2T12Consistent_simDown", "Empirical"),
   "African ancestry: TCD and ASW"
-  )
+)
 ancestry.bootstrap.all.datatypes.adx.asw.bar <-
   make.bootstrap.ancestry.bar.plot(
-  ancestry.bootstrap.summary, SOURCE.LEVELS,
-  "African ancestry: all ADX sources and ASW"
+    ancestry.bootstrap.summary, SOURCE.LEVELS,
+    "African ancestry: all ADX sources and ASW"
   )
 ancestry.bootstrap.histogram.chromosomes <- as.character(1:22)
 ancestry.bootstrap.tcd.1kg.histograms <- setNames(
@@ -1112,11 +1111,11 @@ ancestry.bootstrap.tcd.1kg.histograms <- setNames(
       paste0(
         "Chromosome ", chromosome,
         " simulations and genome-wide ASW: TCD and ASW"
-        )
       )
-    }),
+    )
+  }),
   paste0("chr", ancestry.bootstrap.histogram.chromosomes)
-  )
+)
 ancestry.bootstrap.all.datatypes.adx.asw.histograms <- setNames(
   lapply(ancestry.bootstrap.histogram.chromosomes, function(chromosome) {
     make.bootstrap.ancestry.histogram.plot(
@@ -1124,11 +1123,11 @@ ancestry.bootstrap.all.datatypes.adx.asw.histograms <- setNames(
       paste0(
         "Chromosome ", chromosome,
         " simulations and genome-wide ASW: all ADX sources and ASW"
-        )
       )
-    }),
+    )
+  }),
   paste0("chr", ancestry.bootstrap.histogram.chromosomes)
-  )
+)
 
 # retain chromosome-1 aliases used by existing downstream consumers.
 ancestry.bootstrap.tcd.1kg.histogram <-
@@ -1139,46 +1138,46 @@ ancestry.bootstrap.empirical.95.chromosome.comparisons <-
   make.ancestry.bootstrap.contrast.plot(
     prepare.ancestry.bootstrap.contrast.plot.data(
       ancestry.bootstrap.comparison.tables, "empirical", "95", "chromosome"
-      ),
+    ),
     "Bootstrap ancestry differences: chromosome by chromosome"
-    )
+  )
 ancestry.bootstrap.empirical.95.genome.comparisons <-
   make.ancestry.bootstrap.contrast.plot(
     prepare.ancestry.bootstrap.contrast.plot.data(
       ancestry.bootstrap.comparison.tables, "empirical", "95", "genome"
-      ),
+    ),
     "Bootstrap ancestry differences: chromosome by whole-genome ASW"
-    )
+  )
 ancestry.bootstrap.empirical.bonferroni.chromosome.comparisons <-
   make.ancestry.bootstrap.contrast.plot(
     prepare.ancestry.bootstrap.contrast.plot.data(
       ancestry.bootstrap.comparison.tables, "empirical", "bonferroni",
       "chromosome"
-      ),
+    ),
     "Bonferroni bootstrap ancestry differences: chromosome by chromosome"
-    )
+  )
 ancestry.bootstrap.empirical.bonferroni.genome.comparisons <-
   make.ancestry.bootstrap.contrast.plot(
     prepare.ancestry.bootstrap.contrast.plot.data(
       ancestry.bootstrap.comparison.tables, "empirical", "bonferroni",
       "genome"
-      ),
+    ),
     "Bonferroni bootstrap ancestry differences: chromosome by whole-genome ASW"
-    )
+  )
 ancestry.bootstrap.simulation.95.comparisons <-
   make.ancestry.bootstrap.contrast.plot(
     prepare.ancestry.bootstrap.contrast.plot.data(
       ancestry.bootstrap.comparison.tables, "simulation", "95"
-      ),
+    ),
     "Bootstrap ancestry differences: simulation contrasts"
-    )
+  )
 ancestry.bootstrap.simulation.bonferroni.comparisons <-
   make.ancestry.bootstrap.contrast.plot(
     prepare.ancestry.bootstrap.contrast.plot.data(
       ancestry.bootstrap.comparison.tables, "simulation", "bonferroni"
-      ),
+    ),
     "Bonferroni bootstrap ancestry differences: simulation contrasts"
-    )
+  )
 
 # save each active figure before explicit printing at the script end.
 dir.create(OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
@@ -1246,52 +1245,6 @@ saveRDS(ancestry.bootstrap.simulation.bonferroni.comparisons, file.path(
 print(ancestry.bootstrap.tcd.1kg.bar)
 print(ancestry.bootstrap.all.datatypes.adx.asw.bar)
 print(ancestry.bootstrap.tcd.1kg.histograms$chr1)
-# print(ancestry.bootstrap.tcd.1kg.histograms$chr2)
-# print(ancestry.bootstrap.tcd.1kg.histograms$chr3)
-# print(ancestry.bootstrap.tcd.1kg.histograms$chr4)
-# print(ancestry.bootstrap.tcd.1kg.histograms$chr5)
-# print(ancestry.bootstrap.tcd.1kg.histograms$chr6)
-# print(ancestry.bootstrap.tcd.1kg.histograms$chr7)
-# print(ancestry.bootstrap.tcd.1kg.histograms$chr8)
-# print(ancestry.bootstrap.tcd.1kg.histograms$chr9)
-# print(ancestry.bootstrap.tcd.1kg.histograms$chr10)
-# print(ancestry.bootstrap.tcd.1kg.histograms$chr11)
-# print(ancestry.bootstrap.tcd.1kg.histograms$chr12)
-# print(ancestry.bootstrap.tcd.1kg.histograms$chr13)
-# print(ancestry.bootstrap.tcd.1kg.histograms$chr14)
-# print(ancestry.bootstrap.tcd.1kg.histograms$chr15)
-# print(ancestry.bootstrap.tcd.1kg.histograms$chr16)
-# print(ancestry.bootstrap.tcd.1kg.histograms$chr17)
-# print(ancestry.bootstrap.tcd.1kg.histograms$chr18)
-# print(ancestry.bootstrap.tcd.1kg.histograms$chr19)
-# print(ancestry.bootstrap.tcd.1kg.histograms$chr20)
-# print(ancestry.bootstrap.tcd.1kg.histograms$chr21)
-# print(ancestry.bootstrap.tcd.1kg.histograms$chr22)
-print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr1)
-# print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr2)
-# print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr3)
-# print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr4)
-# print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr5)
-# print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr6)
-# print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr7)
-# print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr8)
-# print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr9)
-# print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr10)
-# print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr11)
-# print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr12)
-# print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr13)
-# print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr14)
-# print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr15)
-# print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr16)
-# print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr17)
-# print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr18)
-# print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr19)
-# print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr20)
-# print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr21)
-# print(ancestry.bootstrap.all.datatypes.adx.asw.histograms$chr22)
-# print(ancestry.bootstrap.empirical.95.chromosome.comparisons)
-# print(ancestry.bootstrap.empirical.95.genome.comparisons)
-# print(ancestry.bootstrap.empirical.bonferroni.chromosome.comparisons)
 print(ancestry.bootstrap.empirical.bonferroni.genome.comparisons)
-# print(ancestry.bootstrap.simulation.95.comparisons)
 print(ancestry.bootstrap.simulation.bonferroni.comparisons)
+

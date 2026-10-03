@@ -10,6 +10,7 @@
 
 
 # set up ----
+setwd("~/OOA_NAAdmixture/analysis_scripts/")
 options(scipen = 999)
 library(tidyverse)
 library(nanoparquet)
@@ -99,20 +100,25 @@ PLOT.STYLES <- list(
     YRI = "#EEC4DC", ASW = "#E44B8D", CEU = "#BB437E"
     ),
   contrast.colors = c(
-    `AFR-ADX` = "#BFFBFF", `AFR-EUR` = "#16ACBD",
-    `ADX-EUR` = "#00606F"
+    `AFR-ADX` = "#00858C", `AFR-EUR` = "#00555A",
+    `ADX-EUR` = "#002526"
     ),
   contrast.labels = c(
-    `AFR-ADX` = "AFR - ADX", `AFR-EUR` = "AFR - EUR",
-    `ADX-EUR` = "ADX - EUR"
-    ),
+    `TC-TCD` = "T.C. ADX - T.C.D. ADX", `LG-LGD` = "L.G. ADX - L.G.D. ADX",
+    `TC-LG` = "T.C. ADX - L.G. ADX", `AFR-ADX` = "AFR - ADX", 
+    `AFR-EUR` = "AFR - EUR", `ADX-EUR` = "ADX - EUR"
+  ),
+  contrast.labels.emp = c(
+    `AFR-ADX` = "YRI - ASW", `AFR-EUR` = "YRI - CEU",
+    `ADX-EUR` = "ASW - CEU"
+  ),
   contrast.linetypes = c(
-    `AFR-ADX` = "solid", `AFR-EUR` = "longdash",
-    `ADX-EUR` = "dotted"
+    `AFR-ADX` = "longdash", `AFR-EUR` = "longdash",
+    `ADX-EUR` = "longdash"
     ),
   simulation.contrast.colors = c(
-    "T.C. - T.C.D." = "#BFFBFF", "L.G. - L.G.D." = "#16ACBD",
-    "T.C. - L.G." = "#00606F"
+    "T.C. - T.C.D." = "#00858C", "L.G. - L.G.D." = "#00555A",
+    "T.C. - L.G." = "#002526"
     ),
   series.labels = SOURCE.LABELS
   )
@@ -606,7 +612,7 @@ prepare.diversity.population.contrast.plot.data <- function(
       chrom = factor(chrom, levels = chromosomes),
       contrast = factor(contrast, levels = contrasts),
       stat = factor(stat, levels = c("pi", "theta")),
-      plot.x = as.numeric(chrom) + (as.numeric(contrast) - 2) * 0.25
+      plot.x = as.numeric(chrom)
       )
   markers <- simulation %>%
     group_by(data.type, stat) %>%
@@ -636,7 +642,7 @@ prepare.diversity.population.empirical.contrast.plot.data <- function(
       chrom = factor(chrom, levels = chromosomes),
       contrast = factor(contrast, levels = contrasts),
       stat = factor(stat, levels = c("pi", "theta")),
-      plot.x = as.numeric(chrom) + (as.numeric(contrast) - 2) * 0.25
+      plot.x = as.numeric(chrom)
       )
   genome <- empirical %>%
     filter(chrom == "all", contrast %in% contrasts) %>%
@@ -675,7 +681,7 @@ prepare.diversity.simulation.contrast.plot.data <- function(
       chrom = factor(chrom, levels = as.character(chromosomes)),
       contrast = factor(contrast, levels = contrasts),
       stat = factor(stat, levels = c("pi", "theta")),
-      plot.x = as.numeric(chrom) + (as.numeric(contrast) - 2) * 0.25
+      plot.x = as.numeric(chrom)
       ) %>%
     group_by(stat) %>%
     mutate(
@@ -717,15 +723,20 @@ make.diversity.contrast.plot <- function(
     geom_hline(yintercept = 0, linetype = "dashed", linewidth = 1)
   facet.layer <- if (contrast.type == "population") {
     facet_grid(
+      cols = vars(contrast), 
       rows = vars(data.type, stat), scales = "free_y",
       labeller = labeller(
-        data.type = SOURCE.LABELS, stat = c(pi = "π", theta = "θ[w]")
+        contrast = PLOT.STYLES$contrast.labels,
+        data.type = SOURCE.LABELS, stat = c(pi = "π", theta = "θ")
         )
       )
     } else {
     facet_grid(
-      rows = vars(stat), scales = "free_y",
-      labeller = labeller(stat = c(pi = "π", theta = "θ[w]"))
+      cols = vars(contrast), rows = vars(stat), scales = "free_y",
+      labeller = labeller(
+        contrast = PLOT.STYLES$contrast.labels,
+        stat = c(pi = "π", theta = "θ")
+        )
       )
     }
   plot <- plot +
@@ -735,7 +746,6 @@ make.diversity.contrast.plot <- function(
       ) +
     geom_point(
       aes(fill = contrast, color = point.color),
-      position = position_dodge(width = CATEGORICAL.BAR.DODGE),
       shape = 21, size = 3, stroke = CATEGORICAL.BAR.LINEWIDTH
       ) +
     facet.layer +
@@ -762,7 +772,8 @@ make.diversity.contrast.plot <- function(
         )
       ) +
     scale_x_continuous(
-      breaks = seq_along(CHROMOSOMES), labels = CHROMOSOMES
+      breaks = seq_along(CHROMOSOMES), 
+      labels = c("1", rep("", 9), "11", rep("", 10), "22")
       ) +
     scale_y_continuous(expand = expansion(mult = c(0.05, 0.17))) +
     labs(
@@ -794,15 +805,17 @@ make.diversity.population.empirical.contrast.plot <- function(data) {
       alpha = 0.5, linewidth = CATEGORICAL.BAR.LINEWIDTH,
       show.legend = FALSE
       ) +
+    geom_hline(yintercept = 0, linetype = "dashed", linewidth = 1) +
     geom_point(
       aes(plot.x, difference, fill = contrast),
-      position = position_dodge(width = CATEGORICAL.BAR.DODGE),
       shape = 21, size = 3, stroke = CATEGORICAL.BAR.LINEWIDTH,
       color = "black", inherit.aes = FALSE
       ) +
     facet_grid(
-      rows = vars(stat), scales = "free_y",
-      labeller = labeller(stat = c(pi = "π", theta = "θ[w]"))
+      cols = vars(contrast), rows = vars(stat), scales = "free_y",
+      labeller = labeller(
+        contrast = PLOT.STYLES$contrast.labels.emp,
+        stat = c(pi = "π", theta = "θ"))
       ) +
     scale_color_manual(
       values = PLOT.STYLES$contrast.colors, breaks = active.contrasts,
@@ -825,7 +838,8 @@ make.diversity.population.empirical.contrast.plot <- function(data) {
         )
       ) +
     scale_x_continuous(
-      breaks = seq_along(CHROMOSOMES), labels = CHROMOSOMES
+      breaks = seq_along(CHROMOSOMES), 
+      labels = c("1", rep("", 9), "11", rep("", 10), "22")
       ) +
     labs(
       x = "Chromosome", y = "Difference", color = NULL, fill = NULL,
@@ -1090,7 +1104,7 @@ make.diversity.plot <- function(
     facet_grid(
       stat ~ ., scales = "free_y",
       labeller = labeller(
-        stat = c(pi = "π", theta = "θ[w]")
+        stat = c(pi = "π", theta = "θ")
         )
       ) +
     scale_color_manual(values = styles$empirical.colors) +
@@ -1201,48 +1215,9 @@ diversity.population.contrast.empirical.tables <-
   make.diversity.population.empirical.contrasts(
     diversity.population.contrast.empirical, CHROMOSOMES
     )
-diversity.population.contrast.plots <- imap(
-  DIVERSITY.POPULATION.CONTRAST.SOURCE.GROUPS,
-  function(sources, tag) {
-    list(
-      `95` = make.diversity.contrast.plot(
-        prepare.diversity.population.contrast.plot.data(
-          diversity.population.contrast.tables, "95", CHROMOSOMES, sources
-          ),
-        "95", "population"
-        ),
-      bonferroni = make.diversity.contrast.plot(
-        prepare.diversity.population.contrast.plot.data(
-          diversity.population.contrast.tables, "bonferroni", CHROMOSOMES, sources
-          ),
-        "bonferroni", "population"
-        )
-      )
-    }
-  )
-diversity.population.contrast.plots$empirical <-
-  make.diversity.population.empirical.contrast.plot(
-    prepare.diversity.population.empirical.contrast.plot.data(
-      diversity.population.contrast.empirical.tables, CHROMOSOMES
-      )
-    )
 diversity.simulation.contrast.tables <- make.diversity.simulation.contrast.tables(
   diversity.population.contrast.simulation, CHROMOSOMES,
   DIVERSITY.POPULATION.CONTRAST.BOOTSTRAP.REPLICATES
-  )
-diversity.simulation.contrast.plots <- list(
-  `95` = make.diversity.contrast.plot(
-    prepare.diversity.simulation.contrast.plot.data(
-      diversity.simulation.contrast.tables, "95", CHROMOSOMES
-      ),
-    "95", "simulation"
-    ),
-  bonferroni = make.diversity.contrast.plot(
-    prepare.diversity.simulation.contrast.plot.data(
-      diversity.simulation.contrast.tables, "bonferroni", CHROMOSOMES
-      ),
-    "bonferroni", "simulation"
-    )
   )
 diversity.simulation.summary <- bind_rows(
   diversity.sim.tc,
@@ -1269,17 +1244,60 @@ diversity.plot.data <- build.diversity.plot.data(
     ),
   SELECTED.CHROMOSOMES
   )
+
+
+
+# plotting ----
 diversity.bootstrap.plots <- imap(list(
   tc.tcd.1kg = PLOT.CONFIGS$tc.tcd.1kg,
   all.datatypes.adx.asw = PLOT.CONFIGS$all.datatypes.adx.asw
-  ), function(data.types, tag) {
+), function(data.types, tag) {
   return(make.diversity.plot(
     diversity.plot.data$points,
     diversity.plot.data$genome.lines,
     PLOT.STYLES, data.types,
     tag
-    ))
-  })
+  ))
+})
+diversity.population.contrast.plots <- imap(
+  DIVERSITY.POPULATION.CONTRAST.SOURCE.GROUPS,
+  function(sources, tag) {
+    list(
+      `95` = make.diversity.contrast.plot(
+        prepare.diversity.population.contrast.plot.data(
+          diversity.population.contrast.tables, "95", CHROMOSOMES, sources
+        ),
+        "95", "population"
+      ),
+      bonferroni = make.diversity.contrast.plot(
+        prepare.diversity.population.contrast.plot.data(
+          diversity.population.contrast.tables, "bonferroni", CHROMOSOMES, sources
+        ),
+        "bonferroni", "population"
+      )
+    )
+  }
+)
+diversity.population.contrast.plots$empirical <-
+  make.diversity.population.empirical.contrast.plot(
+    prepare.diversity.population.empirical.contrast.plot.data(
+      diversity.population.contrast.empirical.tables, CHROMOSOMES
+    )
+  )
+diversity.simulation.contrast.plots <- list(
+  `95` = make.diversity.contrast.plot(
+    prepare.diversity.simulation.contrast.plot.data(
+      diversity.simulation.contrast.tables, "95", CHROMOSOMES
+    ),
+    "95", "simulation"
+  ),
+  bonferroni = make.diversity.contrast.plot(
+    prepare.diversity.simulation.contrast.plot.data(
+      diversity.simulation.contrast.tables, "bonferroni", CHROMOSOMES
+    ),
+    "bonferroni", "simulation"
+  )
+)
 
 # persist every plot before printing figures at the end of the script
 dir.create(OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
@@ -1313,10 +1331,7 @@ saveRDS(diversity.simulation.contrast.plots$bonferroni, file.path(
 
 print(diversity.bootstrap.plots$tc.tcd.1kg)
 print(diversity.bootstrap.plots$all.datatypes.adx.asw)
-# print(diversity.population.contrast.plots$tc.tcd$`95`)
 print(diversity.population.contrast.plots$tc.tcd$bonferroni)
-# print(diversity.population.contrast.plots$lg.lgd$`95`)
-# print(diversity.population.contrast.plots$lg.lgd$bonferroni)
 print(diversity.population.contrast.plots$empirical)
-# print(diversity.simulation.contrast.plots$`95`)
 print(diversity.simulation.contrast.plots$bonferroni)
+
