@@ -13,6 +13,169 @@
 library(tidyverse)
 library(patchwork)
 
+# tunable parameters
+gen.time <- 25
+hacker.end.year <- 1865
+present.year <- 2000
+epoch.1.len <- 1
+epoch.2.len <- 6
+epoch.3.len <- 8
+
+# This source table keeps several historical columns for completeness. The model
+# directly uses only period, person-years, birth-rate, imports, births, and
+# population-boundary columns selected into `AA.hacker.tbl`.
+hacker.tbl <- data.frame(
+  period = c(
+    "1610-1620", "1620-1630", "1630-1640", "1640-1650", "1650-1660",
+    "1660-1670", "1670-1680", "1680-1690", "1690-1700", "1700-1710",
+    "1710-1720", "1720-1730", "1730-1740", "1740-1750", "1750-1760",
+    "1760-1770", "1770-1780", "1780-1790", "1790-1800", "1800-1810",
+    "1810-1820", "1820-1830", "1830-1840", "1840-1850", "1850-1860",
+    "1860-1861", "1861-1862", "1862-1863", "1863-1864", "1864-1865"
+  ),
+  pop.beginning = c(
+    0, 20, 59, 585, 1568,
+    2862, 4444, 6832, 16394, 27806,
+    41844, 67294, 95669, 156040, 247027,
+    319290, 459446, 558921, 706514, 908036,
+    1195182, 1550757, 2021968, 2530405, 3204420,
+    3953760, 3991133, 3903859, 3815760, 3726828
+  ),
+  pop.end = c(
+    20, 59, 585, 1568, 2862,
+    4444, 6832, 16394, 27806, 41844,
+    67294, 95669, 156040, 247027, 319290,
+    459446, 558921, 706514, 908036, 1195182,
+    1550757, 2021968, 2530405, 3204420, 3953760,
+    3991133, 3903859, 3815760, 3726828, 3630336
+  ),
+  growth.rate.10yr = c(
+    NA, 195.0, 891.5, 168.0, 82.5,
+    55.3, 53.7, 140.0, 69.6, 50.5,
+    60.8, 42.2, 63.1, 58.3, 29.3,
+    43.9, 21.7, 26.4, 28.5, 31.6,
+    29.8, 30.4, 25.1, 26.6, 23.4,
+    NA, NA, NA, NA, NA
+  ),
+  person.years.lived = c(
+    16, 361, 2293, 9970, 21505,
+    35952, 55527, 109243, 215999, 343482,
+    535651, 806513, 1234030, 1980625, 2816150,
+    3851269, 5075599, 6298380, 8030652, 10450423,
+    13652609, 17759559, 22666906, 28541607, 35659777,
+    3972417, 3947335, 3859642, 3771119, 3144251
+  ),
+  hours.worked.millions = c(
+    0, 1, 5, 23, 49,
+    82, 127, 251, 496, 788,
+    1229, 1850, 2831, 4544, 6461,
+    8835, 11644, 14449, 18423, 23975,
+    31321, 40743, 52001, 65478, 81808,
+    9113, 9056, 8855, 8651, 7213
+  ),
+  assumed.birth.rate = c(
+    NA, 22.4, 22.4, 22.4, 22.4,
+    22.4, 26.5, 27.3, 29.1, 31.0,
+    34.6, 41.3, 41.4, 41.2, 46.4,
+    39.5, 39.1, 44.7, 50.3, 55.8,
+    55.7, 56.5, 56.5, 54.0, 52.3,
+    49.6, 49.6, 49.6, 49.6, 49.6
+  ),
+  births = c(
+    NA, 8, 51, 223, 481,
+    804, 1472, 2986, 6295, 10635,
+    18524, 33316, 51150, 81536, 130654,
+    151957, 198660, 281549, 403648, 583395,
+    759768, 1003859, 1280680, 1539820, 1865898,
+    197032, 195788, 191438, 187048, 155955
+  ),
+  imported = c(
+    32, 150, 110, 301, 1335,
+    3038, 3582, 4947, 8197, 16442,
+    17622, 41334, 66672, 26455, 44718,
+    59557, 41129, 25105, 16183, 77368,
+    5207, 410, 91, 0, 303,
+    110, 0, 0, 0, 0
+  ),
+  smuggled = c(
+    NA, NA, NA, NA, NA,
+    NA, NA, NA, NA, NA,
+    NA, NA, NA, NA, NA,
+    NA, NA, NA, NA, NA,
+    NA, 1100, 900, 500, 200,
+    NA, NA, NA, NA, NA
+  ),
+  natural.increase.rate = c(
+    NA, -30.8, 18.1, 6.8, -0.2,
+    -4.0, -2.2, 4.2, 1.5, -0.7,
+    1.5, -1.6, -0.5, 3.3, 1.0,
+    2.1, 1.3, 2.2, 2.6, 2.4,
+    2.7, 2.9, 2.4, 2.4, 2.2,
+    NA, NA, NA, NA, NA
+  ),
+  births.plus.imports = c(
+    32, 158, 161, 524, 1816,
+    3842, 5054, 7933, 14492, 27077,
+    36146, 74650, 117822, 107991, 175372,
+    211514, 239789, 306654, 419831, 660763,
+    764975, 1005369, 1281671, 1540320, 1866401,
+    197142, 195788, 191438, 187048, 155955
+  ),
+  percent.total = c(
+    0.0, 0.0, 0.0, 0.0, 0.0,
+    0.0, 0.1, 0.1, 0.1, 0.3,
+    0.4, 0.8, 1.2, 1.1, 1.8,
+    2.2, 2.4, 3.1, 4.3, 6.7,
+    7.8, 10.3, 13.1, 15.7, 19.0,
+    2.0, 2.0, 2.0, 1.9, 1.6
+  ),
+  cumulative.number = c(
+    32, 190, 351, 875, 2691,
+    6533, 11587, 19520, 34012, 61089,
+    97235, 171885, 289707, 397698, 573070,
+    784584, 1024373, 1331027, 1750858, 2411621,
+    3176596, 4181965, 5463636, 7003956, 8870357,
+    9067499, 9263287, 9454725, 9641773, 9797728
+  ),
+  cumulative.percent = c(
+    0.0, 0.0, 0.0, 0.0, 0.0,
+    0.1, 0.1, 0.2, 0.3, 0.6,
+    1.0, 1.8, 3.0, 4.1, 5.8,
+    8.0, 10.5, 13.6, 17.9, 24.6,
+    32.4, 42.7, 55.8, 71.5, 90.5,
+    92.5, 94.5, 96.5, 98.4, 100.0
+  ),
+  stringsAsFactors = FALSE
+)
+
+epoch.3.growth.rate <- 0.023175
+
+epoch.1.eur.prop <- 0.08
+epoch.2.afr.prop <- 0.06
+epoch.2.eur.prop <- 0.03
+epoch.3.afr.prop <- 0
+epoch.3.eur.prop <- 0
+
+# The first value is a dummy index placeholder. The paper-derived values start
+# at position 2, so modeled G1 uses `mooney.cg[2]`.
+mooney.cg <- c(
+  1,
+  1,
+  0.9835,
+  0.8602,
+  0.8551,
+  0.7826,
+  0.5380,
+  0.1418
+)
+
+# plot colors
+afr.prim <- "#56B4E9"
+afr.sec <- "#8FD0F2"
+eur.prim <- "#fb8072"
+admix.prim <- "#703BE7"
+admix.sec <- "#C6B3F6"
+
 # internal functions ----
 # validate that a given value is a single non-negative whole generation.
 # `value` is the candidate input and `name` is used in the error message.
@@ -769,239 +932,7 @@ calc.aa.ne.results <- function(
 }
 
 
-# tunable parameters ----
-gen.time <- 25
-hacker.end.year <- 1865
-present.year <- 2000
-epoch.1.len <- 1
-epoch.2.len <- 6 
-epoch.3.len <- 8
-
-# This source table keeps several historical columns for completeness. The model
-# directly uses only period, person-years, birth-rate, imports, births, and
-# population-boundary columns selected into `AA.hacker.tbl`.
-hacker.tbl <- data.frame(
-  period = c(
-    "1610-1620", "1620-1630", "1630-1640", "1640-1650", "1650-1660",
-    "1660-1670", "1670-1680", "1680-1690", "1690-1700", "1700-1710",
-    "1710-1720", "1720-1730", "1730-1740", "1740-1750", "1750-1760",
-    "1760-1770", "1770-1780", "1780-1790", "1790-1800", "1800-1810",
-    "1810-1820", "1820-1830", "1830-1840", "1840-1850", "1850-1860",
-    "1860-1861", "1861-1862", "1862-1863", "1863-1864", "1864-1865"
-  ),
-  pop.beginning = c(
-    0, 20, 59, 585, 1568,
-    2862, 4444, 6832, 16394, 27806,
-    41844, 67294, 95669, 156040, 247027,
-    319290, 459446, 558921, 706514, 908036,
-    1195182, 1550757, 2021968, 2530405, 3204420,
-    3953760, 3991133, 3903859, 3815760, 3726828
-  ),
-  pop.end = c(
-    20, 59, 585, 1568, 2862,
-    4444, 6832, 16394, 27806, 41844,
-    67294, 95669, 156040, 247027, 319290,
-    459446, 558921, 706514, 908036, 1195182,
-    1550757, 2021968, 2530405, 3204420, 3953760,
-    3991133, 3903859, 3815760, 3726828, 3630336
-  ),
-  growth.rate.10yr = c(
-    NA, 195.0, 891.5, 168.0, 82.5,
-    55.3, 53.7, 140.0, 69.6, 50.5,
-    60.8, 42.2, 63.1, 58.3, 29.3,
-    43.9, 21.7, 26.4, 28.5, 31.6,
-    29.8, 30.4, 25.1, 26.6, 23.4,
-    NA, NA, NA, NA, NA
-  ),
-  person.years.lived = c(
-    16, 361, 2293, 9970, 21505,
-    35952, 55527, 109243, 215999, 343482,
-    535651, 806513, 1234030, 1980625, 2816150,
-    3851269, 5075599, 6298380, 8030652, 10450423,
-    13652609, 17759559, 22666906, 28541607, 35659777,
-    3972417, 3947335, 3859642, 3771119, 3144251
-  ),
-  hours.worked.millions = c(
-    0, 1, 5, 23, 49,
-    82, 127, 251, 496, 788,
-    1229, 1850, 2831, 4544, 6461,
-    8835, 11644, 14449, 18423, 23975,
-    31321, 40743, 52001, 65478, 81808,
-    9113, 9056, 8855, 8651, 7213
-  ),
-  assumed.birth.rate = c(
-    NA, 22.4, 22.4, 22.4, 22.4,
-    22.4, 26.5, 27.3, 29.1, 31.0,
-    34.6, 41.3, 41.4, 41.2, 46.4,
-    39.5, 39.1, 44.7, 50.3, 55.8,
-    55.7, 56.5, 56.5, 54.0, 52.3,
-    49.6, 49.6, 49.6, 49.6, 49.6
-  ),
-  births = c(
-    NA, 8, 51, 223, 481,
-    804, 1472, 2986, 6295, 10635,
-    18524, 33316, 51150, 81536, 130654,
-    151957, 198660, 281549, 403648, 583395,
-    759768, 1003859, 1280680, 1539820, 1865898,
-    197032, 195788, 191438, 187048, 155955
-  ),
-  imported = c(
-    32, 150, 110, 301, 1335,
-    3038, 3582, 4947, 8197, 16442,
-    17622, 41334, 66672, 26455, 44718,
-    59557, 41129, 25105, 16183, 77368,
-    5207, 410, 91, 0, 303,
-    110, 0, 0, 0, 0
-  ),
-  smuggled = c(
-    NA, NA, NA, NA, NA,
-    NA, NA, NA, NA, NA,
-    NA, NA, NA, NA, NA,
-    NA, NA, NA, NA, NA,
-    NA, 1100, 900, 500, 200,
-    NA, NA, NA, NA, NA
-  ),
-  natural.increase.rate = c(
-    NA, -30.8, 18.1, 6.8, -0.2,
-    -4.0, -2.2, 4.2, 1.5, -0.7,
-    1.5, -1.6, -0.5, 3.3, 1.0,
-    2.1, 1.3, 2.2, 2.6, 2.4,
-    2.7, 2.9, 2.4, 2.4, 2.2,
-    NA, NA, NA, NA, NA
-  ),
-  births.plus.imports = c(
-    32, 158, 161, 524, 1816,
-    3842, 5054, 7933, 14492, 27077,
-    36146, 74650, 117822, 107991, 175372,
-    211514, 239789, 306654, 419831, 660763,
-    764975, 1005369, 1281671, 1540320, 1866401,
-    197142, 195788, 191438, 187048, 155955
-  ),
-  percent.total = c(
-    0.0, 0.0, 0.0, 0.0, 0.0,
-    0.0, 0.1, 0.1, 0.1, 0.3,
-    0.4, 0.8, 1.2, 1.1, 1.8,
-    2.2, 2.4, 3.1, 4.3, 6.7,
-    7.8, 10.3, 13.1, 15.7, 19.0,
-    2.0, 2.0, 2.0, 1.9, 1.6
-  ),
-  cumulative.number = c(
-    32, 190, 351, 875, 2691,
-    6533, 11587, 19520, 34012, 61089,
-    97235, 171885, 289707, 397698, 573070,
-    784584, 1024373, 1331027, 1750858, 2411621,
-    3176596, 4181965, 5463636, 7003956, 8870357,
-    9067499, 9263287, 9454725, 9641773, 9797728
-  ),
-  cumulative.percent = c(
-    0.0, 0.0, 0.0, 0.0, 0.0,
-    0.1, 0.1, 0.2, 0.3, 0.6,
-    1.0, 1.8, 3.0, 4.1, 5.8,
-    8.0, 10.5, 13.6, 17.9, 24.6,
-    32.4, 42.7, 55.8, 71.5, 90.5,
-    92.5, 94.5, 96.5, 98.4, 100.0
-  ),
-  stringsAsFactors = FALSE
-)
-
-epoch.3.growth.rate <- 0.023175
-
-epoch.1.eur.prop <- 0.08
-epoch.2.afr.prop <- 0.06
-epoch.2.eur.prop <- 0.03
-epoch.3.afr.prop <- 0
-epoch.3.eur.prop <- 0
-
-# The first value is a dummy index placeholder. The paper-derived values start
-# at position 2, so modeled G1 uses `mooney.cg[2]`.
-mooney.cg <- c(
-  1,
-  1,
-  0.9835,
-  0.8602,
-  0.8551,
-  0.7826,
-  0.5380,
-  0.1418
-)
-
-# plot colors
-afr.prim <- "#56B4E9"
-afr.sec <- "#8FD0F2"
-eur.prim <- "#fb8072"
-admix.prim <- "#703BE7"
-admix.sec <- "#C6B3F6"
-# set up ----
-analysis.results <- calc.aa.ne.results()
-
-lg.analysis.results <- calc.aa.ne.results(
-  epoch.2.len = 9L,
-  epoch.3.len = 5L
-)
-
-AA.ne <- analysis.results$AA.ne
-AA.overlap <- analysis.results$AA.overlap
-AA.mixing.props <- analysis.results$AA.mixing.props
-epoch.config <- analysis.results$epoch.config
-ne.g1 <- analysis.results$ne.g1
-epoch.3.anchor.ne <- analysis.results$epoch.3.anchor.ne
-
-LG.ne <- lg.analysis.results$AA.ne
-LG.overlap <- lg.analysis.results$AA.overlap
-LG.mixing.props <- lg.analysis.results$AA.mixing.props
-lg.epoch.config <- lg.analysis.results$epoch.config
-lg.ne.g1 <- lg.analysis.results$ne.g1
-lg.epoch.3.anchor.ne <- lg.analysis.results$epoch.3.anchor.ne
-
-
-# plotting ----
-summary.generations <- c(
-  epoch.config$epoch.1.generations,
-  epoch.config$epoch.2.generations,
-  epoch.config$final.generation
-)
-summary.generations <- sort(unique(summary.generations))
-
-cat("\nHistorical generation-level ADMIX Ne summary\n")
-print(
-  AA.ne %>%
-    filter(generation %in% summary.generations) %>%
-    select(
-      generation,
-      generation.start.year,
-      generation.end.year,
-      epoch,
-      is.truncated,
-      imported,
-      births,
-      birth.rate,
-      prev.births,
-      female.total,
-      male.total,
-      adult.population.age25.proxy,
-      parental.population,
-      parental.population.method,
-      k,
-      admix.ne,
-      import.female,
-      import.male,
-      import.ne,
-      ne
-    ),
-  n = Inf
-)
-
-cat(
-  paste0(
-    "\nHistorical present-day G",
-    epoch.config$final.generation,
-    " Ne: ",
-    round(AA.ne$ne[AA.ne$generation == epoch.config$final.generation], 1),
-    "\n"
-  )
-)
-
-# tennessen afr/eur ne trajectory ----
+# tennessen afr/eur ne trajectory
 build.tennessen.ne <- function(AA.ne) {
 # constants from `other_scripts/const.sh` and `build_demography.py`
 t.af.years <- 148000
@@ -1064,7 +995,7 @@ tennessen.ne.long <- tennessen.ne %>%
 }
 
 
-# combined aa/afr/eur ne plot ----
+# combined aa/afr/eur ne plot
 build.ne.plot.data <- function(AA.ne, tennessen.ne) {
   tennessen.ne.long <- tennessen.ne %>%
     pivot_longer(
@@ -1174,11 +1105,11 @@ make.combined.ne.plot <- function(ne.plot.data, population.name) {
     )
 }
 
-# mixing proportions plot ----
+# mixing proportions plot
 make.admix.plot <- function() {
   admix.tbl <- tibble(
   generation = 1:15,
-  
+
   afr = c(
     0.850000,
     0.904820,
@@ -1196,7 +1127,7 @@ make.admix.plot <- function() {
     0.000000,
     0.000000
   ),
-  
+
   eur = c(
     0.150000,
     0.080000,
@@ -1214,7 +1145,7 @@ make.admix.plot <- function() {
     0.000000,
     0.000000
   ),
-  
+
   prior.admix = c(
     0.000000,
     0.015180,
@@ -1262,6 +1193,76 @@ make.admix.plot <- function() {
 
 
 # analysis ----
+analysis.results <- calc.aa.ne.results()
+
+lg.analysis.results <- calc.aa.ne.results(
+  epoch.2.len = 9L,
+  epoch.3.len = 5L
+)
+
+AA.ne <- analysis.results$AA.ne
+AA.overlap <- analysis.results$AA.overlap
+AA.mixing.props <- analysis.results$AA.mixing.props
+epoch.config <- analysis.results$epoch.config
+ne.g1 <- analysis.results$ne.g1
+epoch.3.anchor.ne <- analysis.results$epoch.3.anchor.ne
+
+LG.ne <- lg.analysis.results$AA.ne
+LG.overlap <- lg.analysis.results$AA.overlap
+LG.mixing.props <- lg.analysis.results$AA.mixing.props
+lg.epoch.config <- lg.analysis.results$epoch.config
+lg.ne.g1 <- lg.analysis.results$ne.g1
+lg.epoch.3.anchor.ne <- lg.analysis.results$epoch.3.anchor.ne
+
+
+
+summary.generations <- c(
+  epoch.config$epoch.1.generations,
+  epoch.config$epoch.2.generations,
+  epoch.config$final.generation
+)
+summary.generations <- sort(unique(summary.generations))
+
+cat("\nHistorical generation-level ADMIX Ne summary\n")
+print(
+  AA.ne %>%
+    filter(generation %in% summary.generations) %>%
+    select(
+      generation,
+      generation.start.year,
+      generation.end.year,
+      epoch,
+      is.truncated,
+      imported,
+      births,
+      birth.rate,
+      prev.births,
+      female.total,
+      male.total,
+      adult.population.age25.proxy,
+      parental.population,
+      parental.population.method,
+      k,
+      admix.ne,
+      import.female,
+      import.male,
+      import.ne,
+      ne
+    ),
+  n = Inf
+)
+
+cat(
+  paste0(
+    "\nHistorical present-day G",
+    epoch.config$final.generation,
+    " Ne: ",
+    round(AA.ne$ne[AA.ne$generation == epoch.config$final.generation], 1),
+    "\n"
+  )
+)
+
+
 tennessen.results <- build.tennessen.ne(AA.ne)
 tennessen.ne <- tennessen.results$ne
 tennessen.ne.long <- tennessen.results$long
