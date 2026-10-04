@@ -51,7 +51,12 @@ f3.allele.frequncies <- guide_area() / (
         sfs.bootstrap.proportion.datatype.interval.plots$tcd.1kg +
           labs(title = NULL, subtitle = NULL) +
           scale_x_continuous(
-            breaks = c(1, 5, 10, 15), limits = c(0.5, 15.5)
+            breaks = seq_len(15L),
+            labels = c(
+              "1", "", "", "", "5", "", "", "", "", "10", "", "",
+              "", "", "15"
+              ),
+            limits = c(0.5, 15.5)
             )
       ) /
         (

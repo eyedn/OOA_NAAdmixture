@@ -34,7 +34,13 @@ sf9.allele.frequencies.simulation.contrasts <-
    ) / (
      sfs.simulation.contrast.plots$bonferroni +
        labs(title = NULL, subtitle = NULL) +
-       scale_x_continuous(breaks = c(1, 5, 10, 15)) +
+       scale_x_continuous(
+         breaks = seq_len(15L),
+         labels = c(
+           "1", "", "", "", "5", "", "", "", "", "10", "", "", "", "",
+           "15"
+           )
+         ) +
        theme(legend.position = "none", strip.text.x = element_blank())
      ) / (
        ld.simulation.contrast.plots$bonferroni +
