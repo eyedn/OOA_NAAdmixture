@@ -33,7 +33,9 @@ f3.allele.frequncies <- guide_area() / (
     diversity.bootstrap.plots$tc.tcd.1kg +
       labs(title = NULL, subtitle = NULL) +
       facet_grid(
-        stat ~ ., scales = "free_y", switch = "y",
+        stat ~ .,
+        scales = "free_y",
+        switch = "y",
         labeller = labeller(
           stat = c(pi = "π", theta = "θ")
         )
@@ -43,21 +45,34 @@ f3.allele.frequncies <- guide_area() / (
         fill = guide_legend(order = 1, nrow = 1, byrow = TRUE)
       ) +
       theme(strip.placement = "outside")
-    ) + (
+  ) |
+    (
       (
         sfs.bootstrap.proportion.datatype.interval.plots$tcd.1kg +
-          labs(title = NULL, subtitle = NULL) +
-          theme(legend.position = "none", strip.text = element_blank())
-        ) / (
+          labs(title = NULL, subtitle = NULL)
+      ) /
+        (
           ld.bootstrap.tcd.1kg.datatype.interval +
-            labs(title = NULL, subtitle = NULL) +
-            theme(legend.position = "none", strip.text = element_blank())
-          )
-        ) +
-      plot_layout(widths = c(5, 11))
-    ) + 
-  plot_annotation(tag_levels = 'A', tag_suffix = '.)') +
-  plot_layout(guides = 'collect', heights = c(0.1, 1))
+            labs(title = NULL, subtitle = NULL)
+        )
+    ) &
+    theme(
+      legend.position = "none",
+      strip.text = element_blank(),
+      strip.background = element_blank(),
+      strip.placement = "outside",
+      strip.switch.pad.grid = unit(0, "pt")
+    )
+) +
+  plot_layout(
+    widths = c(5, 11),
+    guides = "collect",
+    heights = c(0.1, 1)
+  ) +
+  plot_annotation(
+    tag_levels = "A",
+    tag_suffix = ".)"
+  )
 dir.create(OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
 saveRDS(f3.allele.frequncies, file.path(OUTPUT.DIR, "f3_allele_frequencies.rds"))
 print(f3.allele.frequncies)
