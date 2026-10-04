@@ -28,10 +28,24 @@ sf8.ld.decay.population.contrasts <-
   (
     ld.population.contrast.plots$tc.tcd$bonferroni +
       labs(title = NULL, subtitle = NULL) +
+      scale_x_continuous(
+        limits = c(5000, 200000),
+        breaks = c(5000, 50000, 100000, 150000, 200000),
+        labels = c("5", "50", "100", "150", "200")
+        ) +
+      labs(x = "Distance between SNPs (kb)") +
       theme(axis.title.x = element_blank())
     ) / (
       ld.population.contrast.plots$empirical +
-        labs(title = NULL, subtitle = NULL)
+        labs(
+          title = NULL, subtitle = NULL,
+          x = "Distance between SNPs (kb)"
+          ) +
+        scale_x_continuous(
+          limits = c(5000, 200000),
+          breaks = c(5000, 50000, 100000, 150000, 200000),
+          labels = c("5", "50", "100", "150", "200")
+          )
       ) +
   plot_annotation(tag_levels = 'A', tag_suffix = '.)') +
   plot_layout(heights = c(2, 1))

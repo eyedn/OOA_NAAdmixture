@@ -49,11 +49,22 @@ f3.allele.frequncies <- guide_area() / (
     (
       (
         sfs.bootstrap.proportion.datatype.interval.plots$tcd.1kg +
-          labs(title = NULL, subtitle = NULL)
+          labs(title = NULL, subtitle = NULL) +
+          scale_x_continuous(
+            breaks = c(1, 5, 10, 15), limits = c(0.5, 15.5)
+            )
       ) /
         (
           ld.bootstrap.tcd.1kg.datatype.interval +
-            labs(title = NULL, subtitle = NULL)
+            labs(
+              title = NULL, subtitle = NULL,
+              x = "Distance between SNPs (kb)"
+              ) +
+            scale_x_continuous(
+              limits = c(5000, 200000),
+              breaks = c(5000, 50000, 100000, 150000, 200000),
+              labels = c("5", "50", "100", "150", "200")
+              )
         )
     ) &
     theme(

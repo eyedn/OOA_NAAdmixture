@@ -34,10 +34,19 @@ sf9.allele.frequencies.simulation.contrasts <-
    ) / (
      sfs.simulation.contrast.plots$bonferroni +
        labs(title = NULL, subtitle = NULL) +
+       scale_x_continuous(breaks = c(1, 5, 10, 15)) +
        theme(legend.position = "none", strip.text.x = element_blank())
      ) / (
        ld.simulation.contrast.plots$bonferroni +
-         labs(title = NULL, subtitle = NULL) +
+         labs(
+           title = NULL, subtitle = NULL,
+           x = "Distance between SNPs (kb)"
+           ) +
+         scale_x_continuous(
+           limits = c(5000, 200000),
+           breaks = c(5000, 50000, 100000, 150000, 200000),
+           labels = c("5", "50", "100", "150", "200")
+           ) +
          facet_grid(
            rows = vars(ld.stat = "r^2"),
            cols = vars(contrast),

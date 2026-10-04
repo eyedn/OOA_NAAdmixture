@@ -40,6 +40,7 @@ sf7.sfs.population.contrasts <-
          ))
        )
      ) +
+     scale_x_continuous(breaks = c(1, 5, 10, 15)) +
      theme(
        legend.position = "none", axis.title.x = element_blank())
   ) / (
@@ -52,6 +53,7 @@ sf7.sfs.population.contrasts <-
           measure = c("count" = "count", "proportion" = "prop.")
         )
       ) +
+      scale_x_continuous(breaks = c(1, 5, 10, 15)) +
       theme(legend.position = "none")
   ) +
   plot_annotation(tag_levels = 'A', tag_suffix = '.)') +
