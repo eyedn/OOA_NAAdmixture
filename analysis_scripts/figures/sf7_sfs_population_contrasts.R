@@ -19,7 +19,7 @@ if (
   !exists("sfs.population.contrast.plots", envir = .GlobalEnv) || 
   !exists("sfs.population.contrast.plots", envir = .GlobalEnv)
 ) {
-  source("sfs")
+  source("sfs.R")
 }
 
 
@@ -31,7 +31,7 @@ sf7.sfs.population.contrasts <-
        interaction(data.type, measure, sep = " ") ~ contrast, 
        scales = "free_y",
        labeller = labeller(
-         contrast = PLOT.STYLES$contrast.labels,
+         contrast = SFS.PLOT.STYLES$contrast.labels,
          .rows = as_labeller(c(
            "Simulation_2T12Consistent count" = "T.C. count",
            "Simulation_2T12Consistent_simDown count" = "T.C.D. count",
@@ -48,7 +48,7 @@ sf7.sfs.population.contrasts <-
       facet_grid(
         cols = vars(contrast), rows = vars(measure), scales = "free_y", 
         labeller = labeller(
-          contrast = SFS.CONTRAST.LABELS,
+          contrast = SFS.PLOT.STYLES$contrast.labels,
           measure = c("count" = "count", "proportion" = "prop.")
         )
       ) +

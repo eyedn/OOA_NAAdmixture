@@ -22,37 +22,32 @@ source(if (file.exists("analysis_scripts/bootstrap_parallel.R")) {
   })
 
 
-SIM.TC.DATA.DIR <- "~/scratch/OOA_NAAdmixture_2T12Consistent/stats"
-SIMDOWN.TC.DATA.DIR <- "~/scratch/OOA_NAAdmixture_2T12ConsistentOnekgDownsample/stats"
-SIM.LG.DATA.DIR <- "~/scratch/OOA_NAAdmixture_largeGrowth/stats"
-SIMDOWN.LG.DATA.DIR <- "~/scratch/OOA_NAAdmixture_largeGrowthOnekgDownsample/stats"
-EMPIRICAL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_1kG/stats"
-OUTPUT.DIR <- "/home1/karatas/proj/OOA_NAAdmixture_data"
-CHROMOSOMES <- as.character(1:22)
-SELECTED.CHROMOSOMES <- c("1")
-SOURCE.LEVELS <- c(
+LD.SIM.TC.DATA.DIR <- "~/scratch/OOA_NAAdmixture_2T12Consistent/stats"
+LD.SIMDOWN.TC.DATA.DIR <- "~/scratch/OOA_NAAdmixture_2T12ConsistentOnekgDownsample/stats"
+LD.SIM.LG.DATA.DIR <- "~/scratch/OOA_NAAdmixture_largeGrowth/stats"
+LD.SIMDOWN.LG.DATA.DIR <- "~/scratch/OOA_NAAdmixture_largeGrowthOnekgDownsample/stats"
+LD.EMPIRICAL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_1kG/stats"
+LD.OUTPUT.DIR <- "/home1/karatas/proj/OOA_NAAdmixture_data"
+LD.CHROMOSOMES <- as.character(1:22)
+LD.SELECTED.CHROMOSOMES <- c("1")
+LD.SOURCE.LEVELS <- c(
   "Simulation_2T12Consistent", "Simulation_2T12Consistent_simDown",
   "Simulation_largeGrowth", "Simulation_largeGrowth_simDown",
   "Empirical"
   )
-SOURCE.DISPLAY.LEVELS <- c("T.C.", "T.C.D.", "L.G.", "L.G.D.", "1kG")
-SOURCE.LABELS <- setNames(SOURCE.DISPLAY.LEVELS, SOURCE.LEVELS)
-POPULATION.LEVELS <- c("AFR", "ADX", "EUR", "YRI", "ASW", "CEU")
-PLOT.CONFIGS <- list(
-  tcd.1kg = SOURCE.LEVELS[c(2, 5)],
-  tc.tcd.1kg = SOURCE.LEVELS[c(1, 2, 5)],
-  all.datatypes.adx.asw = SOURCE.LEVELS
-  )
-BOOTSTRAP.LEGEND.VIEWS <- c("all.lines", "role.interval")
-PLOT.BASE.SIZE <- 24
+LD.SOURCE.DISPLAY.LEVELS <- c("T.C.", "T.C.D.", "L.G.", "L.G.D.", "1kG")
+LD.SOURCE.LABELS <- setNames(LD.SOURCE.DISPLAY.LEVELS, LD.SOURCE.LEVELS)
+LD.POPULATION.LEVELS <- c("AFR", "ADX", "EUR", "YRI", "ASW", "CEU")
+LD.BOOTSTRAP.LEGEND.VIEWS <- c("all.lines", "role.interval")
+LD.PLOT.BASE.SIZE <- 24
 LD.CONTRAST.LINEWIDTH <- 1
 LD.PLOT.DISTANCE.BINS <- seq(5000, 200000, by = 5000)
 LD.PLOT.DISTANCE.BINS.LABELS <- c(5000, 50000, 100000, 150000, 200000)
 LD.POPULATION.CONTRAST.BOOTSTRAP.REPLICATES <- 100000L
 # per displayed comparison-set Bonferroni family: 3 contrasts x 40 bins.
 LD.POPULATION.CONTRAST.FAMILY.SIZE <- 120L
-LD.POPULATION.CONTRAST.SOURCES <- SOURCE.LEVELS[c(1L, 2L)]
-LD.SIMULATION.CONTRAST.SOURCES <- SOURCE.LEVELS[seq_len(4L)]
+LD.POPULATION.CONTRAST.SOURCES <- LD.SOURCE.LEVELS[c(1L, 2L)]
+LD.SIMULATION.CONTRAST.SOURCES <- LD.SOURCE.LEVELS[seq_len(4L)]
 LD.POPULATION.CONTRASTS <- tribble(
   ~contrast, ~simulation.left, ~simulation.right,
   ~empirical.left, ~empirical.right,
@@ -62,11 +57,23 @@ LD.POPULATION.CONTRASTS <- tribble(
   )
 LD.SIMULATION.CONTRASTS <- tribble(
   ~contrast, ~left.source, ~right.source, ~paired,
-  "T.C. - T.C.D.", SOURCE.LEVELS[[1L]], SOURCE.LEVELS[[2L]], TRUE,
-  "L.G. - L.G.D.", SOURCE.LEVELS[[3L]], SOURCE.LEVELS[[4L]], TRUE,
-  "T.C. - L.G.", SOURCE.LEVELS[[1L]], SOURCE.LEVELS[[3L]], FALSE
+  "T.C. - T.C.D.", LD.SOURCE.LEVELS[[1L]], LD.SOURCE.LEVELS[[2L]], TRUE,
+  "L.G. - L.G.D.", LD.SOURCE.LEVELS[[3L]], LD.SOURCE.LEVELS[[4L]], TRUE,
+  "T.C. - L.G.", LD.SOURCE.LEVELS[[1L]], LD.SOURCE.LEVELS[[3L]], FALSE
   )
-PLOT.STYLES <- list(
+LD.PLOT.STYLES <- list(
+  source.levels = LD.SOURCE.LEVELS,
+  population.levels = LD.POPULATION.LEVELS,
+  plot.configs = list(
+    tcd.1kg = LD.SOURCE.LEVELS[c(2, 5)],
+    tc.tcd.1kg = LD.SOURCE.LEVELS[c(1, 2, 5)],
+    all.datatypes.adx.asw = LD.SOURCE.LEVELS
+    ),
+  bootstrap.legend.views = LD.BOOTSTRAP.LEGEND.VIEWS,
+  base.size = LD.PLOT.BASE.SIZE,
+  contrast.linewidth = LD.CONTRAST.LINEWIDTH,
+  distance.bins = LD.PLOT.DISTANCE.BINS,
+  distance.bin.labels = LD.PLOT.DISTANCE.BINS.LABELS,
   population.colors = c(
     AFR = "#56B4E9", ADX = "#4B1FA8", EUR = "#fb8072",
     YRI = "#eec4dc", ASW = "#e44b8d", CEU = "#bb437e"
@@ -89,7 +96,13 @@ PLOT.STYLES <- list(
     `AFR-ADX` = "YRI - ASW", `AFR-EUR` = "YRI - CEU",
     `ADX-EUR` = "ASW - CEU"
   ),
-  series.labels = SOURCE.LABELS
+  contrast.labels = c(
+    `AFR-ADX` = "AFR - ADX", `AFR-EUR` = "AFR - EUR",
+    `ADX-EUR` = "ADX - EUR",
+    `T.C. - T.C.D.` = "T.C. - T.C.D.",
+    `L.G. - L.G.D.` = "L.G. - L.G.D.", "T.C. - L.G." = "T.C. - L.G."
+    ),
+  series.labels = LD.SOURCE.LABELS
   )
 
 
@@ -98,7 +111,7 @@ PLOT.STYLES <- list(
 
 # apply the common visual treatment to a completed plot.
 apply.standard.plot.theme <- function(plot, legend.position = "top") {
-  return(plot + theme_bw(base_size = PLOT.BASE.SIZE) + theme(
+  return(plot + theme_bw(base_size = LD.PLOT.BASE.SIZE) + theme(
     legend.position = legend.position,
     legend.direction = "horizontal",
     legend.box = "horizontal",
@@ -154,7 +167,7 @@ apply.ld.source.contract <- function(data) {
         (data.type == "Empirical" & pop %in% c("AFR", "ADX", "EUR",
                                                 "YRI", "ASW", "CEU"))
       ) %>%
-    mutate(data.type = factor(data.type, levels = SOURCE.LEVELS))
+    mutate(data.type = factor(data.type, levels = LD.SOURCE.LEVELS))
 
   return(retained)
   }
@@ -273,7 +286,7 @@ pool.ld.curves <- function(data, include.chromosome) {
 # summarize replicate simulation curves and fixed empirical curves
 summarize.ld.curves <- function(data, chromosomes) {
   chromosomes <- as.character(chromosomes)
-  if (!length(chromosomes) || any(!chromosomes %in% CHROMOSOMES)) {
+  if (!length(chromosomes) || any(!chromosomes %in% LD.CHROMOSOMES)) {
     stop("LD summarization requires autosomal chromosomes")
     }
   scoped <- data %>% filter(as.character(chrom) %in% chromosomes)
@@ -307,11 +320,11 @@ summarize.ld.curves <- function(data, chromosomes) {
     distinct()
   summary <- bind_rows(simulation, empirical, empirical.genome) %>%
     mutate(
-      role = factor(role, levels = POPULATION.LEVELS[1:3]),
+      role = factor(role, levels = LD.POPULATION.LEVELS[1:3]),
       chrom = factor(as.character(chrom), levels = c(chromosomes, "all")),
       data.type = factor(
         data.type,
-        levels = SOURCE.LEVELS
+        levels = LD.SOURCE.LEVELS
         )
       ) %>%
     filter(!is.na(mean))
@@ -333,7 +346,7 @@ validate.ld.contrast.simulation <- function(data, sources, populations) {
   data <- data %>%
     filter(
       data.type %in% sources,
-      as.character(chrom) %in% SELECTED.CHROMOSOMES,
+      as.character(chrom) %in% LD.SELECTED.CHROMOSOMES,
       pop %in% populations,
       distance_bin_bp %in% LD.PLOT.DISTANCE.BINS
       ) %>%
@@ -345,7 +358,7 @@ validate.ld.contrast.simulation <- function(data, sources, populations) {
     stop("LD contrast simulation values must be finite")
     }
   expected <- crossing(
-    data.type = sources, rep = seq_len(50L), chrom = SELECTED.CHROMOSOMES,
+    data.type = sources, rep = seq_len(50L), chrom = LD.SELECTED.CHROMOSOMES,
     pop = populations, distance_bin_bp = LD.PLOT.DISTANCE.BINS
     )
   counts <- expected %>%
@@ -431,7 +444,7 @@ make.ld.population.contrast.tables <- function(
     data %>%
       filter(
         data.type %in% LD.POPULATION.CONTRAST.SOURCES,
-        as.character(chrom) %in% SELECTED.CHROMOSOMES,
+        as.character(chrom) %in% LD.SELECTED.CHROMOSOMES,
         pop %in% populations,
         distance_bin_bp %in% LD.PLOT.DISTANCE.BINS
         ),
@@ -528,7 +541,7 @@ make.ld.simulation.contrast.tables <- function(
       data %>%
         filter(
           data.type %in% c(contrast$left.source, contrast$right.source),
-          as.character(chrom) %in% SELECTED.CHROMOSOMES,
+          as.character(chrom) %in% LD.SELECTED.CHROMOSOMES,
           pop == "ADX", distance_bin_bp %in% LD.PLOT.DISTANCE.BINS
           ),
       c("chrom", "distance_bin_bp"), "data.type",
@@ -584,7 +597,7 @@ make.ld.population.empirical.contrasts <- function(data) {
     ))
   data <- data %>%
     filter(
-      data.type == "Empirical", as.character(chrom) %in% SELECTED.CHROMOSOMES,
+      data.type == "Empirical", as.character(chrom) %in% LD.SELECTED.CHROMOSOMES,
       pop %in% populations, distance_bin_bp %in% LD.PLOT.DISTANCE.BINS
       ) %>%
     mutate(
@@ -702,9 +715,9 @@ make.ld.simulation.contrast.plot <- function(
     LD.SIMULATION.CONTRASTS$contrast
     }
   colors <- if (contrast.type == "population") {
-    PLOT.STYLES$contrast.colors
+    LD.PLOT.STYLES$contrast.colors
     } else {
-    PLOT.STYLES$simulation.contrast.colors
+    LD.PLOT.STYLES$simulation.contrast.colors
     }
   active.contrasts <- contrasts[
     contrasts %in% unique(as.character(data$simulation$contrast))
@@ -748,12 +761,12 @@ make.ld.simulation.contrast.plot <- function(
     if ("data.type" %in% names(data$simulation)) {
       plot <- plot + facet_grid(
         cols = vars(contrast), rows = vars(data.type),
-        labeller = labeller(data.type = SOURCE.LABELS)
+        labeller = labeller(data.type = LD.SOURCE.LABELS)
       )
     } else {
       plot <- plot + facet_grid(
         cols = vars(contrast), scales = "free_y",
-        labeller = labeller(contrast = SFS.CONTRAST.LABELS)
+        labeller = labeller(contrast = LD.PLOT.STYLES$contrast.labels)
       )
     }
   return(apply.standard.plot.theme(plot, legend.position = "none"))
@@ -771,10 +784,10 @@ make.ld.population.empirical.contrast.plot <- function(data) {
     geom_line(linewidth = 1) +
     facet_grid(
       cols = vars(contrast), 
-      labeller = labeller(contrast = PLOT.STYLES$contrast.labels.emp)
+      labeller = labeller(contrast = LD.PLOT.STYLES$contrast.labels.emp)
       ) +
     scale_color_manual(
-      values = PLOT.STYLES$contrast.colors,
+      values = LD.PLOT.STYLES$contrast.colors,
       breaks = LD.POPULATION.CONTRASTS$contrast, guide = "none"
       ) +
     scale_x_continuous(
@@ -792,7 +805,7 @@ make.ld.population.empirical.contrast.plot <- function(data) {
 # build one chromosome-1 bootstrap LD view over the requested distance range
 make.bootstrap.ld.plot <- function(data, data.types, view, title = view) {
   source.view <- grepl("all.datatypes.adx.asw", view)
-  show.legend <- source.view || view %in% BOOTSTRAP.LEGEND.VIEWS
+  show.legend <- source.view || view %in% LD.BOOTSTRAP.LEGEND.VIEWS
   plotted <- data %>%
     filter(
       as.character(chrom) == "1",
@@ -804,9 +817,9 @@ make.bootstrap.ld.plot <- function(data, data.types, view, title = view) {
         (data.type != "Empirical" & pop == "ADX") |
         (data.type == "Empirical" & pop == "ASW")
       )
-  active.sources <- order.active.levels(plotted$data.type, SOURCE.LEVELS)
+  active.sources <- order.active.levels(plotted$data.type, LD.SOURCE.LEVELS)
   active.populations <- order.active.levels(
-    plotted$pop, POPULATION.LEVELS
+    plotted$pop, LD.POPULATION.LEVELS
     )
   plotted <- plotted %>%
     mutate(
@@ -843,17 +856,17 @@ make.bootstrap.ld.plot <- function(data, data.types, view, title = view) {
       )
     }
   source.colors <- c(
-    PLOT.STYLES$source.colors,
-    ASW = PLOT.STYLES$population.colors[["ASW"]]
+    LD.PLOT.STYLES$source.colors,
+    ASW = LD.PLOT.STYLES$population.colors[["ASW"]]
     )
-  source.labels <- c(PLOT.STYLES$series.labels, ASW = "ASW")
+  source.labels <- c(LD.PLOT.STYLES$series.labels, ASW = "ASW")
   plot <- plot +
     geom_line(linewidth = 1, show.legend = show.legend) +
     scale_color_manual(
       values = if (source.view) {
         source.colors
         } else {
-        PLOT.STYLES$population.colors
+        LD.PLOT.STYLES$population.colors
         },
       breaks = levels(plotted$plot.key),
       labels = if (source.view) {
@@ -866,7 +879,7 @@ make.bootstrap.ld.plot <- function(data, data.types, view, title = view) {
       values = if (source.view) {
         source.colors
         } else {
-        PLOT.STYLES$population.colors
+        LD.PLOT.STYLES$population.colors
         },
       breaks = levels(plotted$plot.key),
       labels = if (source.view) {
@@ -887,7 +900,7 @@ make.bootstrap.ld.plot <- function(data, data.types, view, title = view) {
   if (grepl("datatype.interval$", view)) {
     plot <- plot + facet_wrap(
       ~data.type,
-      labeller = labeller(data.type = PLOT.STYLES$series.labels)
+      labeller = labeller(data.type = LD.PLOT.STYLES$series.labels)
       )
     }
   return(apply.standard.plot.theme(
@@ -901,17 +914,17 @@ make.bootstrap.ld.plot <- function(data, data.types, view, title = view) {
 
 # read all available chromosomes for all four simulation sources
 ld.sim.tc.chromosomes <- read.ld.chromosomes(
-  SIM.TC.DATA.DIR, CHROMOSOMES, "Simulation_2T12Consistent"
+  LD.SIM.TC.DATA.DIR, LD.CHROMOSOMES, "Simulation_2T12Consistent"
   )
 ld.simDown.tc.chromosomes <- read.ld.chromosomes(
-  SIMDOWN.TC.DATA.DIR, CHROMOSOMES,
+  LD.SIMDOWN.TC.DATA.DIR, LD.CHROMOSOMES,
   "Simulation_2T12Consistent_simDown"
   )
 ld.sim.lg.chromosomes <- read.ld.chromosomes(
-  SIM.LG.DATA.DIR, CHROMOSOMES, "Simulation_largeGrowth"
+  LD.SIM.LG.DATA.DIR, LD.CHROMOSOMES, "Simulation_largeGrowth"
   )
 ld.simDown.lg.chromosomes <- read.ld.chromosomes(
-  SIMDOWN.LG.DATA.DIR, CHROMOSOMES,
+  LD.SIMDOWN.LG.DATA.DIR, LD.CHROMOSOMES,
   "Simulation_largeGrowth_simDown"
   )
 ld.simulation.chromosomes <- bind_rows(
@@ -925,17 +938,17 @@ ld.simulation.selected <- ld.simulation.chromosomes %>%
 
 # read and pool all available empirical chromosomes
 ld.empirical.selected <- read.ld.chromosomes(
-  EMPIRICAL.DATA.DIR, CHROMOSOMES, "Empirical"
+  LD.EMPIRICAL.DATA.DIR, LD.CHROMOSOMES, "Empirical"
   ) %>%
   pool.ld.curves(include.chromosome = TRUE)
-ld.empirical.genome <- read.empirical.ld.genome(EMPIRICAL.DATA.DIR) %>%
+ld.empirical.genome <- read.empirical.ld.genome(LD.EMPIRICAL.DATA.DIR) %>%
   pool.ld.curves(include.chromosome = TRUE)
 
 # summarize curves for the active bootstrap views
 ld.summary <- bind_rows(
   ld.simulation.selected, ld.empirical.selected, ld.empirical.genome
   ) %>%
-  summarize.ld.curves(SELECTED.CHROMOSOMES)
+  summarize.ld.curves(LD.SELECTED.CHROMOSOMES)
 
 # bootstrap population and ADX source LD contrasts on displayed bins
 ld.population.contrast.tables <- make.ld.population.contrast.tables(
@@ -952,14 +965,14 @@ ld.population.contrast.plots <- list(
     `95` = make.ld.simulation.contrast.plot(
       prepare.ld.population.contrast.plot.data(
         ld.population.contrast.tables, "95", 
-        c(SOURCE.LEVELS[[1L]], SOURCE.LEVELS[[2L]])
+        c(LD.SOURCE.LEVELS[[1L]], LD.SOURCE.LEVELS[[2L]])
         ),
       "95", "population"
       ),
     bonferroni = make.ld.simulation.contrast.plot(
       prepare.ld.population.contrast.plot.data(
         ld.population.contrast.tables, "bonferroni",
-        c(SOURCE.LEVELS[[1L]], SOURCE.LEVELS[[2L]])
+        c(LD.SOURCE.LEVELS[[1L]], LD.SOURCE.LEVELS[[2L]])
         ),
       "bonferroni", "population"
       )
@@ -997,43 +1010,43 @@ ld.bootstrap.tcd.1kg.datatype.interval <- make.bootstrap.ld.plot(
   "datatype.interval", "LD decay: chromosome 1 TCD and 1kG by source"
   )
 ld.bootstrap.all.datatypes.adx.asw.all.lines <- make.bootstrap.ld.plot(
-  ld.summary, SOURCE.LEVELS, "all.datatypes.adx.asw.all.lines",
+  ld.summary, LD.SOURCE.LEVELS, "all.datatypes.adx.asw.all.lines",
   "LD decay: chromosome 1 all ADX sources and ASW"
   )
 ld.bootstrap.all.datatypes.adx.asw.datatype.interval <- make.bootstrap.ld.plot(
-  ld.summary, SOURCE.LEVELS, "all.datatypes.adx.asw.datatype.interval",
+  ld.summary, LD.SOURCE.LEVELS, "all.datatypes.adx.asw.datatype.interval",
   "LD decay: chromosome 1 all ADX sources and ASW by source"
   )
-dir.create(OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
+dir.create(LD.OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
 saveRDS(ld.bootstrap.tcd.1kg.all.lines, file.path(
-  OUTPUT.DIR, "ld.bootstrap.tcd.1kg.all.lines.rds"
+  LD.OUTPUT.DIR, "ld.bootstrap.tcd.1kg.all.lines.rds"
   ))
 saveRDS(ld.bootstrap.tcd.1kg.role.interval, file.path(
-  OUTPUT.DIR, "ld.bootstrap.tcd.1kg.role.interval.rds"
+  LD.OUTPUT.DIR, "ld.bootstrap.tcd.1kg.role.interval.rds"
   ))
 saveRDS(ld.bootstrap.tcd.1kg.datatype.interval, file.path(
-  OUTPUT.DIR, "ld.bootstrap.tcd.1kg.datatype.interval.rds"
+  LD.OUTPUT.DIR, "ld.bootstrap.tcd.1kg.datatype.interval.rds"
   ))
 saveRDS(ld.bootstrap.all.datatypes.adx.asw.all.lines, file.path(
-  OUTPUT.DIR, "ld.bootstrap.all.datatypes.adx.asw.all.lines.rds"
+  LD.OUTPUT.DIR, "ld.bootstrap.all.datatypes.adx.asw.all.lines.rds"
   ))
 saveRDS(ld.bootstrap.all.datatypes.adx.asw.datatype.interval, file.path(
-  OUTPUT.DIR, "ld.bootstrap.all.datatypes.adx.asw.datatype.interval.rds"
+  LD.OUTPUT.DIR, "ld.bootstrap.all.datatypes.adx.asw.datatype.interval.rds"
   ))
 saveRDS(ld.population.contrast.plots$tc.tcd$`95`, file.path(
-  OUTPUT.DIR, "ld.population.tc.tcd.95.rds"
+  LD.OUTPUT.DIR, "ld.population.tc.tcd.95.rds"
   ))
 saveRDS(ld.population.contrast.plots$tc.tcd$bonferroni, file.path(
-  OUTPUT.DIR, "ld.population.tc.tcd.bonferroni.rds"
+  LD.OUTPUT.DIR, "ld.population.tc.tcd.bonferroni.rds"
   ))
 saveRDS(ld.population.contrast.plots$empirical, file.path(
-  OUTPUT.DIR, "ld.population.empirical.rds"
+  LD.OUTPUT.DIR, "ld.population.empirical.rds"
   ))
 saveRDS(ld.simulation.contrast.plots$`95`, file.path(
-  OUTPUT.DIR, "ld.simulation.contrast.95.rds"
+  LD.OUTPUT.DIR, "ld.simulation.contrast.95.rds"
   ))
 saveRDS(ld.simulation.contrast.plots$bonferroni, file.path(
-  OUTPUT.DIR, "ld.simulation.contrast.bonferroni.rds"
+  LD.OUTPUT.DIR, "ld.simulation.contrast.bonferroni.rds"
   ))
 
 print(ld.bootstrap.tcd.1kg.datatype.interval)

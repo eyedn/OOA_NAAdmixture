@@ -27,13 +27,6 @@ if (
 }
 
 
-sf3.contrast.labels <- c(
-  `TC-Emp` = "T.C. ADX - ASW", `TCD-Emp` = "T.C.D. ADX- ASW",
-  `LG-Emp` = "L.G. ADX - ASW", `LGD-Emp` = "L.G.D. ADX - ASW",
-  `TC-TCD` = "T.C. ADX - T.C.D. ADX", `LG-LGD` = "L.G. ADX - L.G.D. ADX",
-  `TC-LG` = "T.C. ADX - L.G. ADX"
-  )
-
 # main ----
 sf3.ancestry.contrasts <- 
   (ancestry.bootstrap.empirical.bonferroni.genome.comparisons +
@@ -41,7 +34,7 @@ sf3.ancestry.contrasts <-
      facet_grid(
        cols = vars(contrast), rows = vars(statistic), scales = "free_y", 
        labeller = labeller(
-         contrast = sf3.contrast.labels,
+         contrast = ANCESTRY.PLOT.STYLES$contrast.labels,
          statistic = c(mean = "Mean", sd = "SD"))
      ) +
      theme(legend.position = "none", axis.title.x = element_blank())
@@ -51,7 +44,7 @@ sf3.ancestry.contrasts <-
       facet_grid(
         cols = vars(contrast), rows = vars(statistic), scales = "free_y", 
         labeller = labeller(
-          contrast = sf3.contrast.labels,
+          contrast = ANCESTRY.PLOT.STYLES$contrast.labels,
           statistic = c(mean = "Mean", sd = "SD"))
       ) +
       theme(legend.position = "none")

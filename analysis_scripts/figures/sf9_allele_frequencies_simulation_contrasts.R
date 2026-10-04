@@ -44,7 +44,7 @@ sf9.allele.frequencies.simulation.contrasts <-
            scales = "free_y",
            labeller = labeller(
              .rows = label_parsed,
-             contrast = SFS.CONTRAST.LABELS
+             contrast = SFS.PLOT.STYLES$contrast.labels
            )
          ) +
          theme(legend.position = "none", strip.text.x = element_blank())

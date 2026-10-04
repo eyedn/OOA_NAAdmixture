@@ -1022,10 +1022,12 @@ build.ne.plot.data <- function(AA.ne, tennessen.ne) {
         series = recode(population, afr = "AFR", eur = "EUR"),
         ne
       ),
-    aa.ne.long %>% transmute(year, series = "ADX import-only", ne = import.ne),
+    aa.ne.long %>% transmute(
+      year, series = "ADX (imported to U.S.)", ne = import.ne
+      ),
     aa.ne.long %>% transmute(
       year,
-      series = "ADX American-born-only",
+      series = "ADX (born in U.S.)",
       ne = admix.ne
     )
   )
@@ -1053,28 +1055,29 @@ make.combined.ne.plot <- function(ne.plot.data, population.name) {
     ) +
     geom_line(
       aes(y = ne, linetype = series),
-      data = ne.plot.data %>% filter(series == "ADX import-only"),
+      data = ne.plot.data %>% filter(series == "ADX (imported to U.S.)"),
       linewidth = 1.1
     ) +
     geom_line(
       aes(y = ne, linetype = series),
-      data = ne.plot.data %>% filter(series == "ADX American-born-only"),
+      data = ne.plot.data %>% filter(series == "ADX (born in U.S.)"),
       linewidth = 1.1
     ) +
     scale_linetype_manual(
       values = c(
-        "ADX import-only" = "dashed",
-        "ADX American-born-only" = "dashed"
+        "ADX (imported to U.S.)" = "dashed",
+        "ADX (born in U.S.)" = "dashed"
       ),
-      name = NULL
+      name = NULL,
+      guide = "none"
     ) +
     scale_color_manual(
       values = c(
         "ADX" = admix.prim,
         "AFR" = afr.prim,
         "EUR" = eur.prim,
-        "ADX import-only" = afr.sec,
-        "ADX American-born-only" = admix.sec
+        "ADX (imported to U.S.)" = afr.sec,
+        "ADX (born in U.S.)" = admix.sec
       ),
       name = NULL
     ) +

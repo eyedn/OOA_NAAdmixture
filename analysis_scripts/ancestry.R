@@ -22,49 +22,58 @@ source(if (file.exists("analysis_scripts/bootstrap_parallel.R")) {
   })
 
 
-SIM.TC.DATA.DIR <- "~/scratch/OOA_NAAdmixture_2T12Consistent/stats"
-SIMDOWN.TC.DATA.DIR <-
+ANCESTRY.SIM.TC.DATA.DIR <- "~/scratch/OOA_NAAdmixture_2T12Consistent/stats"
+ANCESTRY.SIMDOWN.TC.DATA.DIR <-
   "~/scratch/OOA_NAAdmixture_2T12ConsistentOnekgDownsample/stats"
-SIM.LG.DATA.DIR <- "~/scratch/OOA_NAAdmixture_largeGrowth/stats"
-SIMDOWN.LG.DATA.DIR <-
+ANCESTRY.SIM.LG.DATA.DIR <- "~/scratch/OOA_NAAdmixture_largeGrowth/stats"
+ANCESTRY.SIMDOWN.LG.DATA.DIR <-
   "~/scratch/OOA_NAAdmixture_largeGrowthOnekgDownsample/stats"
-EMPIRICAL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_1kG/stats"
-OUTPUT.DIR <- "/home1/karatas/proj/OOA_NAAdmixture_data"
-CHROMOSOMES <- as.character(1:22)
-SELECTED.CHROMOSOMES <- c("1", "10", "20")
-SIMULATION.K <- 2L
-EMPIRICAL.K <- 2L
-RANDOM.SEED <- 123L
-DOWNSAMPLE.SIZE <- 50L
-BOOTSTRAP.REPLICATES <- 100000L
+ANCESTRY.EMPIRICAL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_1kG/stats"
+ANCESTRY.OUTPUT.DIR <- "/home1/karatas/proj/OOA_NAAdmixture_data"
+ANCESTRY.CHROMOSOMES <- as.character(1:22)
+ANCESTRY.SELECTED.CHROMOSOMES <- c("1", "10", "20")
+ANCESTRY.SIMULATION.K <- 2L
+ANCESTRY.EMPIRICAL.K <- 2L
+ANCESTRY.RANDOM.SEED <- 123L
+ANCESTRY.DOWNSAMPLE.SIZE <- 50L
+ANCESTRY.BOOTSTRAP.REPLICATES <- 100000L
 # per-statistic Bonferroni family for chromosome-level ancestry comparisons.
 ANCESTRY.BOOTSTRAP.CHROMOSOME.FAMILY.SIZE <- 154L
 # per-statistic Bonferroni family for chromosome versus genome-wide ASW.
 ANCESTRY.BOOTSTRAP.GENOME.ASW.FAMILY.SIZE <- 88L
-HISTOGRAM.BREAKS <- seq(0, 1, by = 0.05)
-PLOT.EMPIRICAL.METHOD <- "ADMIXTURE"
-PLOT.SAMPLE.SET <- "downsampled"
-PLOT.BASE.SIZE <- 24
-CATEGORICAL.BAR.DODGE <- 0.9
-CATEGORICAL.BAR.WIDTH <- 0.8
-CATEGORICAL.BAR.LINEWIDTH <- 1
-DENSE.BAR.WIDTH.MULTIPLIER <- 0.8
-DENSE.BAR.LINEWIDTH <- 0.75
-SOURCE.LEVELS <- c(
+ANCESTRY.HISTOGRAM.BREAKS <- seq(0, 1, by = 0.05)
+ANCESTRY.PLOT.EMPIRICAL.METHOD <- "ADMIXTURE"
+ANCESTRY.PLOT.SAMPLE.SET <- "downsampled"
+ANCESTRY.PLOT.BASE.SIZE <- 24
+ANCESTRY.CATEGORICAL.BAR.DODGE <- 0.9
+ANCESTRY.CATEGORICAL.BAR.WIDTH <- 0.8
+ANCESTRY.CATEGORICAL.BAR.LINEWIDTH <- 1
+ANCESTRY.DENSE.BAR.WIDTH.MULTIPLIER <- 0.8
+ANCESTRY.DENSE.BAR.LINEWIDTH <- 0.75
+ANCESTRY.SOURCE.LEVELS <- c(
   "Simulation_2T12Consistent", "Simulation_2T12Consistent_simDown",
   "Simulation_largeGrowth", "Simulation_largeGrowth_simDown", "Empirical"
   )
-SOURCE.LABELS <- setNames(
-  c("T.C. ADX", "T.C.D. ADX", "L.G. ADX", "L.G.D. ADX", "ASW"), SOURCE.LEVELS
+ANCESTRY.SOURCE.LABELS <- setNames(
+  c("T.C. ADX", "T.C.D. ADX", "L.G. ADX", "L.G.D. ADX", "ASW"), ANCESTRY.SOURCE.LEVELS
   )
-PLOT.STYLES <- list(
+ANCESTRY.PLOT.STYLES <- list(
+  source.levels = ANCESTRY.SOURCE.LEVELS,
+  base.size = ANCESTRY.PLOT.BASE.SIZE,
+  categorical.bar.dodge = ANCESTRY.CATEGORICAL.BAR.DODGE,
+  categorical.bar.width = ANCESTRY.CATEGORICAL.BAR.WIDTH,
+  categorical.bar.linewidth = ANCESTRY.CATEGORICAL.BAR.LINEWIDTH,
+  dense.bar.width.multiplier = ANCESTRY.DENSE.BAR.WIDTH.MULTIPLIER,
+  dense.bar.linewidth = ANCESTRY.DENSE.BAR.LINEWIDTH,
+  empirical.method = ANCESTRY.PLOT.EMPIRICAL.METHOD,
+  sample.set = ANCESTRY.PLOT.SAMPLE.SET,
   colors = c(
     Simulation_2T12Consistent = "#9A83CE",
     Simulation_2T12Consistent_simDown = "#6F55B5",
     Simulation_largeGrowth = "#32146F",
     Simulation_largeGrowth_simDown = "#4B1FA8", Empirical = "#E44B8D"
     ),
-  labels = SOURCE.LABELS,
+  labels = ANCESTRY.SOURCE.LABELS,
   empirical.colors = c(ADMIXTURE = "#E44B8D", fastStructure = "#E44B8D"),
   contrast.colors = c(
     `TC-Emp` = "#9A83CE", `TCD-Emp` = "#6F55B5",
@@ -96,7 +105,7 @@ ANCESTRY.BOOTSTRAP.CONTRASTS <- tribble(
 
 # apply the common visual treatment to a completed plot.
 apply.standard.plot.theme <- function(plot, legend.position = "top") {
-  return(plot + theme_bw(base_size = PLOT.BASE.SIZE) + theme(
+  return(plot + theme_bw(base_size = ANCESTRY.PLOT.BASE.SIZE) + theme(
     legend.position = legend.position,
     legend.direction = "horizontal",
     legend.box = "horizontal",
@@ -109,13 +118,13 @@ apply.standard.plot.theme <- function(plot, legend.position = "top") {
 
 # return the configured empirical-inference subtitle.
 ancestry.inference.subtitle <- function() {
-  return(paste("Empirical inference:", PLOT.EMPIRICAL.METHOD))
+  return(paste("Empirical inference:", ANCESTRY.PLOT.EMPIRICAL.METHOD))
   }
 
 
 # return a method-tagged output filename.
 ancestry.output.filename <- function(stem, extension) {
-  return(paste0(stem, ".", tolower(PLOT.EMPIRICAL.METHOD), ".", extension))
+  return(paste0(stem, ".", tolower(ANCESTRY.PLOT.EMPIRICAL.METHOD), ".", extension))
   }
 
 
@@ -138,10 +147,10 @@ ancestry.inference.file.family <- function(method) {
 apply.ancestry.source.contract <- function(data) {
   retained <- data %>%
     filter(
-      (data.type %in% SOURCE.LEVELS[1:4] & pop == "ADX") |
+      (data.type %in% ANCESTRY.SOURCE.LEVELS[1:4] & pop == "ADX") |
         (data.type == "Empirical" & pop == "ASW")
       ) %>%
-    mutate(data.type = factor(data.type, levels = SOURCE.LEVELS))
+    mutate(data.type = factor(data.type, levels = ANCESTRY.SOURCE.LEVELS))
   return(retained)
   }
 
@@ -333,9 +342,9 @@ filter.bootstrap.ancestry.simulation <- function(data) {
   simulation <- data %>%
     filter(
       data.type != "Empirical", sample.set == "full",
-      (data.type %in% SOURCE.LEVELS[c(1, 3)] & method == "tspop") |
-        (data.type %in% SOURCE.LEVELS[c(2, 4)] &
-          method == PLOT.EMPIRICAL.METHOD)
+      (data.type %in% ANCESTRY.SOURCE.LEVELS[c(1, 3)] & method == "tspop") |
+        (data.type %in% ANCESTRY.SOURCE.LEVELS[c(2, 4)] &
+          method == ANCESTRY.PLOT.EMPIRICAL.METHOD)
       )
   return(simulation)
   }
@@ -389,7 +398,7 @@ summarize.bootstrap.ancestry <- function(
   empirical <- data %>%
     filter(
       data.type == "Empirical", sample.set == "full",
-      method == PLOT.EMPIRICAL.METHOD
+      method == ANCESTRY.PLOT.EMPIRICAL.METHOD
       )
   if (any(!is.finite(empirical$afr.q))) {
     stop("Empirical ancestry values must be finite")
@@ -421,7 +430,7 @@ summarize.bootstrap.ancestry <- function(
 
 # summarize simulation and genome-wide asw bootstrap histogram fractions.
 summarize.bootstrap.histograms <- function(data, breaks, seed, replicates) {
-  selected <- select.bootstrap.ancestry.ids(data, DOWNSAMPLE.SIZE,
+  selected <- select.bootstrap.ancestry.ids(data, ANCESTRY.DOWNSAMPLE.SIZE,
     "sample_id", seed)
   simulation <- filter.bootstrap.ancestry.simulation(data) %>%
     inner_join(selected, by = c("data.type", "rep", "chrom", "sample_id")) %>%
@@ -436,7 +445,7 @@ summarize.bootstrap.histograms <- function(data, breaks, seed, replicates) {
   empirical <- data %>%
     filter(
       data.type == "Empirical", sample.set == "full", chrom == "all",
-      method == PLOT.EMPIRICAL.METHOD
+      method == ANCESTRY.PLOT.EMPIRICAL.METHOD
       ) %>%
     group_by(data.type, chrom) %>%
     group_modify(function(group, key) {
@@ -467,33 +476,33 @@ make.bootstrap.ancestry.bar.plot <- function(data, data.types, title) {
   plotted <- data %>%
     filter(
       as.character(data.type) %in% data.types,
-      chrom %in% SELECTED.CHROMOSOMES
+      chrom %in% ANCESTRY.SELECTED.CHROMOSOMES
       ) %>%
     mutate(data.type = factor(
       as.character(data.type),
-      levels = order.active.levels(data.type, SOURCE.LEVELS)
+      levels = order.active.levels(data.type, ANCESTRY.SOURCE.LEVELS)
       ))
   genome <- data %>%
     filter(data.type == "Empirical", chrom == "all", stat %in% plotted$stat)
-  dodge <- position_dodge(width = CATEGORICAL.BAR.DODGE)
+  dodge <- position_dodge(width = ANCESTRY.CATEGORICAL.BAR.DODGE)
   plot <- ggplot(plotted, aes(chrom, mean, fill = data.type)) +
     geom_rect(
       data = genome, aes(ymin = lower, ymax = upper),
       xmin = -Inf, xmax = Inf, inherit.aes = FALSE,
-      fill = PLOT.STYLES$empirical.colors[[PLOT.EMPIRICAL.METHOD]],
+      fill = ANCESTRY.PLOT.STYLES$empirical.colors[[ANCESTRY.PLOT.EMPIRICAL.METHOD]],
       alpha = 0.15
       ) +
     geom_col(
-      position = dodge, width = CATEGORICAL.BAR.WIDTH,
-      linewidth = CATEGORICAL.BAR.LINEWIDTH, color = "black"
+      position = dodge, width = ANCESTRY.CATEGORICAL.BAR.WIDTH,
+      linewidth = ANCESTRY.CATEGORICAL.BAR.LINEWIDTH, color = "black"
       ) +
     geom_errorbar(
       aes(ymin = lower, ymax = upper), position = dodge, width = 0,
-      linewidth = CATEGORICAL.BAR.LINEWIDTH, na.rm = TRUE
+      linewidth = ANCESTRY.CATEGORICAL.BAR.LINEWIDTH, na.rm = TRUE
       ) +
     geom_hline(
       data = genome, aes(yintercept = mean), linetype = "longdash",
-      color = PLOT.STYLES$empirical.colors[[PLOT.EMPIRICAL.METHOD]],
+      color = ANCESTRY.PLOT.STYLES$empirical.colors[[ANCESTRY.PLOT.EMPIRICAL.METHOD]],
       linewidth = 1
       ) +
     facet_wrap(
@@ -506,8 +515,8 @@ make.bootstrap.ancestry.bar.plot <- function(data, data.types, title) {
         stat == "sd" ~ scale_y_continuous(limits = c(0, 0.25))
         )
       ) +
-    scale_fill_manual(values = PLOT.STYLES$colors,
-      labels = PLOT.STYLES$labels) +
+    scale_fill_manual(values = ANCESTRY.PLOT.STYLES$colors,
+      labels = ANCESTRY.PLOT.STYLES$labels) +
     labs(
       title = title, subtitle = ancestry.inference.subtitle(), x = "Chromosome",
       y = "African ancestry", fill = NULL
@@ -534,21 +543,21 @@ make.bootstrap.ancestry.histogram.plot <- function(
       ) %>%
     mutate(data.type = factor(
       as.character(data.type),
-      levels = order.active.levels(data.type, SOURCE.LEVELS)
+      levels = order.active.levels(data.type, ANCESTRY.SOURCE.LEVELS)
       ))
-  dodge <- position_dodge(width = diff(HISTOGRAM.BREAKS)[1])
+  dodge <- position_dodge(width = diff(ANCESTRY.HISTOGRAM.BREAKS)[1])
   plot <- ggplot(plotted, aes(xmid, mean, fill = data.type)) +
     geom_col(
       position = dodge,
-      width = diff(HISTOGRAM.BREAKS)[1] * DENSE.BAR.WIDTH.MULTIPLIER,
-      color = "black", linewidth = DENSE.BAR.LINEWIDTH
+      width = diff(ANCESTRY.HISTOGRAM.BREAKS)[1] * ANCESTRY.DENSE.BAR.WIDTH.MULTIPLIER,
+      color = "black", linewidth = ANCESTRY.DENSE.BAR.LINEWIDTH
       ) +
     geom_errorbar(
       aes(ymin = lower, ymax = upper), position = dodge, width = 0,
-      linewidth = DENSE.BAR.LINEWIDTH, na.rm = TRUE
+      linewidth = ANCESTRY.DENSE.BAR.LINEWIDTH, na.rm = TRUE
       ) +
-    scale_fill_manual(values = PLOT.STYLES$colors,
-      labels = PLOT.STYLES$labels) +
+    scale_fill_manual(values = ANCESTRY.PLOT.STYLES$colors,
+      labels = ANCESTRY.PLOT.STYLES$labels) +
     labs(
       title = title, x = "African ancestry", y = "Fraction of individuals",
       fill = NULL, subtitle = ancestry.inference.subtitle()
@@ -748,7 +757,7 @@ bootstrap.ancestry.empirical.difference <- function(
 # build one table against chromosome or genome asw values.
 make.ancestry.bootstrap.comparison.table <- function(
     simulation, empirical, contrasts, chromosomes, statistic, reference.chrom,
-    reference.scope, family.size, bootstrap.replicates, seed = RANDOM.SEED
+    reference.scope, family.size, bootstrap.replicates, seed = ANCESTRY.RANDOM.SEED
   ) {
   work <- crossing(
     chromosome = chromosomes, contrast.index = seq_len(nrow(contrasts))
@@ -798,9 +807,9 @@ make.ancestry.bootstrap.comparison.table <- function(
 
 # make deterministic chromosome and genome-wide asw comparison tables.
 make.ancestry.bootstrap.comparison.tables <- function(
-    summary.data, individual.data, empirical.method = PLOT.EMPIRICAL.METHOD,
-    sample.set.input = PLOT.SAMPLE.SET, chromosomes = CHROMOSOMES,
-    bootstrap.replicates = BOOTSTRAP.REPLICATES, seed = RANDOM.SEED
+    summary.data, individual.data, empirical.method = ANCESTRY.PLOT.EMPIRICAL.METHOD,
+    sample.set.input = ANCESTRY.PLOT.SAMPLE.SET, chromosomes = ANCESTRY.CHROMOSOMES,
+    bootstrap.replicates = ANCESTRY.BOOTSTRAP.REPLICATES, seed = ANCESTRY.RANDOM.SEED
   ) {
   if (!is.numeric(bootstrap.replicates) || length(bootstrap.replicates) != 1L ||
       !is.finite(bootstrap.replicates) || bootstrap.replicates < 1L ||
@@ -889,11 +898,11 @@ prepare.ancestry.bootstrap.contrast.plot.data <- function(
   contrast.config <- list(
     empirical = list(
       contrasts = c("TC-Emp", "TCD-Emp", "LG-Emp", "LGD-Emp"),
-      chromosome.levels = CHROMOSOMES
+      chromosome.levels = ANCESTRY.CHROMOSOMES
       ),
     simulation = list(
       contrasts = c("TC-TCD", "LG-LGD", "TC-LG"),
-      chromosome.levels = CHROMOSOMES
+      chromosome.levels = ANCESTRY.CHROMOSOMES
       )
     )
   if (!contrast.family %in% names(contrast.config)) {
@@ -932,7 +941,7 @@ prepare.ancestry.bootstrap.contrast.plot.data <- function(
       statistic = factor(statistic, levels = statistics),
       significant = ci.lower > 0 | ci.upper < 0,
       point.color = if_else(significant, "red", "black"),
-      contrast.color = unname(PLOT.STYLES$contrast.colors[as.character(
+      contrast.color = unname(ANCESTRY.PLOT.STYLES$contrast.colors[as.character(
         contrast
         )]),
       facet.label = factor(NA_character_)
@@ -960,19 +969,19 @@ make.ancestry.bootstrap.contrast.plot <- function(
     geom_hline(yintercept = 0, linetype = "dashed", linewidth = 1) +
     geom_errorbar(
       aes(ymin = ci.lower, ymax = ci.upper), width = 0,
-      color = "black", linewidth = CATEGORICAL.BAR.LINEWIDTH,
+      color = "black", linewidth = ANCESTRY.CATEGORICAL.BAR.LINEWIDTH,
       show.legend = FALSE
       ) +
     geom_point(
       aes(fill = contrast, color = point.color),
-      shape = 21, size = 3, stroke = CATEGORICAL.BAR.LINEWIDTH
+      shape = 21, size = 3, stroke = ANCESTRY.CATEGORICAL.BAR.LINEWIDTH
       ) +
     scale_color_manual(
-      values = c(red = "red", black = "black", PLOT.STYLES$contrast.colors),
+      values = c(red = "red", black = "black", ANCESTRY.PLOT.STYLES$contrast.colors),
       guide = "none") +
     scale_fill_manual(
-      values = PLOT.STYLES$contrast.colors, breaks = active.contrasts,
-      labels = PLOT.STYLES$contrast.labels[active.contrasts]
+      values = ANCESTRY.PLOT.STYLES$contrast.colors, breaks = active.contrasts,
+      labels = ANCESTRY.PLOT.STYLES$contrast.labels[active.contrasts]
       ) +
     scale_y_continuous(expand = expansion(mult = c(0.05, 0.15))) +
     labs(
@@ -984,7 +993,7 @@ make.ancestry.bootstrap.contrast.plot <- function(
       fill = guide_legend(
         override.aes = list(
           shape = 21,
-          fill = unname(PLOT.STYLES$contrast.colors[active.contrasts]),
+          fill = unname(ANCESTRY.PLOT.STYLES$contrast.colors[active.contrasts]),
           color = "black"
           )
         )
@@ -1000,7 +1009,7 @@ make.ancestry.bootstrap.contrast.plot <- function(
       plot <- plot + facet_grid(
         cols = vars(contrast), rows = vars(statistic), scales = "free_y",
         labeller = labeller(
-          contrast = PLOT.STYLES$contrast.labels,
+          contrast = ANCESTRY.PLOT.STYLES$contrast.labels,
           statistic = c(mean = "Mean", sd = "SD"))
         )
       } else {
@@ -1020,32 +1029,32 @@ make.ancestry.bootstrap.contrast.plot <- function(
 
 # read tc/lg truth, configured tcd/lgd inference, and empirical inference.
 ancestry.sim.tc.tspop.data <- read.ancestry.family(
-  SIM.TC.DATA.DIR, "ancestry.chr{chrom}.parquet", CHROMOSOMES,
+  ANCESTRY.SIM.TC.DATA.DIR, "ancestry.chr{chrom}.parquet", ANCESTRY.CHROMOSOMES,
   "Simulation_2T12Consistent", "tspop", 0L, "tspop"
   )
 ancestry.simDown.tc.inference.data <- read.ancestry.family(
-  SIMDOWN.TC.DATA.DIR, ancestry.inference.file.family(PLOT.EMPIRICAL.METHOD),
-  CHROMOSOMES, "Simulation_2T12Consistent_simDown", PLOT.EMPIRICAL.METHOD,
-  SIMULATION.K, PLOT.EMPIRICAL.METHOD
+  ANCESTRY.SIMDOWN.TC.DATA.DIR, ancestry.inference.file.family(ANCESTRY.PLOT.EMPIRICAL.METHOD),
+  ANCESTRY.CHROMOSOMES, "Simulation_2T12Consistent_simDown", ANCESTRY.PLOT.EMPIRICAL.METHOD,
+  ANCESTRY.SIMULATION.K, ANCESTRY.PLOT.EMPIRICAL.METHOD
   )
 ancestry.sim.lg.tspop.data <- read.ancestry.family(
-  SIM.LG.DATA.DIR, "ancestry.chr{chrom}.parquet", CHROMOSOMES,
+  ANCESTRY.SIM.LG.DATA.DIR, "ancestry.chr{chrom}.parquet", ANCESTRY.CHROMOSOMES,
   "Simulation_largeGrowth", "tspop", 0L, "tspop"
   )
 ancestry.simDown.lg.inference.data <- read.ancestry.family(
-  SIMDOWN.LG.DATA.DIR, ancestry.inference.file.family(PLOT.EMPIRICAL.METHOD),
-  CHROMOSOMES, "Simulation_largeGrowth_simDown", PLOT.EMPIRICAL.METHOD,
-  SIMULATION.K, PLOT.EMPIRICAL.METHOD
+  ANCESTRY.SIMDOWN.LG.DATA.DIR, ancestry.inference.file.family(ANCESTRY.PLOT.EMPIRICAL.METHOD),
+  ANCESTRY.CHROMOSOMES, "Simulation_largeGrowth_simDown", ANCESTRY.PLOT.EMPIRICAL.METHOD,
+  ANCESTRY.SIMULATION.K, ANCESTRY.PLOT.EMPIRICAL.METHOD
   )
 ancestry.empirical.file.family <- ancestry.inference.file.family(
-  PLOT.EMPIRICAL.METHOD
+  ANCESTRY.PLOT.EMPIRICAL.METHOD
   )
 ancestry.empirical.genome.file <- str_replace(
   ancestry.empirical.file.family, "\\.chr\\{chrom\\}", ""
   )
 ancestry.empirical.inference.data <- read.ancestry.family(
-  EMPIRICAL.DATA.DIR, ancestry.empirical.file.family, CHROMOSOMES, "Empirical",
-  PLOT.EMPIRICAL.METHOD, EMPIRICAL.K, "Empirical", include.genome = TRUE,
+  ANCESTRY.EMPIRICAL.DATA.DIR, ancestry.empirical.file.family, ANCESTRY.CHROMOSOMES, "Empirical",
+  ANCESTRY.PLOT.EMPIRICAL.METHOD, ANCESTRY.EMPIRICAL.K, "Empirical", include.genome = TRUE,
   genome.file.family = ancestry.empirical.genome.file
   )
 
@@ -1058,8 +1067,8 @@ ancestry.individual.data <- bind_rows(
   apply.ancestry.source.contract() %>%
   orient.ancestry.components(c("rep", "chrom", "data.type", "method"))
 ancestry.downsample.ids <- select.downsample.ids(
-  ancestry.individual.data, DOWNSAMPLE.SIZE, "sample_id",
-  c("data.type", "rep", "chrom"), RANDOM.SEED
+  ancestry.individual.data, ANCESTRY.DOWNSAMPLE.SIZE, "sample_id",
+  c("data.type", "rep", "chrom"), ANCESTRY.RANDOM.SEED
   )
 ancestry.individual.data <- apply.downsample.ids(
   ancestry.individual.data, ancestry.downsample.ids, "sample_id",
@@ -1071,23 +1080,23 @@ ancestry.summary.data <- summarize.ancestry.comparison(ancestry.individual.data)
 ancestry.bootstrap.comparison.tables <-
   make.ancestry.bootstrap.comparison.tables(
   ancestry.summary.data, ancestry.individual.data,
-  empirical.method = PLOT.EMPIRICAL.METHOD,
-  sample.set.input = PLOT.SAMPLE.SET, chromosomes = CHROMOSOMES,
-  bootstrap.replicates = BOOTSTRAP.REPLICATES, seed = RANDOM.SEED
+  empirical.method = ANCESTRY.PLOT.EMPIRICAL.METHOD,
+  sample.set.input = ANCESTRY.PLOT.SAMPLE.SET, chromosomes = ANCESTRY.CHROMOSOMES,
+  bootstrap.replicates = ANCESTRY.BOOTSTRAP.REPLICATES, seed = ANCESTRY.RANDOM.SEED
   )
 write.ancestry.bootstrap.comparison.tables(
-  ancestry.bootstrap.comparison.tables, OUTPUT.DIR
+  ancestry.bootstrap.comparison.tables, ANCESTRY.OUTPUT.DIR
   )
 
 
 # construct the four active bottom bootstrap figures.
 ancestry.bootstrap.summary <- summarize.bootstrap.ancestry(
-  ancestry.individual.data, DOWNSAMPLE.SIZE, RANDOM.SEED,
-  BOOTSTRAP.REPLICATES
+  ancestry.individual.data, ANCESTRY.DOWNSAMPLE.SIZE, ANCESTRY.RANDOM.SEED,
+  ANCESTRY.BOOTSTRAP.REPLICATES
   )
 ancestry.bootstrap.histograms <- summarize.bootstrap.histograms(
-  ancestry.individual.data, HISTOGRAM.BREAKS, RANDOM.SEED,
-  BOOTSTRAP.REPLICATES
+  ancestry.individual.data, ANCESTRY.HISTOGRAM.BREAKS, ANCESTRY.RANDOM.SEED,
+  ANCESTRY.BOOTSTRAP.REPLICATES
   )
 
 
@@ -1099,7 +1108,7 @@ ancestry.bootstrap.tcd.1kg.bar <- make.bootstrap.ancestry.bar.plot(
 )
 ancestry.bootstrap.all.datatypes.adx.asw.bar <-
   make.bootstrap.ancestry.bar.plot(
-    ancestry.bootstrap.summary, SOURCE.LEVELS,
+    ancestry.bootstrap.summary, ANCESTRY.SOURCE.LEVELS,
     "African ancestry: all ADX sources and ASW"
   )
 ancestry.bootstrap.histogram.chromosomes <- as.character(1:22)
@@ -1119,7 +1128,7 @@ ancestry.bootstrap.tcd.1kg.histograms <- setNames(
 ancestry.bootstrap.all.datatypes.adx.asw.histograms <- setNames(
   lapply(ancestry.bootstrap.histogram.chromosomes, function(chromosome) {
     make.bootstrap.ancestry.histogram.plot(
-      ancestry.bootstrap.histograms, SOURCE.LEVELS, chromosome,
+      ancestry.bootstrap.histograms, ANCESTRY.SOURCE.LEVELS, chromosome,
       paste0(
         "Chromosome ", chromosome,
         " simulations and genome-wide ASW: all ADX sources and ASW"
@@ -1180,65 +1189,65 @@ ancestry.bootstrap.simulation.bonferroni.comparisons <-
   )
 
 # save each active figure before explicit printing at the script end.
-dir.create(OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
+dir.create(ANCESTRY.OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
 saveRDS(ancestry.bootstrap.tcd.1kg.bar, file.path(
-  OUTPUT.DIR, ancestry.output.filename("ancestry.bootstrap.tcd.1kg.bar", "rds")
+  ANCESTRY.OUTPUT.DIR, ancestry.output.filename("ancestry.bootstrap.tcd.1kg.bar", "rds")
   ))
 saveRDS(ancestry.bootstrap.all.datatypes.adx.asw.bar, file.path(
-  OUTPUT.DIR, ancestry.output.filename(
+  ANCESTRY.OUTPUT.DIR, ancestry.output.filename(
     "ancestry.bootstrap.all.datatypes.adx.asw.bar", "rds"
     )
   ))
 saveRDS(ancestry.bootstrap.tcd.1kg.histogram, file.path(
-  OUTPUT.DIR, ancestry.output.filename(
+  ANCESTRY.OUTPUT.DIR, ancestry.output.filename(
     "ancestry.bootstrap.tcd.1kg.histogram", "rds"
     )
   ))
 saveRDS(ancestry.bootstrap.all.datatypes.adx.asw.histogram, file.path(
-  OUTPUT.DIR, ancestry.output.filename(
+  ANCESTRY.OUTPUT.DIR, ancestry.output.filename(
     "ancestry.bootstrap.all.datatypes.adx.asw.histogram", "rds"
     )
   ))
 saveRDS(ancestry.bootstrap.tcd.1kg.histograms, file.path(
-  OUTPUT.DIR, ancestry.output.filename(
+  ANCESTRY.OUTPUT.DIR, ancestry.output.filename(
     "ancestry.bootstrap.tcd.1kg.histograms", "rds"
     )
   ))
 saveRDS(ancestry.bootstrap.all.datatypes.adx.asw.histograms, file.path(
-  OUTPUT.DIR, ancestry.output.filename(
+  ANCESTRY.OUTPUT.DIR, ancestry.output.filename(
     "ancestry.bootstrap.all.datatypes.adx.asw.histograms", "rds"
     )
   ))
 saveRDS(ancestry.bootstrap.empirical.95.chromosome.comparisons, file.path(
-  OUTPUT.DIR, ancestry.output.filename(
+  ANCESTRY.OUTPUT.DIR, ancestry.output.filename(
     "ancestry.bootstrap.empirical.95.chromosome.comparisons", "rds"
     )
   ))
 saveRDS(ancestry.bootstrap.empirical.95.genome.comparisons, file.path(
-  OUTPUT.DIR, ancestry.output.filename(
+  ANCESTRY.OUTPUT.DIR, ancestry.output.filename(
     "ancestry.bootstrap.empirical.95.genome.comparisons", "rds"
     )
   ))
 saveRDS(ancestry.bootstrap.empirical.bonferroni.chromosome.comparisons,
   file.path(
-    OUTPUT.DIR,
+    ANCESTRY.OUTPUT.DIR,
     ancestry.output.filename(
       "ancestry.bootstrap.empirical.bonferroni.chromosome.comparisons", "rds"
       )
     )
   )
 saveRDS(ancestry.bootstrap.empirical.bonferroni.genome.comparisons, file.path(
-  OUTPUT.DIR, ancestry.output.filename(
+  ANCESTRY.OUTPUT.DIR, ancestry.output.filename(
     "ancestry.bootstrap.empirical.bonferroni.genome.comparisons", "rds"
     )
   ))
 saveRDS(ancestry.bootstrap.simulation.95.comparisons, file.path(
-  OUTPUT.DIR, ancestry.output.filename(
+  ANCESTRY.OUTPUT.DIR, ancestry.output.filename(
     "ancestry.bootstrap.simulation.95.comparisons", "rds"
     )
   ))
 saveRDS(ancestry.bootstrap.simulation.bonferroni.comparisons, file.path(
-  OUTPUT.DIR, ancestry.output.filename(
+  ANCESTRY.OUTPUT.DIR, ancestry.output.filename(
     "ancestry.bootstrap.simulation.bonferroni.comparisons", "rds"
     )
   ))
@@ -1247,4 +1256,3 @@ print(ancestry.bootstrap.all.datatypes.adx.asw.bar)
 print(ancestry.bootstrap.tcd.1kg.histograms$chr1)
 print(ancestry.bootstrap.empirical.bonferroni.genome.comparisons)
 print(ancestry.bootstrap.simulation.bonferroni.comparisons)
-

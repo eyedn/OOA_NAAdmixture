@@ -22,31 +22,26 @@ source(if (file.exists("analysis_scripts/bootstrap_parallel.R")) {
   })
 
 
-SIM.TC.DATA.DIR <- "~/scratch/OOA_NAAdmixture_2T12Consistent/stats"
-SIMDOWN.TC.DATA.DIR <- "~/scratch/OOA_NAAdmixture_2T12ConsistentOnekgDownsample/stats"
-SIM.LG.DATA.DIR <- "~/scratch/OOA_NAAdmixture_largeGrowth/stats"
-SIMDOWN.LG.DATA.DIR <- "~/scratch/OOA_NAAdmixture_largeGrowthOnekgDownsample/stats"
-EMPIRICAL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_1kG/stats"
-OUTPUT.DIR <- "/home1/karatas/proj/OOA_NAAdmixture_data"
-CHROMOSOMES <- as.character(1:22)
-SELECTED.CHROMOSOMES <- c("1")
-DISPLAY.BIN.MAX <- 15
+SFS.SIM.TC.DATA.DIR <- "~/scratch/OOA_NAAdmixture_2T12Consistent/stats"
+SFS.SIMDOWN.TC.DATA.DIR <- "~/scratch/OOA_NAAdmixture_2T12ConsistentOnekgDownsample/stats"
+SFS.SIM.LG.DATA.DIR <- "~/scratch/OOA_NAAdmixture_largeGrowth/stats"
+SFS.SIMDOWN.LG.DATA.DIR <- "~/scratch/OOA_NAAdmixture_largeGrowthOnekgDownsample/stats"
+SFS.EMPIRICAL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_1kG/stats"
+SFS.OUTPUT.DIR <- "/home1/karatas/proj/OOA_NAAdmixture_data"
+SFS.CHROMOSOMES <- as.character(1:22)
+SFS.SELECTED.CHROMOSOMES <- c("1")
+SFS.DISPLAY.BIN.MAX <- 15
 SFS.PROJECTION.ALLELE.COUNT <- 100
-SOURCE.LEVELS <- c(
+SFS.SOURCE.LEVELS <- c(
   "Simulation_2T12Consistent", "Simulation_2T12Consistent_simDown",
   "Simulation_largeGrowth", "Simulation_largeGrowth_simDown",
   "Empirical"
   )
-SOURCE.LABELS <- setNames(
-  c("T.C.", "T.C.D.", "L.G.", "L.G.D.", "1kG"), SOURCE.LEVELS
+SFS.SOURCE.LABELS <- setNames(
+  c("T.C.", "T.C.D.", "L.G.", "L.G.D.", "1kG"), SFS.SOURCE.LEVELS
   )
-POPULATION.LEVELS <- c("AFR", "ADX", "EUR", "YRI", "ASW", "CEU")
-PLOT.CONFIGS <- list(
-  tcd.1kg = SOURCE.LEVELS[c(2, 5)],
-  tc.tcd.1kg = SOURCE.LEVELS[c(1, 2, 5)],
-  all.datatypes.adx.asw = SOURCE.LEVELS
-  )
-SFS.FACET.LEVELS <- SELECTED.CHROMOSOMES
+SFS.POPULATION.LEVELS <- c("AFR", "ADX", "EUR", "YRI", "ASW", "CEU")
+SFS.FACET.LEVELS <- SFS.SELECTED.CHROMOSOMES
 SFS.SERIES.PREFIXES <- c(
   Simulation_2T12Consistent = "TC",
   Simulation_2T12Consistent_simDown = "TC D.",
@@ -55,13 +50,13 @@ SFS.SERIES.PREFIXES <- c(
   Empirical = "empirical"
   )
 SFS.SOURCE.POPULATIONS <- list(
-  Simulation_2T12Consistent = POPULATION.LEVELS[1:3],
-  Simulation_2T12Consistent_simDown = POPULATION.LEVELS[1:3],
-  Simulation_largeGrowth = POPULATION.LEVELS[2],
-  Simulation_largeGrowth_simDown = POPULATION.LEVELS[2],
-  Empirical = POPULATION.LEVELS[4:6]
+  Simulation_2T12Consistent = SFS.POPULATION.LEVELS[1:3],
+  Simulation_2T12Consistent_simDown = SFS.POPULATION.LEVELS[1:3],
+  Simulation_largeGrowth = SFS.POPULATION.LEVELS[2],
+  Simulation_largeGrowth_simDown = SFS.POPULATION.LEVELS[2],
+  Empirical = SFS.POPULATION.LEVELS[4:6]
   )
-SFS.SERIES.LEVELS <- unname(unlist(lapply(SOURCE.LEVELS, function(source) {
+SFS.SERIES.LEVELS <- unname(unlist(lapply(SFS.SOURCE.LEVELS, function(source) {
   paste(SFS.SERIES.PREFIXES[[source]], SFS.SOURCE.POPULATIONS[[source]])
   })))
 SFS.COLORS <- c(
@@ -92,26 +87,26 @@ SFS.SERIES.LABELS <- c(
   )
 SFS.BIN.WIDTH <- 1
 SFS.DODGE <- position_dodge(width = SFS.BIN.WIDTH)
-PLOT.BASE.SIZE <- 24
-CATEGORICAL.BAR.LINEWIDTH <- 1
-DENSE.BAR.WIDTH.MULTIPLIER <- 0.8
-DENSE.BAR.LINEWIDTH <- 0.75
+SFS.PLOT.BASE.SIZE <- 24
+SFS.CATEGORICAL.BAR.LINEWIDTH <- 1
+SFS.DENSE.BAR.WIDTH.MULTIPLIER <- 0.8
+SFS.DENSE.BAR.LINEWIDTH <- 0.75
 SFS.CONTRAST.BOOTSTRAP.REPLICATES <- 100000L
 # per count/proportion Bonferroni family.
 SFS.CONTRAST.FAMILY.SIZE <- 45L
-SFS.POPULATION.CONTRAST.SOURCES <- SOURCE.LEVELS[1:2]
+SFS.POPULATION.CONTRAST.SOURCES <- SFS.SOURCE.LEVELS[1:2]
 SFS.POPULATION.CONTRASTS <- tribble(
   ~contrast, ~left.pop, ~right.pop,
   "AFR-ADX", "AFR", "ADX",
   "AFR-EUR", "AFR", "EUR",
   "ADX-EUR", "ADX", "EUR"
   )
-SFS.SIMULATION.CONTRAST.SOURCES <- SOURCE.LEVELS[1:4]
+SFS.SIMULATION.CONTRAST.SOURCES <- SFS.SOURCE.LEVELS[1:4]
 SFS.SIMULATION.CONTRASTS <- tribble(
   ~contrast, ~left.source, ~right.source, ~paired,
-  "T.C. - T.C.D.", SOURCE.LEVELS[[1L]], SOURCE.LEVELS[[2L]], TRUE,
-  "L.G. - L.G.D.", SOURCE.LEVELS[[3L]], SOURCE.LEVELS[[4L]], TRUE,
-  "T.C. - L.G.", SOURCE.LEVELS[[1L]], SOURCE.LEVELS[[3L]], FALSE
+  "T.C. - T.C.D.", SFS.SOURCE.LEVELS[[1L]], SFS.SOURCE.LEVELS[[2L]], TRUE,
+  "L.G. - L.G.D.", SFS.SOURCE.LEVELS[[3L]], SFS.SOURCE.LEVELS[[4L]], TRUE,
+  "T.C. - L.G.", SFS.SOURCE.LEVELS[[1L]], SFS.SOURCE.LEVELS[[3L]], FALSE
   )
 SFS.EMPIRICAL.CONTRASTS <- tribble(
   ~contrast, ~left.pop, ~right.pop,
@@ -133,6 +128,28 @@ SFS.CONTRAST.LABELS <- c(
   "YRI-ASW" = "YRI - ASW", "YRI-CEU" = "YRI - CEU",
   "ASW-CEU" = "ASW - CEU"
   )
+SFS.PLOT.STYLES <- list(
+  source.levels = SFS.SOURCE.LEVELS,
+  population.levels = SFS.POPULATION.LEVELS,
+  plot.configs = list(
+    tcd.1kg = SFS.SOURCE.LEVELS[c(2, 5)],
+    tc.tcd.1kg = SFS.SOURCE.LEVELS[c(1, 2, 5)],
+    all.datatypes.adx.asw = SFS.SOURCE.LEVELS
+    ),
+  facet.levels = SFS.FACET.LEVELS,
+  series.prefixes = SFS.SERIES.PREFIXES,
+  source.populations = SFS.SOURCE.POPULATIONS,
+  series.levels = SFS.SERIES.LEVELS,
+  colors = SFS.COLORS,
+  series.labels = SFS.SERIES.LABELS,
+  dodge = SFS.DODGE,
+  base.size = SFS.PLOT.BASE.SIZE,
+  categorical.bar.linewidth = SFS.CATEGORICAL.BAR.LINEWIDTH,
+  dense.bar.width.multiplier = SFS.DENSE.BAR.WIDTH.MULTIPLIER,
+  dense.bar.linewidth = SFS.DENSE.BAR.LINEWIDTH,
+  contrast.colors = SFS.CONTRAST.COLORS,
+  contrast.labels = SFS.CONTRAST.LABELS
+  )
 
 
 # internal functions ----
@@ -140,7 +157,7 @@ SFS.CONTRAST.LABELS <- c(
 
 # apply the common visual treatment to a completed plot.
 apply.standard.plot.theme <- function(plot, legend.position = "top") {
-  return(plot + theme_bw(base_size = PLOT.BASE.SIZE) + theme(
+  return(plot + theme_bw(base_size = SFS.PLOT.BASE.SIZE) + theme(
     legend.position = legend.position,
     legend.direction = "horizontal",
     legend.box = "horizontal",
@@ -195,7 +212,7 @@ apply.sfs.source.contract <- function(data) {
           ) & pop == "ADX") |
         (data.type == "Empirical" & pop %in% c("YRI", "ASW", "CEU"))
       ) %>%
-    mutate(data.type = factor(data.type, levels = SOURCE.LEVELS))
+    mutate(data.type = factor(data.type, levels = SFS.SOURCE.LEVELS))
   return(retained)
   }
 
@@ -375,7 +392,7 @@ prepare.sfs.analysis <- function(simulation, simDown = NULL, empirical = NULL) {
           paste("LG D.", pop),
         data.type == "Empirical" ~ paste("empirical", pop)
         ),
-      pop = factor(pop, levels = POPULATION.LEVELS),
+      pop = factor(pop, levels = SFS.POPULATION.LEVELS),
       chrom = factor(chrom, levels = c(SFS.FACET.LEVELS, "all")),
       series = factor(series, levels = SFS.SERIES.LEVELS)
       )
@@ -395,7 +412,7 @@ prepare.sfs.analysis <- function(simulation, simDown = NULL, empirical = NULL) {
   if (any(!is.finite(prepared$proportion))) {
     stop("Every SFS group must contain positive segregating-site mass")
     }
-  prepared$data.type <- factor(prepared$data.type, levels = SOURCE.LEVELS)
+  prepared$data.type <- factor(prepared$data.type, levels = SFS.SOURCE.LEVELS)
   return(prepared)
   }
 
@@ -453,8 +470,8 @@ validate.sfs.contrast.input <- function(
     filter(
       data.type %in% sources,
       pop %in% populations,
-      as.character(chrom) %in% SELECTED.CHROMOSOMES,
-      minor.allele.count %in% seq_len(DISPLAY.BIN.MAX)
+      as.character(chrom) %in% SFS.SELECTED.CHROMOSOMES,
+      minor.allele.count %in% seq_len(SFS.DISPLAY.BIN.MAX)
       ) %>%
     mutate(
       data.type = as.character(data.type),
@@ -466,8 +483,8 @@ validate.sfs.contrast.input <- function(
   invalid <- if (canonical.reps) {
     expected <- crossing(
       data.type = sources, rep = seq_len(50L),
-      chrom = SELECTED.CHROMOSOMES, pop = populations,
-      minor.allele.count = seq_len(DISPLAY.BIN.MAX)
+      chrom = SFS.SELECTED.CHROMOSOMES, pop = populations,
+      minor.allele.count = seq_len(SFS.DISPLAY.BIN.MAX)
       )
     expected %>%
       left_join(
@@ -545,7 +562,7 @@ make.sfs.population.contrast.tables <- function(
     data.type = SFS.POPULATION.CONTRAST.SOURCES,
     contrast.index = seq_len(nrow(SFS.POPULATION.CONTRASTS)),
     measure = c("count", "proportion"),
-    minor.allele.count = seq_len(DISPLAY.BIN.MAX)
+    minor.allele.count = seq_len(SFS.DISPLAY.BIN.MAX)
     ) %>%
     mutate(contrast.data = map(contrast.index,
       ~ SFS.POPULATION.CONTRASTS[.x, ])) %>%
@@ -594,7 +611,7 @@ make.sfs.simulation.contrast.tables <- function(
   work <- crossing(
     contrast.index = seq_len(nrow(SFS.SIMULATION.CONTRASTS)),
     measure = c("count", "proportion"),
-    minor.allele.count = seq_len(DISPLAY.BIN.MAX)
+    minor.allele.count = seq_len(SFS.DISPLAY.BIN.MAX)
     ) %>%
     mutate(contrast.data = map(contrast.index,
       ~ SFS.SIMULATION.CONTRASTS[.x, ])) %>%
@@ -638,13 +655,13 @@ make.sfs.empirical.contrast.table <- function(data) {
   data <- data %>%
     filter(
       data.type == "Empirical", as.character(chrom) %in%
-        SELECTED.CHROMOSOMES,
+        SFS.SELECTED.CHROMOSOMES,
       pop %in% c("YRI", "ASW", "CEU"),
-      minor.allele.count %in% seq_len(DISPLAY.BIN.MAX)
+      minor.allele.count %in% seq_len(SFS.DISPLAY.BIN.MAX)
       )
   expected <- crossing(
     pop = c("YRI", "ASW", "CEU"),
-    minor.allele.count = seq_len(DISPLAY.BIN.MAX)
+    minor.allele.count = seq_len(SFS.DISPLAY.BIN.MAX)
     )
   counts <- data %>% count(pop, minor.allele.count, name = "value.count")
   invalid <- expected %>% left_join(
@@ -743,14 +760,14 @@ make.sfs.contrast.plot <- function(data, interval.label, title) {
     geom_hline(yintercept = 0, linetype = "dashed", linewidth = 1) +
     geom_errorbar(
       aes(ymin = ci.lower, ymax = ci.upper), position = SFS.DODGE, width = 0,
-      color = "black", linewidth = CATEGORICAL.BAR.LINEWIDTH,
+      color = "black", linewidth = SFS.CATEGORICAL.BAR.LINEWIDTH,
       show.legend = FALSE
       ) +
     geom_point(
       aes(fill = contrast, color = point.color), position = SFS.DODGE,
-      shape = 21, size = 3, stroke = CATEGORICAL.BAR.LINEWIDTH
+      shape = 21, size = 3, stroke = SFS.CATEGORICAL.BAR.LINEWIDTH
       ) +
-    scale_x_continuous(breaks = seq_len(DISPLAY.BIN.MAX)) +
+    scale_x_continuous(breaks = seq_len(SFS.DISPLAY.BIN.MAX)) +
     scale_color_manual(
       values = c(red = "red", black = "black", SFS.CONTRAST.COLORS),
       guide = "none") +
@@ -781,7 +798,7 @@ make.sfs.contrast.plot <- function(data, interval.label, title) {
       labeller = labeller(
         contrast = SFS.CONTRAST.LABELS,
         measure = c("count" = "count", "proportion" = "prop."),
-        data.type = SOURCE.LABELS)
+        data.type = SFS.SOURCE.LABELS)
       )
     } else {
     plot <- plot + facet_grid(
@@ -816,10 +833,10 @@ make.sfs.empirical.contrast.plot <- function(data) {
         group = contrast
         ),
       position = SFS.DODGE,
-      shape = 21, size = 3, stroke = CATEGORICAL.BAR.LINEWIDTH,
+      shape = 21, size = 3, stroke = SFS.CATEGORICAL.BAR.LINEWIDTH,
       color = "black", inherit.aes = FALSE
       ) +
-    scale_x_continuous(breaks = seq_len(DISPLAY.BIN.MAX)) +
+    scale_x_continuous(breaks = seq_len(SFS.DISPLAY.BIN.MAX)) +
     scale_fill_manual(
       values = SFS.CONTRAST.COLORS[active.contrasts],
       breaks = active.contrasts,
@@ -853,10 +870,10 @@ make.sfs.empirical.contrast.plot <- function(data) {
 
 # retain one configured SFS view
 filter.plot.view <- function(data, data.types, tag) {
-  if (!tag %in% names(PLOT.CONFIGS)) {
+  if (!tag %in% names(SFS.PLOT.STYLES$plot.configs)) {
     stop("Unsupported SFS plot tag: ", tag)
     }
-  if (!identical(data.types, PLOT.CONFIGS[[tag]])) {
+  if (!identical(data.types, SFS.PLOT.STYLES$plot.configs[[tag]])) {
     stop("SFS data types do not match the configured tag")
     }
   filtered <- data %>%
@@ -866,9 +883,9 @@ filter.plot.view <- function(data, data.types, tag) {
         (data.type != "Empirical" & pop == "ADX") |
         (data.type == "Empirical" & pop == "ASW")
       )
-  active.sources <- order.active.levels(filtered$data.type, SOURCE.LEVELS)
+  active.sources <- order.active.levels(filtered$data.type, SFS.SOURCE.LEVELS)
   active.populations <- order.active.levels(
-    filtered$pop, POPULATION.LEVELS
+    filtered$pop, SFS.POPULATION.LEVELS
     )
   filtered <- filtered %>%
     mutate(
@@ -899,10 +916,10 @@ make.sfs.plot <- function(
   ) {
   displayed <- filter.plot.view(data, data.types, tag) %>%
     filter(
-      as.character(chrom) %in% SELECTED.CHROMOSOMES |
+      as.character(chrom) %in% SFS.SELECTED.CHROMOSOMES |
         (show.all & data.type == "Empirical" & chrom == "all")
       ) %>%
-    filter(minor.allele.count <= DISPLAY.BIN.MAX)
+    filter(minor.allele.count <= SFS.DISPLAY.BIN.MAX)
   series.keys <- levels(displayed$series)
   plot <- ggplot(
     displayed,
@@ -915,18 +932,18 @@ make.sfs.plot <- function(
     ) +
     geom_col(
       position = SFS.DODGE,
-      width = SFS.BIN.WIDTH * DENSE.BAR.WIDTH.MULTIPLIER,
-      color = "black", linewidth = DENSE.BAR.LINEWIDTH
+      width = SFS.BIN.WIDTH * SFS.DENSE.BAR.WIDTH.MULTIPLIER,
+      color = "black", linewidth = SFS.DENSE.BAR.LINEWIDTH
       ) +
     geom_errorbar(
       aes(ymin = lower, ymax = upper),
       position = SFS.DODGE,
-      width = 0, linewidth = DENSE.BAR.LINEWIDTH,
+      width = 0, linewidth = SFS.DENSE.BAR.LINEWIDTH,
       na.rm = TRUE
       ) +
     scale_x_continuous(
-      breaks = seq_len(DISPLAY.BIN.MAX),
-      limits = c(0.5, DISPLAY.BIN.MAX + 0.5)
+      breaks = seq_len(SFS.DISPLAY.BIN.MAX),
+      limits = c(0.5, SFS.DISPLAY.BIN.MAX + 0.5)
       ) +
     scale_fill_manual(
       values = SFS.COLORS[series.keys],
@@ -962,7 +979,7 @@ make.sfs.plot <- function(
   if (facet.by.datatype) {
     plot <- plot + facet_wrap(
       ~data.type,
-      labeller = labeller(data.type = SOURCE.LABELS)
+      labeller = labeller(data.type = SFS.SOURCE.LABELS)
       )
     }
   return(apply.standard.plot.theme(plot))
@@ -1047,12 +1064,12 @@ read.sfs.inputs <- function(
 
 
 sfs.inputs <- read.sfs.inputs(
-  SIM.TC.DATA.DIR,
-  SIMDOWN.TC.DATA.DIR,
-  SIM.LG.DATA.DIR,
-  SIMDOWN.LG.DATA.DIR,
-  EMPIRICAL.DATA.DIR,
-  CHROMOSOMES
+  SFS.SIM.TC.DATA.DIR,
+  SFS.SIMDOWN.TC.DATA.DIR,
+  SFS.SIM.LG.DATA.DIR,
+  SFS.SIMDOWN.LG.DATA.DIR,
+  SFS.EMPIRICAL.DATA.DIR,
+  SFS.CHROMOSOMES
   )
 sfs.data <- prepare.sfs.analysis(
   sfs.inputs$simulation,
@@ -1099,8 +1116,8 @@ sfs.simulation.contrast.plots <- list(
   )
 
 sfs.bootstrap.count.plots <- imap(list(
-  tcd.1kg = PLOT.CONFIGS$tcd.1kg,
-  all.datatypes.adx.asw = PLOT.CONFIGS$all.datatypes.adx.asw
+  tcd.1kg = SFS.PLOT.STYLES$plot.configs$tcd.1kg,
+  all.datatypes.adx.asw = SFS.PLOT.STYLES$plot.configs$all.datatypes.adx.asw
   ), function(data.types, tag) {
   return(make.sfs.plot(
     sfs.summaries$count, "mean", "Projected site count", TRUE,
@@ -1109,8 +1126,8 @@ sfs.bootstrap.count.plots <- imap(list(
     ))
   })
 sfs.bootstrap.proportion.plots <- imap(list(
-  tcd.1kg = PLOT.CONFIGS$tcd.1kg,
-  all.datatypes.adx.asw = PLOT.CONFIGS$all.datatypes.adx.asw
+  tcd.1kg = SFS.PLOT.STYLES$plot.configs$tcd.1kg,
+  all.datatypes.adx.asw = SFS.PLOT.STYLES$plot.configs$all.datatypes.adx.asw
   ), function(data.types, tag) {
   return(make.sfs.plot(
     sfs.summaries$proportion, "mean",
@@ -1120,8 +1137,8 @@ sfs.bootstrap.proportion.plots <- imap(list(
     ))
   })
 sfs.bootstrap.count.datatype.interval.plots <- imap(list(
-  tcd.1kg = PLOT.CONFIGS$tcd.1kg,
-  all.datatypes.adx.asw = PLOT.CONFIGS$all.datatypes.adx.asw
+  tcd.1kg = SFS.PLOT.STYLES$plot.configs$tcd.1kg,
+  all.datatypes.adx.asw = SFS.PLOT.STYLES$plot.configs$all.datatypes.adx.asw
   ), function(data.types, tag) {
   return(make.sfs.plot(
     sfs.summaries$count, "mean", "Projected site count", TRUE,
@@ -1129,8 +1146,8 @@ sfs.bootstrap.count.datatype.interval.plots <- imap(list(
     ))
   })
 sfs.bootstrap.proportion.datatype.interval.plots <- imap(list(
-  tcd.1kg = PLOT.CONFIGS$tcd.1kg,
-  all.datatypes.adx.asw = PLOT.CONFIGS$all.datatypes.adx.asw
+  tcd.1kg = SFS.PLOT.STYLES$plot.configs$tcd.1kg,
+  all.datatypes.adx.asw = SFS.PLOT.STYLES$plot.configs$all.datatypes.adx.asw
   ), function(data.types, tag) {
   return(make.sfs.plot(
     sfs.summaries$proportion, "mean", "Prop. of sites",
@@ -1139,49 +1156,49 @@ sfs.bootstrap.proportion.datatype.interval.plots <- imap(list(
   })
 
 # persist chromosome-1 bootstrap count and proportion plots before printing.
-dir.create(OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
+dir.create(SFS.OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
 saveRDS(sfs.bootstrap.count.plots$tcd.1kg, file.path(
-  OUTPUT.DIR, "sfs.bootstrap.count.tcd.1kg.rds"
+  SFS.OUTPUT.DIR, "sfs.bootstrap.count.tcd.1kg.rds"
   ))
 saveRDS(sfs.bootstrap.count.plots$all.datatypes.adx.asw, file.path(
-  OUTPUT.DIR, "sfs.bootstrap.count.all.datatypes.adx.asw.rds"
+  SFS.OUTPUT.DIR, "sfs.bootstrap.count.all.datatypes.adx.asw.rds"
   ))
 saveRDS(sfs.bootstrap.proportion.plots$tcd.1kg, file.path(
-  OUTPUT.DIR, "sfs.bootstrap.proportion.tcd.1kg.rds"
+  SFS.OUTPUT.DIR, "sfs.bootstrap.proportion.tcd.1kg.rds"
   ))
 saveRDS(sfs.bootstrap.proportion.plots$all.datatypes.adx.asw, file.path(
-  OUTPUT.DIR, "sfs.bootstrap.proportion.all.datatypes.adx.asw.rds"
+  SFS.OUTPUT.DIR, "sfs.bootstrap.proportion.all.datatypes.adx.asw.rds"
   ))
 saveRDS(sfs.bootstrap.count.datatype.interval.plots$tcd.1kg, file.path(
-  OUTPUT.DIR, "sfs.bootstrap.count.tcd.1kg.datatype.interval.rds"
+  SFS.OUTPUT.DIR, "sfs.bootstrap.count.tcd.1kg.datatype.interval.rds"
   ))
 saveRDS(sfs.bootstrap.count.datatype.interval.plots$all.datatypes.adx.asw,
-  file.path(OUTPUT.DIR,
+  file.path(SFS.OUTPUT.DIR,
     "sfs.bootstrap.count.all.datatypes.adx.asw.datatype.interval.rds"
     ))
 saveRDS(sfs.bootstrap.proportion.datatype.interval.plots$tcd.1kg, file.path(
-  OUTPUT.DIR, "sfs.bootstrap.proportion.tcd.1kg.datatype.interval.rds"
+  SFS.OUTPUT.DIR, "sfs.bootstrap.proportion.tcd.1kg.datatype.interval.rds"
   ))
 saveRDS(
   sfs.bootstrap.proportion.datatype.interval.plots$all.datatypes.adx.asw,
-  file.path(OUTPUT.DIR,
+  file.path(SFS.OUTPUT.DIR,
     "sfs.bootstrap.proportion.all.datatypes.adx.asw.datatype.interval.rds"
     )
   )
 saveRDS(sfs.population.contrast.plots$tc.tcd$`95`, file.path(
-  OUTPUT.DIR, "sfs.population.contrasts.tc.tcd.95.rds"
+  SFS.OUTPUT.DIR, "sfs.population.contrasts.tc.tcd.95.rds"
   ))
 saveRDS(sfs.population.contrast.plots$tc.tcd$bonferroni, file.path(
-  OUTPUT.DIR, "sfs.population.contrasts.tc.tcd.bonferroni.rds"
+  SFS.OUTPUT.DIR, "sfs.population.contrasts.tc.tcd.bonferroni.rds"
   ))
 saveRDS(sfs.population.contrast.plots$empirical, file.path(
-  OUTPUT.DIR, "sfs.population.contrasts.empirical.rds"
+  SFS.OUTPUT.DIR, "sfs.population.contrasts.empirical.rds"
   ))
 saveRDS(sfs.simulation.contrast.plots$`95`, file.path(
-  OUTPUT.DIR, "sfs.simulation.contrasts.95.rds"
+  SFS.OUTPUT.DIR, "sfs.simulation.contrasts.95.rds"
   ))
 saveRDS(sfs.simulation.contrast.plots$bonferroni, file.path(
-  OUTPUT.DIR, "sfs.simulation.contrasts.bonferroni.rds"
+  SFS.OUTPUT.DIR, "sfs.simulation.contrasts.bonferroni.rds"
   ))
 print(sfs.bootstrap.count.datatype.interval.plots$tcd.1kg)
 print(sfs.bootstrap.count.plots$all.datatypes.adx.asw)
@@ -1190,4 +1207,3 @@ print(sfs.bootstrap.proportion.plots$all.datatypes.adx.asw)
 print(sfs.population.contrast.plots$tc.tcd$bonferroni)
 print(sfs.population.contrast.plots$empirical)
 print(sfs.simulation.contrast.plots$bonferroni)
-

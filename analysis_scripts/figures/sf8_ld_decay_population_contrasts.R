@@ -19,7 +19,7 @@ if (
   !exists("ld.population.contrast.plots", envir = .GlobalEnv) || 
   !exists("ld.population.contrast.plots", envir = .GlobalEnv)
 ) {
-  source("diversity.R")
+  source("ld_decay.R")
 }
 
 

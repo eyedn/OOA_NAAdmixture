@@ -22,51 +22,46 @@ source(if (file.exists("analysis_scripts/bootstrap_parallel.R")) {
   })
 
 
-SIM.TC.DATA.DIR <- "~/scratch/OOA_NAAdmixture_2T12Consistent/stats"
-SIMDOWN.TC.DATA.DIR <- "~/scratch/OOA_NAAdmixture_2T12ConsistentOnekgDownsample/stats"
-SIM.LG.DATA.DIR <- "~/scratch/OOA_NAAdmixture_largeGrowth/stats"
-SIMDOWN.LG.DATA.DIR <- "~/scratch/OOA_NAAdmixture_largeGrowthOnekgDownsample/stats"
-EMPIRICAL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_1kG/stats"
-OUTPUT.DIR <- "/home1/karatas/proj/OOA_NAAdmixture_data"
-SELECTED.CHROMOSOMES <- c("1")
-SOURCE.LEVELS <- c(
+KINSHIP.SIM.TC.DATA.DIR <- "~/scratch/OOA_NAAdmixture_2T12Consistent/stats"
+KINSHIP.SIMDOWN.TC.DATA.DIR <- "~/scratch/OOA_NAAdmixture_2T12ConsistentOnekgDownsample/stats"
+KINSHIP.SIM.LG.DATA.DIR <- "~/scratch/OOA_NAAdmixture_largeGrowth/stats"
+KINSHIP.SIMDOWN.LG.DATA.DIR <- "~/scratch/OOA_NAAdmixture_largeGrowthOnekgDownsample/stats"
+KINSHIP.EMPIRICAL.DATA.DIR <- "~/scratch/OOA_NAAdmixture_1kG/stats"
+KINSHIP.OUTPUT.DIR <- "/home1/karatas/proj/OOA_NAAdmixture_data"
+KINSHIP.SELECTED.CHROMOSOMES <- c("1")
+KINSHIP.SOURCE.LEVELS <- c(
   "Simulation_2T12Consistent", "Simulation_2T12Consistent_simDown",
   "Simulation_largeGrowth", "Simulation_largeGrowth_simDown",
   "Empirical"
   )
-SOURCE.DISPLAY.LEVELS <- c("T.C.", "T.C.D.", "L.G.", "L.G.D.", "1kG")
-SOURCE.LABELS <- setNames(SOURCE.DISPLAY.LEVELS, SOURCE.LEVELS)
-POPULATION.LEVELS <- c("AFR", "ADX", "EUR", "YRI", "ASW", "CEU")
-PLOT.CONFIGS <- list(
-  tcd.1kg = SOURCE.LEVELS[c(2, 5)],
-  tc.tcd.1kg = SOURCE.LEVELS[c(1, 2, 5)],
-  all.datatypes.adx.asw = SOURCE.LEVELS
-  )
+KINSHIP.SOURCE.DISPLAY.LEVELS <- c("T.C.", "T.C.D.", "L.G.", "L.G.D.", "1kG")
+KINSHIP.SOURCE.LABELS <- setNames(KINSHIP.SOURCE.DISPLAY.LEVELS, KINSHIP.SOURCE.LEVELS)
+KINSHIP.POPULATION.LEVELS <- c("AFR", "ADX", "EUR", "YRI", "ASW", "CEU")
 KINSHIP.BIN.WIDTH <- 0.01
 KINSHIP.DOWNSAMPLE.SIZES <- c(AFR = 118L, ADX = 50L, EUR = 119L)
-BOOTSTRAP.REPLICATES <- 1000L
-RANDOM.SEED <- 123L
-PLOT.BASE.SIZE <- 24
-CATEGORICAL.BAR.LINEWIDTH <- 1
-DENSE.BAR.WIDTH.MULTIPLIER <- 0.8
-DENSE.BAR.LINEWIDTH <- 0.75
+KINSHIP.BOOTSTRAP.REPLICATES <- 1000L
+KINSHIP.RANDOM.SEED <- 123L
+KINSHIP.PLOT.BASE.SIZE <- 24
+KINSHIP.CATEGORICAL.BAR.LINEWIDTH <- 1
+KINSHIP.DENSE.BAR.WIDTH.MULTIPLIER <- 0.8
+KINSHIP.DENSE.BAR.LINEWIDTH <- 0.75
 KINSHIP.CONTRAST.BOOTSTRAP.REPLICATES <- 100000L
 # per comparison-set Bonferroni family: 3 contrasts x 25 bins.
 KINSHIP.CONTRAST.FAMILY.SIZE <- 75L
 KINSHIP.CONTRAST.X.LIMITS <- c(-0.20, 0.05)
-KINSHIP.POPULATION.CONTRAST.SOURCES <- SOURCE.LEVELS[1:2]
+KINSHIP.POPULATION.CONTRAST.SOURCES <- KINSHIP.SOURCE.LEVELS[1:2]
 KINSHIP.POPULATION.CONTRASTS <- tribble(
   ~contrast, ~left.pop, ~right.pop,
   "AFR-ADX", "AFR", "ADX",
   "AFR-EUR", "AFR", "EUR",
   "ADX-EUR", "ADX", "EUR"
   )
-KINSHIP.SIMULATION.CONTRAST.SOURCES <- SOURCE.LEVELS[1:4]
+KINSHIP.SIMULATION.CONTRAST.SOURCES <- KINSHIP.SOURCE.LEVELS[1:4]
 KINSHIP.SIMULATION.CONTRASTS <- tribble(
   ~contrast, ~left.source, ~right.source, ~paired,
-  "T.C. - T.C.D.", SOURCE.LEVELS[[1L]], SOURCE.LEVELS[[2L]], TRUE,
-  "L.G. - L.G.D.", SOURCE.LEVELS[[3L]], SOURCE.LEVELS[[4L]], TRUE,
-  "T.C. - L.G.", SOURCE.LEVELS[[1L]], SOURCE.LEVELS[[3L]], FALSE
+  "T.C. - T.C.D.", KINSHIP.SOURCE.LEVELS[[1L]], KINSHIP.SOURCE.LEVELS[[2L]], TRUE,
+  "L.G. - L.G.D.", KINSHIP.SOURCE.LEVELS[[3L]], KINSHIP.SOURCE.LEVELS[[4L]], TRUE,
+  "T.C. - L.G.", KINSHIP.SOURCE.LEVELS[[1L]], KINSHIP.SOURCE.LEVELS[[3L]], FALSE
   )
 KINSHIP.EMPIRICAL.CONTRASTS <- tribble(
   ~contrast, ~left.pop, ~right.pop,
@@ -87,8 +82,9 @@ KINSHIP.CONTRAST.LABELS <- c(
   "YRI-ASW" = "YRI - ASW", "YRI-CEU" = "YRI - CEU",
   "ASW-CEU" = "ASW - CEU"
   )
-BOOTSTRAP.PLOT.STYLES <- list(
-  tcd.1kg = list(
+KINSHIP.PLOT.STYLES <- list(
+  bootstrap = list(
+    tcd.1kg = list(
     fill.colors = c(
       "T.C.D. AFR" = "#56B4E9", "T.C.D. ADX" = "#6F55B5",
       "T.C.D. EUR" = "#FB8072", YRI = "#EEC4DC", ASW = "#E44B8D",
@@ -99,8 +95,8 @@ BOOTSTRAP.PLOT.STYLES <- list(
       "T.C.D. EUR" = "T.C.D. EUR", YRI = "YRI", ASW = "ASW",
       CEU = "CEU"
       )
-    ),
-  all.datatypes.adx.asw = list(
+      ),
+    all.datatypes.adx.asw = list(
     fill.colors = c(
       "T.C." = "#9A83CE", "T.C.D." = "#6F55B5",
       "L.G." = "#32146F", "L.G.D." = "#4B1FA8", ASW = "#E44B8D"
@@ -109,7 +105,22 @@ BOOTSTRAP.PLOT.STYLES <- list(
       "T.C." = "T.C.", "T.C.D." = "T.C.D.", "L.G." = "L.G.",
       "L.G.D." = "L.G.D.", ASW = "ASW"
       )
-    )
+      )
+    ),
+  source.levels = KINSHIP.SOURCE.LEVELS,
+  population.levels = KINSHIP.POPULATION.LEVELS,
+  plot.configs = list(
+    tcd.1kg = KINSHIP.SOURCE.LEVELS[c(2, 5)],
+    tc.tcd.1kg = KINSHIP.SOURCE.LEVELS[c(1, 2, 5)],
+    all.datatypes.adx.asw = KINSHIP.SOURCE.LEVELS
+    ),
+  base.size = KINSHIP.PLOT.BASE.SIZE,
+  categorical.bar.linewidth = KINSHIP.CATEGORICAL.BAR.LINEWIDTH,
+  dense.bar.width.multiplier = KINSHIP.DENSE.BAR.WIDTH.MULTIPLIER,
+  dense.bar.linewidth = KINSHIP.DENSE.BAR.LINEWIDTH,
+  contrast.colors = KINSHIP.CONTRAST.COLORS,
+  contrast.labels = KINSHIP.CONTRAST.LABELS,
+  contrast.x.limits = KINSHIP.CONTRAST.X.LIMITS
   )
 
 
@@ -118,7 +129,7 @@ BOOTSTRAP.PLOT.STYLES <- list(
 
 # apply the common visual treatment to a completed plot.
 apply.standard.plot.theme <- function(plot, legend.position = "top") {
-  return(plot + theme_bw(base_size = PLOT.BASE.SIZE) + theme(
+  return(plot + theme_bw(base_size = KINSHIP.PLOT.BASE.SIZE) + theme(
     legend.position = legend.position,
     legend.direction = "horizontal",
     legend.box = "horizontal",
@@ -223,7 +234,7 @@ select.bootstrap.kinship.ids <- function(data, seed) {
 
 # summarize per-replicate relationship fractions with simulation intervals
 summarize.bootstrap.kinship <- function(data, breaks) {
-  selected <- select.bootstrap.kinship.ids(data, RANDOM.SEED)
+  selected <- select.bootstrap.kinship.ids(data, KINSHIP.RANDOM.SEED)
   selected.pairs <- apply.kinship.selection(data, selected) %>%
     filter(sample.set == "downsampled")
   histograms <- build.kinship.histograms(selected.pairs, breaks) %>%
@@ -241,7 +252,7 @@ summarize.bootstrap.kinship <- function(data, breaks) {
       )
   empirical <- summarize.empirical.kinship.interval(
     filter(data, data.type == "Empirical"), breaks,
-    BOOTSTRAP.REPLICATES, RANDOM.SEED
+    KINSHIP.BOOTSTRAP.REPLICATES, KINSHIP.RANDOM.SEED
     )
   summary <- bind_rows(simulation, empirical)
   attr(summary, "sample.sizes") <- attr(selected, "sample.sizes")
@@ -303,16 +314,16 @@ summarize.empirical.kinship.interval <- function(
 
 # select the source and population series for one bootstrap kinship view
 filter.bootstrap.kinship.plot.view <- function(data, data.types, tag) {
-  if (!tag %in% names(BOOTSTRAP.PLOT.STYLES)) {
+  if (!tag %in% names(KINSHIP.PLOT.STYLES$bootstrap)) {
     stop("Unsupported bootstrap kinship plot tag: ", tag)
     }
-  if (!identical(data.types, PLOT.CONFIGS[[tag]])) {
+  if (!identical(data.types, KINSHIP.PLOT.STYLES$plot.configs[[tag]])) {
     stop("Kinship data types do not match the configured bootstrap view")
     }
   plotted <- data %>%
     filter(
       as.character(data.type) %in% data.types,
-      as.character(chrom) %in% SELECTED.CHROMOSOMES
+      as.character(chrom) %in% KINSHIP.SELECTED.CHROMOSOMES
       )
   plotted <- if (tag == "tcd.1kg") {
     plotted %>% filter(
@@ -326,23 +337,23 @@ filter.bootstrap.kinship.plot.view <- function(data, data.types, tag) {
         (data.type == "Empirical" & pop == "ASW")
       )
     }
-  styles <- BOOTSTRAP.PLOT.STYLES[[tag]]
+  styles <- KINSHIP.PLOT.STYLES$bootstrap[[tag]]
   plotted <- plotted %>%
     mutate(
       data.type = factor(
         as.character(data.type),
-        levels = order.active.levels(data.type, SOURCE.LEVELS)
+        levels = order.active.levels(data.type, KINSHIP.SOURCE.LEVELS)
         ),
       pop = factor(
         as.character(pop),
-        levels = order.active.levels(pop, POPULATION.LEVELS)
+        levels = order.active.levels(pop, KINSHIP.POPULATION.LEVELS)
         ),
       plot.key = case_when(
         tag == "tcd.1kg" & data.type != "Empirical" ~
           paste("T.C.D.", pop),
         tag == "tcd.1kg" ~ as.character(pop),
         data.type == "Empirical" ~ "ASW",
-        TRUE ~ SOURCE.LABELS[as.character(data.type)]
+        TRUE ~ KINSHIP.SOURCE.LABELS[as.character(data.type)]
         ),
       plot.key = factor(
         plot.key,
@@ -362,18 +373,18 @@ make.bootstrap.kinship.plot <- function(
     stop("Kinship x limits must contain two finite values")
     }
   plotted <- filter.bootstrap.kinship.plot.view(data, data.types, tag)
-  styles <- BOOTSTRAP.PLOT.STYLES[[tag]]
+  styles <- KINSHIP.PLOT.STYLES$bootstrap[[tag]]
   dodge <- position_dodge(diff(breaks)[1])
   plot <- ggplot(plotted, aes(
     xmid, mean, fill = plot.key, group = plot.key
     )) +
     geom_col(
       position = dodge,
-      width = diff(breaks)[1] * DENSE.BAR.WIDTH.MULTIPLIER,
-      color = "black", linewidth = DENSE.BAR.LINEWIDTH
+      width = diff(breaks)[1] * KINSHIP.DENSE.BAR.WIDTH.MULTIPLIER,
+      color = "black", linewidth = KINSHIP.DENSE.BAR.LINEWIDTH
       ) +
     geom_errorbar(aes(ymin = lower, ymax = upper),
-      position = dodge, width = 0, linewidth = DENSE.BAR.LINEWIDTH,
+      position = dodge, width = 0, linewidth = KINSHIP.DENSE.BAR.LINEWIDTH,
       na.rm = TRUE) +
     coord_cartesian(xlim = x.limits) +
     scale_fill_manual(
@@ -387,7 +398,7 @@ make.bootstrap.kinship.plot <- function(
   if (facet.by.datatype) {
     plot <- plot + facet_wrap(
       ~data.type,
-      labeller = labeller(data.type = SOURCE.LABELS)
+      labeller = labeller(data.type = KINSHIP.SOURCE.LABELS)
       )
     }
   return(apply.standard.plot.theme(plot))
@@ -407,7 +418,7 @@ apply.kinship.source.contract <- function(data) {
         (data.type == "Empirical" & pop %in% c("AFR", "ADX", "EUR",
                                                 "YRI", "ASW", "CEU"))
       ) %>%
-    mutate(data.type = factor(data.type, levels = SOURCE.LEVELS))
+    mutate(data.type = factor(data.type, levels = KINSHIP.SOURCE.LEVELS))
 
   return(retained)
   }
@@ -604,7 +615,7 @@ validate.kinship.contrast.input <- function(
     }
   data <- data %>%
     filter(data.type %in% sources, pop %in% populations,
-      as.character(chrom) %in% SELECTED.CHROMOSOMES) %>%
+      as.character(chrom) %in% KINSHIP.SELECTED.CHROMOSOMES) %>%
     select.kinship.contrast.bins() %>%
     mutate(data.type = as.character(data.type), chrom = as.character(chrom),
       pop = as.character(pop))
@@ -612,7 +623,7 @@ validate.kinship.contrast.input <- function(
     name = "fraction.count")
   invalid <- if (canonical.reps) {
     expected <- crossing(data.type = sources, rep = seq_len(50L),
-      chrom = SELECTED.CHROMOSOMES, pop = populations,
+      chrom = KINSHIP.SELECTED.CHROMOSOMES, pop = populations,
       xmin = sort(unique(data$xmin)))
     expected %>% left_join(counts,
       by = c("data.type", "rep", "chrom", "pop", "xmin")) %>%
@@ -675,7 +686,7 @@ summarize.kinship.contrast.bootstrap <- function(
 # construct paired population contrast intervals from simulation histograms
 make.kinship.population.contrast.tables <- function(
     data, bootstrap.replicates = KINSHIP.CONTRAST.BOOTSTRAP.REPLICATES,
-    seed = RANDOM.SEED
+    seed = KINSHIP.RANDOM.SEED
   ) {
   data <- validate.kinship.contrast.input(data,
     KINSHIP.POPULATION.CONTRAST.SOURCES, c("AFR", "ADX", "EUR"))
@@ -720,7 +731,7 @@ make.kinship.population.contrast.tables <- function(
 # independently resample T.C.-L.G.; retain paired source contrasts otherwise
 make.kinship.simulation.contrast.tables <- function(
     data, bootstrap.replicates = KINSHIP.CONTRAST.BOOTSTRAP.REPLICATES,
-    seed = RANDOM.SEED
+    seed = KINSHIP.RANDOM.SEED
   ) {
   data <- validate.kinship.contrast.input(data,
     KINSHIP.SIMULATION.CONTRAST.SOURCES, "ADX", canonical.reps = FALSE)
@@ -767,13 +778,13 @@ make.kinship.simulation.contrast.tables <- function(
 # bootstrap independently resampled empirical pair fractions for each contrast
 make.kinship.empirical.contrast.tables <- function(
     data, breaks, bootstrap.replicates = KINSHIP.CONTRAST.BOOTSTRAP.REPLICATES,
-    seed = RANDOM.SEED
+    seed = KINSHIP.RANDOM.SEED
   ) {
   if (any(!is.finite(data$kinship))) {
     stop("Empirical kinship contrast values must be finite")
     }
   data <- data %>% filter(data.type == "Empirical",
-    as.character(chrom) %in% SELECTED.CHROMOSOMES,
+    as.character(chrom) %in% KINSHIP.SELECTED.CHROMOSOMES,
     pop %in% c("YRI", "ASW", "CEU"))
   if (!all(c("YRI", "ASW", "CEU") %in% unique(data$pop))) {
     stop("Empirical kinship contrast inputs require YRI, ASW, and CEU pairs")
@@ -903,12 +914,12 @@ make.kinship.contrast.plot <- function(data, interval.label, title) {
     geom_hline(yintercept = 0, linetype = "dashed", linewidth = 1) +
     geom_errorbar(
       aes(ymin = ci.lower, ymax = ci.upper), position = dodge, width = 0,
-      color = "black", linewidth = CATEGORICAL.BAR.LINEWIDTH,
+      color = "black", linewidth = KINSHIP.CATEGORICAL.BAR.LINEWIDTH,
       show.legend = FALSE
       ) +
     geom_point(
       aes(fill = contrast, color = point.color), position = dodge,
-      shape = 21, size = 3, stroke = CATEGORICAL.BAR.LINEWIDTH
+      shape = 21, size = 3, stroke = KINSHIP.CATEGORICAL.BAR.LINEWIDTH
       ) +
     coord_cartesian(xlim = KINSHIP.CONTRAST.X.LIMITS) +
     scale_color_manual(
@@ -935,7 +946,7 @@ make.kinship.contrast.plot <- function(data, interval.label, title) {
     plot <- plot + facet_grid(
       cols = vars(contrast), rows = vars(data.type), 
       labeller = labeller(
-        contrast = KINSHIP.CONTRAST.LABELS, data.type = SOURCE.LABELS
+        contrast = KINSHIP.CONTRAST.LABELS, data.type = KINSHIP.SOURCE.LABELS
         )
       )
   } else {
@@ -953,21 +964,21 @@ make.kinship.contrast.plot <- function(data, interval.label, title) {
 
 # read selected chromosome-level simulation and empirical estimates
 kinship.sim.tc <- read.kinship.chromosomes(
-  SIM.TC.DATA.DIR, SELECTED.CHROMOSOMES, "Simulation_2T12Consistent"
+  KINSHIP.SIM.TC.DATA.DIR, KINSHIP.SELECTED.CHROMOSOMES, "Simulation_2T12Consistent"
   )
 kinship.simDown.tc <- read.kinship.chromosomes(
-  SIMDOWN.TC.DATA.DIR, SELECTED.CHROMOSOMES,
+  KINSHIP.SIMDOWN.TC.DATA.DIR, KINSHIP.SELECTED.CHROMOSOMES,
   "Simulation_2T12Consistent_simDown"
   )
 kinship.sim.lg <- read.kinship.chromosomes(
-  SIM.LG.DATA.DIR, SELECTED.CHROMOSOMES, "Simulation_largeGrowth"
+  KINSHIP.SIM.LG.DATA.DIR, KINSHIP.SELECTED.CHROMOSOMES, "Simulation_largeGrowth"
   )
 kinship.simDown.lg <- read.kinship.chromosomes(
-  SIMDOWN.LG.DATA.DIR, SELECTED.CHROMOSOMES,
+  KINSHIP.SIMDOWN.LG.DATA.DIR, KINSHIP.SELECTED.CHROMOSOMES,
   "Simulation_largeGrowth_simDown"
   )
 kinship.emp.chromosome <- read.kinship.chromosomes(
-  EMPIRICAL.DATA.DIR, SELECTED.CHROMOSOMES, "Empirical"
+  KINSHIP.EMPIRICAL.DATA.DIR, KINSHIP.SELECTED.CHROMOSOMES, "Empirical"
   )
 
 # combine all unrelated simulation and empirical pairs
@@ -984,7 +995,7 @@ kinship.breaks <- make.kinship.breaks(
   )
 kinship.summary <- summarize.bootstrap.kinship(kinship.data, kinship.breaks)
 kinship.contrast.selected.ids <- select.bootstrap.kinship.ids(
-  kinship.data, RANDOM.SEED
+  kinship.data, KINSHIP.RANDOM.SEED
   )
 kinship.contrast.histograms <- apply.kinship.selection(
   kinship.data, kinship.contrast.selected.ids
@@ -1046,62 +1057,62 @@ kinship.empirical.contrast.plots <- list(
     )
   )
 kinship.bootstrap.tcd.1kg <- make.bootstrap.kinship.plot(
-  kinship.summary, kinship.breaks, PLOT.CONFIGS$tcd.1kg,
+  kinship.summary, kinship.breaks, KINSHIP.PLOT.STYLES$plot.configs$tcd.1kg,
   "Pairwise KING kinship: chromosome 1 TCD and 1kG",
   x.limits = c(-0.1, 0.05), tag = "tcd.1kg"
   )
 kinship.bootstrap.all.datatypes.adx.asw <- make.bootstrap.kinship.plot(
-  kinship.summary, kinship.breaks, PLOT.CONFIGS$all.datatypes.adx.asw,
+  kinship.summary, kinship.breaks, KINSHIP.PLOT.STYLES$plot.configs$all.datatypes.adx.asw,
   "Pairwise KING kinship: chromosome 1 all ADX sources and ASW",
   x.limits = c(-0.2, 0.05), tag = "all.datatypes.adx.asw"
   )
 kinship.bootstrap.tcd.1kg.datatype.interval <- make.bootstrap.kinship.plot(
-  kinship.summary, kinship.breaks, PLOT.CONFIGS$tcd.1kg,
+  kinship.summary, kinship.breaks, KINSHIP.PLOT.STYLES$plot.configs$tcd.1kg,
   "Pairwise KING kinship: chromosome 1 TCD and 1kG",
   x.limits = c(-0.1, 0.05), tag = "tcd.1kg", facet.by.datatype = TRUE
   )
 kinship.bootstrap.all.datatypes.adx.asw.datatype.interval <-
   make.bootstrap.kinship.plot(
-    kinship.summary, kinship.breaks, PLOT.CONFIGS$all.datatypes.adx.asw,
+    kinship.summary, kinship.breaks, KINSHIP.PLOT.STYLES$plot.configs$all.datatypes.adx.asw,
     "Pairwise KING kinship: chromosome 1 all ADX sources and ASW",
     x.limits = c(-0.2, 0.05), tag = "all.datatypes.adx.asw",
     facet.by.datatype = TRUE
     )
 
 # persist bootstrap plots before printing figures at the end of the script
-dir.create(OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
+dir.create(KINSHIP.OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
 write_csv(attr(kinship.summary, "sample.sizes"), file.path(
-  OUTPUT.DIR, "kinship.bootstrap.sample_sizes.csv"
+  KINSHIP.OUTPUT.DIR, "kinship.bootstrap.sample_sizes.csv"
   ))
 saveRDS(kinship.bootstrap.tcd.1kg, file.path(
-  OUTPUT.DIR, "kinship.bootstrap.tcd.1kg.rds"
+  KINSHIP.OUTPUT.DIR, "kinship.bootstrap.tcd.1kg.rds"
   ))
 saveRDS(kinship.bootstrap.all.datatypes.adx.asw, file.path(
-  OUTPUT.DIR, "kinship.bootstrap.all.datatypes.adx.asw.rds"
+  KINSHIP.OUTPUT.DIR, "kinship.bootstrap.all.datatypes.adx.asw.rds"
   ))
 saveRDS(kinship.bootstrap.tcd.1kg.datatype.interval, file.path(
-  OUTPUT.DIR, "kinship.bootstrap.tcd.1kg.datatype.interval.rds"
+  KINSHIP.OUTPUT.DIR, "kinship.bootstrap.tcd.1kg.datatype.interval.rds"
   ))
 saveRDS(kinship.bootstrap.all.datatypes.adx.asw.datatype.interval, file.path(
-  OUTPUT.DIR, "kinship.bootstrap.all.datatypes.adx.asw.datatype.interval.rds"
+  KINSHIP.OUTPUT.DIR, "kinship.bootstrap.all.datatypes.adx.asw.datatype.interval.rds"
   ))
 saveRDS(kinship.population.contrast.plots$`95`, file.path(
-  OUTPUT.DIR, "kinship.population.contrasts.95.rds"
+  KINSHIP.OUTPUT.DIR, "kinship.population.contrasts.95.rds"
   ))
 saveRDS(kinship.population.contrast.plots$bonferroni, file.path(
-  OUTPUT.DIR, "kinship.population.contrasts.bonferroni.rds"
+  KINSHIP.OUTPUT.DIR, "kinship.population.contrasts.bonferroni.rds"
   ))
 saveRDS(kinship.simulation.contrast.plots$`95`, file.path(
-  OUTPUT.DIR, "kinship.simulation.contrasts.95.rds"
+  KINSHIP.OUTPUT.DIR, "kinship.simulation.contrasts.95.rds"
   ))
 saveRDS(kinship.simulation.contrast.plots$bonferroni, file.path(
-  OUTPUT.DIR, "kinship.simulation.contrasts.bonferroni.rds"
+  KINSHIP.OUTPUT.DIR, "kinship.simulation.contrasts.bonferroni.rds"
   ))
 saveRDS(kinship.empirical.contrast.plots$`95`, file.path(
-  OUTPUT.DIR, "kinship.empirical.contrasts.95.rds"
+  KINSHIP.OUTPUT.DIR, "kinship.empirical.contrasts.95.rds"
   ))
 saveRDS(kinship.empirical.contrast.plots$bonferroni, file.path(
-  OUTPUT.DIR, "kinship.empirical.contrasts.bonferroni.rds"
+  KINSHIP.OUTPUT.DIR, "kinship.empirical.contrasts.bonferroni.rds"
   ))
 
 print(kinship.bootstrap.tcd.1kg.datatype.interval)

@@ -31,7 +31,7 @@ sf6.diversity.population.contrasts <-
        interaction(data.type, stat, sep = " ") ~ contrast, 
        scales = "free_y",
        labeller = labeller(
-         contrast = PLOT.STYLES$contrast.labels,
+         contrast = DIVERSITY.PLOT.STYLES$contrast.labels,
          .rows = as_labeller(c(
            "Simulation_2T12Consistent pi" = "T.C. π",
            "Simulation_2T12Consistent_simDown pi" = "T.C.D. π",
@@ -49,7 +49,7 @@ sf6.diversity.population.contrasts <-
       facet_grid(
         cols = vars(contrast), rows = vars(stat), scales = "free_y", 
         labeller = labeller(
-          contrast = PLOT.STYLES$contrast.labels.emp,
+          contrast = DIVERSITY.PLOT.STYLES$contrast.labels.emp,
           stat = c(pi = "π", theta = "θ"))
       ) +
       theme(

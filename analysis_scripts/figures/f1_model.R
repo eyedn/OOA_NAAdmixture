@@ -31,7 +31,7 @@ f1.model <- (
           labs(title = NULL, subtitle = NULL) +
           guides(
             color = guide_legend(order = 1, nrow = 1),
-            linetype = guide_legend(order = 2, nrow = 1)
+            linetype = "none"
           )
       ) / (
         admix.plot +

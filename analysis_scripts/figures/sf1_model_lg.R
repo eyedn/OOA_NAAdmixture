@@ -21,7 +21,8 @@ if (!exists("lg.combined.ne.plot", envir = .GlobalEnv)) {
 
 # main ----
 sf1.model.lg <- lg.combined.ne.plot +
-  labs(title = NULL, subtitle = NULL)
+  labs(title = NULL, subtitle = NULL) +
+  guides(linetype = "none")
 
 dir.create(OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
 saveRDS(sf1.model.lg, file.path(OUTPUT.DIR, "sf1_model_lg.rds"))
