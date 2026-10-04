@@ -5,7 +5,7 @@
 # Department of Quantitative and Computational Biology
 # Mooney Lab
 # ___
-# f4_kinship.R
+# sf1_model_lg.R
 # ______________________________________________________________________________
 
 
@@ -14,17 +14,15 @@ setwd("~/OOA_NAAdmixture/analysis_scripts/")
 library(tidyverse)
 library(patchwork)
 OUTPUT.DIR <- "/home1/karatas/proj/OOA_NAAdmixture_data"
-if (
-  !exists("kinship.bootstrap.tcd.1kg.datatype.interval", envir = .GlobalEnv)
-) {
-  source("kinship.R")
+if (!exists("lg.combined.ne.plot", envir = .GlobalEnv)) {
+  source("calc_ADX_Ne.R")
 }
 
 
 # main ----
-f4.kinship <- kinship.bootstrap.tcd.1kg.datatype.interval +
-  labs(title = NULL, subtitle = NULL) +
-  theme(strip.text = element_blank())
+sf1.model.lg <- lg.combined.ne.plot +
+  labs(title = NULL, subtitle = NULL)
+
 dir.create(OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
-saveRDS(f4.kinship, file.path(OUTPUT.DIR, "f4_kinship.rds"))
-print(f4.kinship)
+saveRDS(sf1.model.lg, file.path(OUTPUT.DIR, "sf1_model_lg.rds"))
+print(sf1.model.lg)

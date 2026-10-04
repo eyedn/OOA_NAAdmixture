@@ -13,6 +13,7 @@
 setwd("~/OOA_NAAdmixture/analysis_scripts/")
 library(tidyverse)
 library(patchwork)
+OUTPUT.DIR <- "/home1/karatas/proj/OOA_NAAdmixture_data"
 if (
   !exists("ancestry.bootstrap.tcd.1kg.bar", envir = .GlobalEnv) || 
   !exists("ancestry.bootstrap.tcd.1kg.histograms", envir = .GlobalEnv)
@@ -31,4 +32,6 @@ f2.ancestry <- (
     theme(legend.position = "none")
 ) +
   plot_annotation(tag_levels = 'A', tag_suffix = '.)')
+dir.create(OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
+saveRDS(f2.ancestry, file.path(OUTPUT.DIR, "f2_ancestry.rds"))
 print(f2.ancestry)

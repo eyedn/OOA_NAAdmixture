@@ -9,10 +9,11 @@
 # ______________________________________________________________________________
 
 
+# set up ----
 library(tidyverse)
 library(patchwork)
 
-# functions ----
+# internal functions ----
 # validate that a given value is a single non-negative whole generation.
 # `value` is the candidate input and `name` is used in the error message.
 validate.whole.generation.count <- function(value, name) {
@@ -930,8 +931,13 @@ afr.sec <- "#8FD0F2"
 eur.prim <- "#fb8072"
 admix.prim <- "#703BE7"
 admix.sec <- "#C6B3F6"
-# calculations ----
+# set up ----
 analysis.results <- calc.aa.ne.results()
+
+lg.analysis.results <- calc.aa.ne.results(
+  epoch.2.len = 9L,
+  epoch.3.len = 5L
+)
 
 AA.ne <- analysis.results$AA.ne
 AA.overlap <- analysis.results$AA.overlap
@@ -939,6 +945,13 @@ AA.mixing.props <- analysis.results$AA.mixing.props
 epoch.config <- analysis.results$epoch.config
 ne.g1 <- analysis.results$ne.g1
 epoch.3.anchor.ne <- analysis.results$epoch.3.anchor.ne
+
+LG.ne <- lg.analysis.results$AA.ne
+LG.overlap <- lg.analysis.results$AA.overlap
+LG.mixing.props <- lg.analysis.results$AA.mixing.props
+lg.epoch.config <- lg.analysis.results$epoch.config
+lg.ne.g1 <- lg.analysis.results$ne.g1
+lg.epoch.3.anchor.ne <- lg.analysis.results$epoch.3.anchor.ne
 
 
 # plotting ----
@@ -989,6 +1002,7 @@ cat(
 )
 
 # tennessen afr/eur ne trajectory ----
+build.tennessen.ne <- function(AA.ne) {
 # constants from `other_scripts/const.sh` and `build_demography.py`
 t.af.years <- 148000
 t.ooa.years <- 51000
@@ -1046,99 +1060,123 @@ tennessen.ne.long <- tennessen.ne %>%
     values_to = "ne"
   )
 
+  list(ne = tennessen.ne, long = tennessen.ne.long)
+}
+
 
 # combined aa/afr/eur ne plot ----
-aa.ne.long <- AA.ne %>%
+build.ne.plot.data <- function(AA.ne, tennessen.ne) {
+  tennessen.ne.long <- tennessen.ne %>%
+    pivot_longer(
+      cols = c(afr, eur),
+      names_to = "population",
+      values_to = "ne"
+    )
+
+  aa.ne.long <- AA.ne %>%
   transmute(
     year = generation.end.year,
-    population = "aa",
+    series = "ADX",
     ne = ne,
     admix.ne = admix.ne,
     import.ne = import.ne,
     epoch = epoch
   )
 
-combined.ne.long <- bind_rows(
-  aa.ne.long,
+  bind_rows(
+    aa.ne.long %>% transmute(year, series, ne),
   tennessen.ne.long %>%
-    transmute(year, population, ne, admix.ne, import.ne, epoch)
-)
-
-combined.ne.plot <- ggplot(
-  combined.ne.long,
-  aes(x = year, color = population)
-) +
-  geom_line(
-    aes(y = ne), data = combined.ne.long %>% filter(population != "aa"),
-    linewidth = 1.1
-  ) +
-  geom_line(
-    aes(y = ne), data = combined.ne.long %>% filter(population == "aa"),
-    linewidth = 1.1
-  ) +
-  geom_line(
-    aes(y = import.ne, linetype = "Import-only trajectory"),
-    data = combined.ne.long %>% filter(population == "aa"),
-    linewidth = 1.1,
-    color = afr.sec
-  ) +
-  geom_line(
-    aes(y = admix.ne, linetype = "American-born-only trajectory"),
-    data = combined.ne.long %>% filter(population == "aa"),
-    linewidth = 1.1,
-    color = admix.sec
-  ) +
-  scale_linetype_manual(
-    values = c(
-      "Import-only trajectory" = "dashed",
-      "American-born-only trajectory" = "dashed"
-    ),
-    name = NULL
-  ) +
-  scale_color_manual(
-    values = c(
-      aa = admix.prim,
-      afr = afr.prim,
-      eur = eur.prim
-    ),
-    labels = c(
-      aa = "ADX",
-      afr = "AFR",
-      eur = "EUR"
-    ),
-    name = NULL
-  ) +
-  scale_y_continuous(labels = scales::comma) +
-  scale_x_continuous(
-    breaks = seq(tennessen.start.year, tennessen.end.year, by = 50)
-  ) +
-  labs(
-    x = "Year",
-    y = expression(N[e]),
-    color = NULL,
-    title = paste0(
-      "African, European, and African American effective population size, ",
-      tennessen.start.year,
-      "-",
-      tennessen.end.year
+      transmute(
+        year,
+        series = recode(population, afr = "AFR", eur = "EUR"),
+        ne
+      ),
+    aa.ne.long %>% transmute(year, series = "ADX import-only", ne = import.ne),
+    aa.ne.long %>% transmute(
+      year,
+      series = "ADX American-born-only",
+      ne = admix.ne
     )
-  ) +
-  theme_bw(base_size = 24) +
-  theme(
-    legend.position = "top",
-    legend.direction = "horizontal",
-    legend.box = "horizontal",
-    panel.grid.minor = element_blank(),
-    strip.background = element_blank(),
-    strip.text = element_text(face = "plain")
   )
+}
 
-print(combined.ne.plot)
+make.combined.ne.plot <- function(ne.plot.data, population.name) {
+  tennessen.start.year <- min(ne.plot.data$year)
+  tennessen.end.year <- max(ne.plot.data$year)
 
-
+  ggplot(ne.plot.data, aes(x = year, color = series)) +
+    geom_line(
+      aes(y = ne),
+      data = ne.plot.data %>% filter(series == "ADX"),
+      linewidth = 1.1
+    ) +
+    geom_line(
+      aes(y = ne),
+      data = ne.plot.data %>% filter(series == "AFR"),
+      linewidth = 1.1
+    ) +
+    geom_line(
+      aes(y = ne),
+      data = ne.plot.data %>% filter(series == "EUR"),
+      linewidth = 1.1
+    ) +
+    geom_line(
+      aes(y = ne, linetype = series),
+      data = ne.plot.data %>% filter(series == "ADX import-only"),
+      linewidth = 1.1
+    ) +
+    geom_line(
+      aes(y = ne, linetype = series),
+      data = ne.plot.data %>% filter(series == "ADX American-born-only"),
+      linewidth = 1.1
+    ) +
+    scale_linetype_manual(
+      values = c(
+        "ADX import-only" = "dashed",
+        "ADX American-born-only" = "dashed"
+      ),
+      name = NULL
+    ) +
+    scale_color_manual(
+      values = c(
+        "ADX" = admix.prim,
+        "AFR" = afr.prim,
+        "EUR" = eur.prim,
+        "ADX import-only" = afr.sec,
+        "ADX American-born-only" = admix.sec
+      ),
+      name = NULL
+    ) +
+    scale_y_continuous(labels = scales::comma) +
+    scale_x_continuous(
+      breaks = seq(tennessen.start.year, tennessen.end.year, by = 50)
+    ) +
+    labs(
+      x = "Year",
+      y = expression(N[e]),
+      color = NULL,
+      title = paste0(
+        "African, European, and ", population.name,
+        " effective population size, ",
+        tennessen.start.year,
+        "-",
+        tennessen.end.year
+      )
+    ) +
+    theme_bw(base_size = 24) +
+    theme(
+      legend.position = "top",
+      legend.direction = "horizontal",
+      legend.box = "horizontal",
+      panel.grid.minor = element_blank(),
+      strip.background = element_blank(),
+      strip.text = element_text(face = "plain")
+    )
+}
 
 # mixing proportions plot ----
-admix.tbl <- tibble(
+make.admix.plot <- function() {
+  admix.tbl <- tibble(
   generation = 1:15,
   
   afr = c(
@@ -1197,7 +1235,7 @@ admix.tbl <- tibble(
 )
 
 # long format
-admix.long <- admix.tbl %>%
+  admix.long <- admix.tbl %>%
   pivot_longer(
     cols = -generation,
     names_to = "ancestry",
@@ -1206,7 +1244,7 @@ admix.long <- admix.tbl %>%
   mutate(perc = proportion * 100)
 
 
-admix.plot <- ggplot(
+  ggplot(
   admix.long, aes(x = generation, y = proportion, color = ancestry)
   ) +
   geom_line() +
@@ -1220,5 +1258,21 @@ admix.plot <- ggplot(
         panel.grid.minor = element_blank(),
         strip.background = element_blank(),
         strip.text = element_text(face = "plain"))
+}
 
+
+# analysis ----
+tennessen.results <- build.tennessen.ne(AA.ne)
+tennessen.ne <- tennessen.results$ne
+tennessen.ne.long <- tennessen.results$long
+combined.ne.long <- build.ne.plot.data(AA.ne, tennessen.ne)
+combined.ne.plot <- make.combined.ne.plot(combined.ne.long, "T.C.")
+lg.combined.ne.long <- build.ne.plot.data(LG.ne, tennessen.ne)
+lg.combined.ne.plot <- make.combined.ne.plot(lg.combined.ne.long, "L.G.")
+admix.plot <- make.admix.plot()
+
+
+# plotting ----
+print(combined.ne.plot)
+print(lg.combined.ne.plot)
 print(admix.plot)

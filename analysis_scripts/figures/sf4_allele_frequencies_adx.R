@@ -13,6 +13,7 @@
 setwd("~/OOA_NAAdmixture/analysis_scripts/")
 library(tidyverse)
 library(patchwork)
+OUTPUT.DIR <- "/home1/karatas/proj/OOA_NAAdmixture_data"
 if (
   !exists("diversity.bootstrap.plots", envir = .GlobalEnv) || 
   !exists("sfs.bootstrap.proportion.plots", envir = .GlobalEnv) ||
@@ -55,4 +56,9 @@ sf4.allele.frequencies.adx <- guide_area() / (
 ) + 
   plot_annotation(tag_levels = 'A', tag_suffix = '.)') +
   plot_layout(guides = 'collect', heights = c(0.1, 1))
+dir.create(OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
+saveRDS(
+  sf4.allele.frequencies.adx,
+  file.path(OUTPUT.DIR, "sf4_allele_frequencies_adx.rds")
+)
 print(sf4.allele.frequencies.adx)

@@ -13,6 +13,7 @@
 setwd("~/OOA_NAAdmixture/analysis_scripts/")
 library(tidyverse)
 library(patchwork)
+OUTPUT.DIR <- "/home1/karatas/proj/OOA_NAAdmixture_data"
 if (
   !exists(
     "ancestry.bootstrap.empirical.bonferroni.genome.comparisons", 
@@ -56,4 +57,9 @@ sf3.ancestry.contrasts <-
       theme(legend.position = "none")
     ) +
   plot_annotation(tag_levels = 'A', tag_suffix = '.)')
+dir.create(OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
+saveRDS(
+  sf3.ancestry.contrasts,
+  file.path(OUTPUT.DIR, "sf3_ancestry_contrasts.rds")
+)
 print(sf3.ancestry.contrasts)

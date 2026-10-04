@@ -14,6 +14,7 @@ setwd("~/OOA_NAAdmixture/analysis_scripts/")
 library(tidyverse)
 library(patchwork)
 library(ggh4x)
+OUTPUT.DIR <- "/home1/karatas/proj/OOA_NAAdmixture_data"
 if (
   !exists("sfs.population.contrast.plots", envir = .GlobalEnv) || 
   !exists("sfs.population.contrast.plots", envir = .GlobalEnv)
@@ -55,4 +56,9 @@ sf7.sfs.population.contrasts <-
   ) +
   plot_annotation(tag_levels = 'A', tag_suffix = '.)') +
   plot_layout(heights = c(2, 1))
+dir.create(OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
+saveRDS(
+  sf7.sfs.population.contrasts,
+  file.path(OUTPUT.DIR, "sf7_sfs_population_contrasts.rds")
+)
 print(sf7.sfs.population.contrasts)

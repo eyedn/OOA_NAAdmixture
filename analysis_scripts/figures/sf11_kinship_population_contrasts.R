@@ -13,6 +13,7 @@
 setwd("~/OOA_NAAdmixture/analysis_scripts/")
 library(tidyverse)
 library(patchwork)
+OUTPUT.DIR <- "/home1/karatas/proj/OOA_NAAdmixture_data"
 if (
   !exists("kinship.population.contrast.plots", envir = .GlobalEnv) ||
   !exists("kinship.empirical.contrast.plots", envir = .GlobalEnv)
@@ -34,5 +35,9 @@ sf11.kinship.population.contrasts <-
       ) +
   plot_annotation(tag_levels = 'A', tag_suffix = '.)') +
   plot_layout(heights = c(2, 1))
+dir.create(OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
+saveRDS(
+  sf11.kinship.population.contrasts,
+  file.path(OUTPUT.DIR, "sf11_kinship_population_contrasts.rds")
+)
 print(sf11.kinship.population.contrasts)
-

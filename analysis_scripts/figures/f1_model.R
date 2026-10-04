@@ -12,9 +12,8 @@
 # set up ----
 setwd("~/OOA_NAAdmixture/analysis_scripts/")
 library(tidyverse)
-library(svgparser)
-library(grid)
 library(patchwork)
+OUTPUT.DIR <- "/home1/karatas/proj/OOA_NAAdmixture_data"
 if (
   !exists("combined.ne.plot", envir = .GlobalEnv) || 
   !exists("admix.plot", envir = .GlobalEnv)
@@ -24,53 +23,24 @@ if (
 
 
 # main ----
-svg.file <- paste0(
-  "/project2/jazlynmo_738/karatas/",
-  "OOA_NAAdmixture_data/demography_plot.svg"
-)
-
-normalized.svg.file <- paste0(
-  "/project2/jazlynmo_738/karatas/",
-  "OOA_NAAdmixture_data/demography_plot_normalized.svg"
-)
-
-# Rewrite the Matplotlib SVG into a simpler normalized SVG.
-rsvg::rsvg_svg(
-  svg = svg.file,
-  file = normalized.svg.file
-)
-
-# Read the normalized file, not the original Matplotlib file.
-my.grob <- svgparser::read_svg(normalized.svg.file)
-
-# Test the grob.
-grid::grid.newpage()
-grid::grid.draw(my.grob)
-
-demesdraw.res <- patchwork::wrap_elements(
-  full = my.grob,
-  clip = FALSE
-  )
-
-# Draw the vector graphic on your screen
-right.panels <- (
-  combined.ne.plot +
-    labs(title = NULL, subtitle = NULL) +
-    guides(
-      color = guide_legend(order = 1, nrow = 1),
-      linetype = guide_legend(order = 2, nrow = 1)
-    )
-) / (
-  admix.plot +
-    labs(title = NULL, subtitle = NULL) +
-    guides(color = "none")
-) +
-  plot_layout(heights = c(1, 1))
-
-figure.panels <- demesdraw.res | right.panels
-
 f1.model <- (
-  guide_area() / figure.panels +
+  guide_area() / (
+    plot_spacer() | (
+      (
+        combined.ne.plot +
+          labs(title = NULL, subtitle = NULL) +
+          guides(
+            color = guide_legend(order = 1, nrow = 1),
+            linetype = guide_legend(order = 2, nrow = 1)
+          )
+      ) / (
+        admix.plot +
+          labs(title = NULL, subtitle = NULL) +
+          guides(color = "none")
+      ) +
+        plot_layout(heights = c(1, 1))
+    )
+  ) +
     plot_layout(
       guides = "collect",
       heights = c(0.1, 1)
@@ -94,4 +64,6 @@ f1.model <- (
     legend.box = "horizontal"
   )
 
+dir.create(OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
+saveRDS(f1.model, file.path(OUTPUT.DIR, "f1_model.rds"))
 print(f1.model)

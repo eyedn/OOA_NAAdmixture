@@ -13,6 +13,7 @@
 setwd("~/OOA_NAAdmixture/analysis_scripts/")
 library(tidyverse)
 library(patchwork)
+OUTPUT.DIR <- "/home1/karatas/proj/OOA_NAAdmixture_data"
 if (
   !exists("sfs.bootstrap.count.datatype.interval.plots", envir = .GlobalEnv) || 
   !exists("sfs.bootstrap.count.plots", envir = .GlobalEnv)
@@ -33,5 +34,6 @@ sf5_sfs_counts_adx <- (
       plot_layout(widths = c(1, 1))
   ) +
   plot_annotation(tag_levels = 'A', tag_suffix = '.)')
+dir.create(OUTPUT.DIR, recursive = TRUE, showWarnings = FALSE)
+saveRDS(sf5_sfs_counts_adx, file.path(OUTPUT.DIR, "sf5_sfs_counts_adx.rds"))
 print(sf5_sfs_counts_adx)
-
