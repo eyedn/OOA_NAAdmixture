@@ -25,7 +25,7 @@ if (
 # main ----
 f1.model <- (
   guide_area() / (
-    plot_spacer() | (
+    ggplot() + theme_void() + theme(text = element_text(size = 24)) + (
       (
         combined.ne.plot +
           labs(title = NULL, subtitle = NULL) +

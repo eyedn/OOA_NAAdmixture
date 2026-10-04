@@ -69,7 +69,7 @@ PLOT.STYLES <- list(
   contrast.colors = c(
     `TC-Emp` = "#9A83CE", `TCD-Emp` = "#6F55B5",
     `LG-Emp` = "#32146F", `LGD-Emp` = "#4B1FA8",
-    `TC-TCD` = "#00858C", `LG-LGD` = "#00555A",
+    `TC-TCD` = "#7FC2C5", `LG-LGD` = "#2C777C",
     `TC-LG` = "#002526" 
     ),
   contrast.labels = c(

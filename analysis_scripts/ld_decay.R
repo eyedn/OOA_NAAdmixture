@@ -78,11 +78,11 @@ PLOT.STYLES <- list(
     Simulation_largeGrowth_simDown = "#4B1FA8"
     ),
   contrast.colors = c(
-    `AFR-ADX` = "#00858C", `AFR-EUR` = "#00555A",
+    `AFR-ADX` = "#7FC2C5", `AFR-EUR` = "#2C777C",
     `ADX-EUR` = "#002526"
     ),
   simulation.contrast.colors = c(
-    "T.C. - T.C.D." = "#00858C", "L.G. - L.G.D." = "#00555A",
+    "T.C. - T.C.D." = "#7FC2C5", "L.G. - L.G.D." = "#2C777C",
     "T.C. - L.G." = "#002526"
     ),
   contrast.labels.emp = c(

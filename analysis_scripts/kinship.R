@@ -75,10 +75,10 @@ KINSHIP.EMPIRICAL.CONTRASTS <- tribble(
   "ASW-CEU", "ASW", "CEU"
   )
 KINSHIP.CONTRAST.COLORS <- c(
-  "AFR-ADX" = "#00858C", "AFR-EUR" = "#00555A", "ADX-EUR" = "#002526",
-  "T.C. - T.C.D." = "#00858C", "L.G. - L.G.D." = "#00555A",
+  "AFR-ADX" = "#7FC2C5", "AFR-EUR" = "#2C777C", "ADX-EUR" = "#002526",
+  "T.C. - T.C.D." = "#7FC2C5", "L.G. - L.G.D." = "#2C777C",
   "T.C. - L.G." = "#002526",
-  "YRI-ASW" = "#00858C", "YRI-CEU" = "#00555A", "ASW-CEU" = "#002526"
+  "YRI-ASW" = "#7FC2C5", "YRI-CEU" = "#2C777C", "ASW-CEU" = "#002526"
   )
 KINSHIP.CONTRAST.LABELS <- c(
   "AFR-ADX" = "AFR - ADX", "AFR-EUR" = "AFR - EUR",

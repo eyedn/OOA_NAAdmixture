@@ -100,7 +100,7 @@ PLOT.STYLES <- list(
     YRI = "#EEC4DC", ASW = "#E44B8D", CEU = "#BB437E"
     ),
   contrast.colors = c(
-    `AFR-ADX` = "#00858C", `AFR-EUR` = "#00555A",
+    `AFR-ADX` = "#7FC2C5", `AFR-EUR` = "#2C777C",
     `ADX-EUR` = "#002526"
     ),
   contrast.labels = c(
@@ -117,7 +117,7 @@ PLOT.STYLES <- list(
     `ADX-EUR` = "longdash"
     ),
   simulation.contrast.colors = c(
-    "T.C. - T.C.D." = "#00858C", "L.G. - L.G.D." = "#00555A",
+    "T.C. - T.C.D." = "#7FC2C5", "L.G. - L.G.D." = "#2C777C",
     "T.C. - L.G." = "#002526"
     ),
   series.labels = SOURCE.LABELS
