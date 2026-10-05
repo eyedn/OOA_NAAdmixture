@@ -50,13 +50,18 @@ fi
 ##### biallelic-SNP filtering #################################################
 mkdir -p "${output_dir}"
 
+# subset first so the minor allele count reflects only retained samples.
 bcftools view \
     --threads 4 \
     --samples-file "${samples_keep}" \
+    --output-type u \
+    "${source_vcf}" | \
+bcftools view \
+    --threads 4 \
     --min-alleles 2 \
     --max-alleles 2 \
     --types snps \
+    --min-ac 1:minor \
     --output-type z \
-    --output-file "${output_vcf}" \
-    "${source_vcf}"
+    --output-file "${output_vcf}"
 tabix -f -p vcf "${output_vcf}"
