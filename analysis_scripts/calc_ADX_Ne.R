@@ -12,6 +12,7 @@
 # set up ----
 library(tidyverse)
 library(patchwork)
+CALC.OUTPUT.DIR <- "/home1/karatas/proj/OOA_NAAdmixture_data"
 
 # tunable parameters
 gen.time <- 25
@@ -1277,6 +1278,10 @@ admix.plot <- make.admix.plot()
 
 
 # plotting ----
+saveRDS(combined.ne.plot, file.path(CALC.OUTPUT.DIR, "combined.ne.plot.rds"))
+saveRDS(lg.combined.ne.plot, file.path(CALC.OUTPUT.DIR, "lg.combined.ne.plot.rds"))
+saveRDS(admix.plot, file.path(CALC.OUTPUT.DIR, "admix.plot.rds"))
+
 print(combined.ne.plot)
 print(lg.combined.ne.plot)
 print(admix.plot)
