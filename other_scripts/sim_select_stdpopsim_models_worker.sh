@@ -33,8 +33,8 @@ source /apps/conda/miniforge3/25.3.0/etc/profile.d/conda.sh
 conda activate "${conda_env}"
 export PATH="${HOME}/.conda/envs/${conda_env}/bin:${PATH}"
 
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${script_dir}/log_msg.sh"
+project_dir="$(pwd)"
+source "${project_dir}/other_scripts/log_msg.sh"
 
 
 ##### model samples ###########################################################
