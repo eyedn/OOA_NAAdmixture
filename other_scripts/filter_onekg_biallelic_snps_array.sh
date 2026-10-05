@@ -11,6 +11,17 @@
 ###############################################################################
 
 #SBATCH --cpus-per-task=4
+#SBATCH --array=1-22
+#SBATCH --mem=16
+#SBATCH --time=1-00:01:00
+#SBATCH --partition=qcb
+#SBATCH --account=jazlynmo_738
+#SBATCH --job-name="filterUnmasked2kG"
+#SBATCH --nodes=1
+#SBATCH --output="/home1/karatas/logs/tmp/%A_%a.%x.out"
+#SBATCH --error="/home1/karatas/logs/tmp/%A_%a.%x.err"
+#SBATCH --mail-type=ALL
+#SBATCH --mail-user=karatas@usc.edu
 
 # create one indexed, biallelic-SNP 1kG VCF for each chromosome array task.
 
@@ -21,7 +32,7 @@ set -euo pipefail
 : "${SLURM_ARRAY_TASK_ID:?ERROR: run with sbatch --array=1-22}"
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-project_dir="$(cd "${script_dir}/.." && pwd)"
+project_dir="/home1/karatas/scratch/OOA_NAAdmixture_1kGwoStrickMask"
 chrom="${SLURM_ARRAY_TASK_ID}"
 
 module load htslib/1.19.1 bcftools/1.19
