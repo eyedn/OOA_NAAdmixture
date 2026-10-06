@@ -1110,8 +1110,7 @@ make.combined.ne.plot <- function(ne.plot.data, population.name) {
 }
 
 # mixing proportions plot
-make.admix.plot <- function() {
-  admix.tbl <- tibble(
+admix.tbl <- tibble(
   generation = 1:15,
 
   afr = c(
@@ -1169,7 +1168,8 @@ make.admix.plot <- function() {
   )
 )
 
-# long format
+make.admix.plot <- function(admix.tbl) {
+  # long format
   admix.long <- admix.tbl %>%
   pivot_longer(
     cols = -generation,
@@ -1274,7 +1274,7 @@ combined.ne.long <- build.ne.plot.data(AA.ne, tennessen.ne)
 combined.ne.plot <- make.combined.ne.plot(combined.ne.long, "T.C.")
 lg.combined.ne.long <- build.ne.plot.data(LG.ne, tennessen.ne)
 lg.combined.ne.plot <- make.combined.ne.plot(lg.combined.ne.long, "L.G.")
-admix.plot <- make.admix.plot()
+admix.plot <- make.admix.plot(admix.tbl)
 
 
 # plotting ----
