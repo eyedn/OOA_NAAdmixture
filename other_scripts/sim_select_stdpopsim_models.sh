@@ -10,7 +10,7 @@
 #           sim_select_stdpopsim_models.sh
 ###############################################################################
 
-# workflow: submit one chrom. 22 simulation for each selected stdpopsim model.
+# workflow: submit one simulation per autosome and selected stdpopsim model.
 
 
 ##### set up ##################################################################
@@ -34,7 +34,7 @@ sim_jid=$(sbatch \
     --parsable \
     --chdir="${project_dir}" \
     --job-name="selectStdpopsimModels" \
-    --array="1-3%${MAX_JOBS}" \
+    --array="1-66%${MAX_JOBS}" \
     --cpus-per-task="${SIM_CPUS_PER_TASK}" \
     --mem="${SIM_MEM}" \
     --time=1-00:00:00 \
