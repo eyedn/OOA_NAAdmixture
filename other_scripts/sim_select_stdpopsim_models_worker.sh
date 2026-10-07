@@ -31,7 +31,7 @@ set -euo pipefail
 
 : "${SLURM_ARRAY_TASK_ID:?ERROR: run as a Slurm array task}"
 # Slurm runs a spooled copy; recover the original submitted script path.
-script_path="${BASH_SOURCE[0]}"
+script_path="/home1/karatas/OOA_NAAdmixture"
 if [[ "${script_path}" == */slurm_script ]]; then
     script_path=$(scontrol show job "${SLURM_JOB_ID}" -o |
         tr ' ' '\n' | sed -n 's/^Command=//p')

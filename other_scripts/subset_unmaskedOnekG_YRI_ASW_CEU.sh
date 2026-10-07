@@ -31,7 +31,7 @@ set -euo pipefail
 
 : "${SLURM_ARRAY_TASK_ID:?ERROR: run with sbatch --array=1-22}"
 
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+script_dir="/home1/karatas/OOA_NAAdmixture"
 project_dir="/home1/karatas/scratch/OOA_NAAdmixture_1kGwoStrickMask"
 chrom="${SLURM_ARRAY_TASK_ID}"
 
