@@ -95,7 +95,7 @@ import sys
 import msprime
 import stdpopsim
 import tszip
-from sim_utils.run_simulation import _build_demography
+from sim_utils.run_simulation import _build_demography, _parse_float_list
 
 chrom, seed, output_prefix = sys.argv[1:4]
 parameters = {
@@ -114,12 +114,19 @@ for name, raw in zip(
      "admix_eur_props_by_generation", "admix_prioradmix_props_by_generation"),
     sys.argv[4:8],
 ):
-    parameters[name] = [float(value) for value in raw.split(",")]
+    parameters[name] = _parse_float_list(raw)
 demography, _ = _build_demography(**parameters)
 population_sizes = {"AFR": 118, "EUR": 119, "ADX": 50}
-population_order = [population.name for population in demography.populations]
-if population_order != ["AFR", "EUR", "ADX"]:
-    raise ValueError(f"Unexpected model population order: {population_order}")
+# sample only modern populations, allowing the builder's intermediate ADX_G*.
+population_order = ["AFR", "EUR", "ADX"]
+population_ids = {
+    population.name: population.id for population in demography.populations
+}
+missing_populations = [
+    pop for pop in population_order if pop not in population_ids
+]
+if missing_populations:
+    raise ValueError(f"Missing sampled populations: {missing_populations}")
 sample_sets = [
     msprime.SampleSet(population_sizes[pop], population=pop, time=0, ploidy=2)
     for pop in population_order
@@ -144,7 +151,7 @@ if ts.num_samples != 574 or ts.num_individuals != 287:
     raise ValueError("Unexpected tree-sequence sample or individual count")
 # check the population of each diploid individual before assigning VCF names.
 expected_populations = [
-    pop_id for pop_id, pop in enumerate(population_order)
+    population_ids[pop] for pop in population_order
     for _ in range(population_sizes[pop])
 ]
 for individual, pop_id in zip(ts.individuals(), expected_populations):
