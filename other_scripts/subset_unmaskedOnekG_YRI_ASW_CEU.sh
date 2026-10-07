@@ -18,13 +18,12 @@
 #SBATCH --account=jazlynmo_738
 #SBATCH --job-name="subsetUnmaskedOnekG"
 #SBATCH --nodes=1
-#SBATCH --output="/home1/karatas/logs/tmp/%A_%a.%x.out"
-#SBATCH --error="/home1/karatas/logs/tmp/%A_%a.%x.err"
+#SBATCH --output="/home1/karatas/logs/subsetUnmaskedOnekG/%A_%a.%x.out"
+#SBATCH --error="/home1/karatas/logs/subsetUnmaskedOnekG/%A_%a.%x.err"
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=karatas@usc.edu
 
-# subset unmasked 1kG YRI, ASW, and CEU samples into indexed SNP VCFs.
-# samples.keep must contain the intended population members on the cluster.
+# workflow: subset unmasked 1kG YRI, ASW, and CEU samples.
 
 
 ##### set up ##################################################################

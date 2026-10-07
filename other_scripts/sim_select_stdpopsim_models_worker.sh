@@ -23,7 +23,6 @@
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=karatas@usc.edu
 
-# create the Slurm log directory before submission.
 # workflow: simulate and export one selected stdpopsim model on one autosome.
 
 
