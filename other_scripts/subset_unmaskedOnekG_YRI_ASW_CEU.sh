@@ -7,7 +7,7 @@
 #           Department of Quantitative and Computational Biology
 #           Mooney Lab
 #           ---
-#           filter_onekg_biallelic_snps_array.sh
+#           subset_unmaskedOnekG_YRI_ASW_CEU.sh
 ###############################################################################
 
 #SBATCH --cpus-per-task=4
@@ -16,14 +16,15 @@
 #SBATCH --time=1-00:01:00
 #SBATCH --partition=qcb
 #SBATCH --account=jazlynmo_738
-#SBATCH --job-name="filterUnmasked2kG"
+#SBATCH --job-name="subsetUnmaskedOnekG"
 #SBATCH --nodes=1
 #SBATCH --output="/home1/karatas/logs/tmp/%A_%a.%x.out"
 #SBATCH --error="/home1/karatas/logs/tmp/%A_%a.%x.err"
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=karatas@usc.edu
 
-# create one indexed, biallelic-SNP 1kG VCF for each chromosome array task.
+# subset unmasked 1kG YRI, ASW, and CEU samples into indexed SNP VCFs.
+# samples.keep must contain the intended population members on the cluster.
 
 
 ##### set up ##################################################################
@@ -38,7 +39,7 @@ chrom="${SLURM_ARRAY_TASK_ID}"
 module load htslib/1.19.1 bcftools/1.19
 
 
-##### input and output paths ##################################################
+##### unmasked inputs and subset outputs ##################################################
 samples_keep="${project_dir}/samples.keep"
 source_dir="${HOME}/1000GenomeNYGC_hg38/vcfs"
 source_stem="CCDG_14151_B01_GRM_WGS_2020-08-05_chr${chrom}"
@@ -58,7 +59,7 @@ if [[ ! -s "${source_vcf}" ]]; then
 fi
 
 
-##### biallelic-SNP filtering #################################################
+##### polymorphic biallelic-SNP subset #################################################
 mkdir -p "${output_dir}"
 
 # subset first so the minor allele count reflects only retained samples.

@@ -10,6 +10,20 @@
 #           sim_select_stdpopsim_models_worker.sh
 ###############################################################################
 
+#SBATCH --job-name="selectStdpopsimModels"
+#SBATCH --array=1-66%100
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=8G
+#SBATCH --time=1-00:00:00
+#SBATCH --partition=qcb
+#SBATCH --account=jazlynmo_738
+#SBATCH --nodes=1
+#SBATCH --output="/home1/karatas/logs/selectStdpopsimModels/%A_%a.%x.out"
+#SBATCH --error="/home1/karatas/logs/selectStdpopsimModels/%A_%a.%x.err"
+#SBATCH --mail-type=ALL
+#SBATCH --mail-user=karatas@usc.edu
+
+# create the Slurm log directory before submission.
 # workflow: simulate and export one selected stdpopsim model on one autosome.
 
 
@@ -17,15 +31,21 @@
 set -euo pipefail
 
 : "${SLURM_ARRAY_TASK_ID:?ERROR: run as a Slurm array task}"
-if (( $# != 4 )); then
-    echo "ERROR: expected conda env, output dir, map, and msprime model" >&2
-    exit 1
+# Slurm runs a spooled copy; recover the original submitted script path.
+script_path="${BASH_SOURCE[0]}"
+if [[ "${script_path}" == */slurm_script ]]; then
+    script_path=$(scontrol show job "${SLURM_JOB_ID}" -o |
+        tr ' ' '\n' | sed -n 's/^Command=//p')
 fi
-
-conda_env="$1"
-select_out_dir="$2"
-genetic_map="$3"
-msprime_model="$4"
+script_dir="$(cd "$(dirname "${script_path}")" && pwd)"
+project_dir="$(cd "${script_dir}/.." && pwd)"
+source "${script_dir}/const.sh"
+source "${script_dir}/log_msg.sh"
+: "${OOA_NAADMIXTURE_CONDA:?ERROR: conda environment is not configured}"
+conda_env="${OOA_NAADMIXTURE_CONDA}"
+select_out_dir="/home1/karatas/scratch/OOA_NAAdmixture_selectStspopsimModels"
+genetic_map="${GENETIC_MAP}"
+msprime_model="${MSPRIME_MODEL}"
 
 module purge
 ml gcc/13.3.0 htslib/1.19.1 bcftools/1.19 conda
@@ -33,9 +53,6 @@ source /apps/conda/miniforge3/25.3.0/etc/profile.d/conda.sh
 conda activate "${conda_env}"
 export PATH="${HOME}/.conda/envs/${conda_env}/bin:${PATH}"
 
-project_dir="$(pwd)"
-source "${project_dir}/other_scripts/const.sh"
-source "${project_dir}/other_scripts/log_msg.sh"
 
 
 ##### task mapping ############################################################
