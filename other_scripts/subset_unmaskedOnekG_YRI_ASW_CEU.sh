@@ -31,20 +31,21 @@ set -euo pipefail
 
 : "${SLURM_ARRAY_TASK_ID:?ERROR: run with sbatch --array=1-22}"
 
-script_dir="/home1/karatas/OOA_NAAdmixture"
-project_dir="/home1/karatas/scratch/OOA_NAAdmixture_1kGwoStrickMask"
+project_dir="/home1/karatas/OOA_NAAdmixture"
+script_dir="${project_dir}/other_scripts"
+subset_dir="/home1/karatas/scratch/OOA_NAAdmixture_1kGwoStrickMask"
 chrom="${SLURM_ARRAY_TASK_ID}"
 
 module load htslib/1.19.1 bcftools/1.19
 
 
 ##### unmasked inputs and subset outputs ##################################################
-samples_keep="${project_dir}/samples.keep"
+samples_keep="${subset_dir}/samples.keep"
 source_dir="${HOME}/1000GenomeNYGC_hg38/vcfs"
 source_stem="CCDG_14151_B01_GRM_WGS_2020-08-05_chr${chrom}"
 source_suffix=".filtered.shapeit2-duohmm-phased.nodupmarkers.snps.vcf.gz"
 source_vcf="${source_dir}/${source_stem}${source_suffix}"
-output_dir="${project_dir}/vcfs"
+output_dir="${subset_dir}/vcfs"
 output_vcf="${output_dir}/chr${chrom}.vcf.gz"
 
 if [[ ! -s "${samples_keep}" ]]; then
